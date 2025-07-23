@@ -1,0 +1,7 @@
+#ifndef RTOS_CONFIG_TEMPLATE_H
+#define RTOS_CONFIG_TEMPLATE_H
+
+
+
+
+#endif // ~RTOS_CONFIG_TEMPLATE_H
