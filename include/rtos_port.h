@@ -85,4 +85,4 @@ void rtos_port_pendsv_handler(void);
 }
 #endif
 
-#endif // RTOS_PORT_H
+#endif /* RTOS_PORT_H */

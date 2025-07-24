@@ -43,4 +43,4 @@ extern rtos_kernel_cb_t g_kernel;
 void rtos_kernel_tick_handler(void);
 void rtos_kernel_switch_context(void);
 
-#endif // KERNEL_PRIV_H
+#endif /* KERNEL_PRIV_H */

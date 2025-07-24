@@ -47,4 +47,4 @@
 #define RTOS_USE_QUEUES                     (0U)           /**< Enable queue support */
 #define RTOS_USE_TIMERS                     (0U)           /**< Enable software timer support */
 
-#endif // RTOS_CONFIG_H
+#endif /* RTOS_CONFIG_H */

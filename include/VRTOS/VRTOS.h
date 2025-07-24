@@ -74,4 +74,4 @@ void rtos_yield(void);
 }
 #endif
 
-#endif // VRTOS_H
+#endif /* VRTOS_H */

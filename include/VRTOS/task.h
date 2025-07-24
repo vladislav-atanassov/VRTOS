@@ -67,4 +67,4 @@ rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle);
 }
 #endif
 
-#endif // RTOS_TASK_H
+#endif /* RTOS_TASK_H */
