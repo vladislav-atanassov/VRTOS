@@ -17,7 +17,7 @@
  */
 
 /* Include the generic RTOS configuration */
-#include "../../include/VRTOS/config.h"
+#include "/VRTOS/config.h"
 
 /* STM32F446RE Specific Overrides */
 #undef RTOS_SYSTEM_CLOCK_HZ
@@ -47,6 +47,12 @@
 #define RTOS_MINIMUM_TASK_STACK_SIZE        (256U)         /**< Minimum stack size */
 
 /* Performance optimizations */
-#define RTOS_USE_FAST_INTERRU
+#define RTOS_USE_FAST_INTERRUPTS            (1U)           /**< Enable fast interrupt handling */
+#define RTOS_USE_TICKLESS_IDLE              (0U)           /**< Disable for MVP */
 
-#endif // RTOS_CONFIG_STM32F446RE_H
+/* Debug and profiling features */
+#define RTOS_ENABLE_STACK_OVERFLOW_CHECK    (1U)           /**< Enable stack overflow detection */
+#define RTOS_ENABLE_RUNTIME_STATS           (0U)           /**< Disable for MVP */
+#define RTOS_ENABLE_TRACE                   (0U)           /**< Disable for MVP */
+
+#endif /* RTOS_CONFIG_STM32F446RE_H */

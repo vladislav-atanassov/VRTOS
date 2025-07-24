@@ -10,6 +10,12 @@
 
 #include "config.h"
 #include "rtos_types.h"
+#include "task.h"
+#include "scheduler.h"
+#include "mutex.h"
+#include "semaphore.h"
+#include "queue.h"
+#include "timer.h"
 
 /**
  * @file VRTOS.h

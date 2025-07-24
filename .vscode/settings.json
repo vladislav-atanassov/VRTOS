@@ -147,12 +147,16 @@
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
     "*.asm": "m6800-as0",
+    "*.s": "arm",
     "typeinfo": "c",
     "config.h": "c",
     "kernel_priv.h": "c",
     "rtos_types.h": "c",
     "rtos_port.h": "c",
-    "stm32f446xx.h": "c"
+    "stm32f446xx.h": "c",
+    "task.h": "c",
+    "vrtos.h": "c",
+    "stm32f4xx_hal.h": "c"
   },
   "[m68k]": {
     "editor.rulers": []

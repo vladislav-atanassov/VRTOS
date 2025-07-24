@@ -5,10 +5,10 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "../include/VRTOS/VRTOS.h"
-#include "../include/VRTOS/task.h"
-#include "../include/rtos_port.h"
-#include "../task/task_priv.h"
+#include "VRTOS/VRTOS.h"
+#include "VRTOS/task.h"
+#include "rtos_port.h"
+#include "task/task_priv.h"
 #include "kernel_priv.h"
 
 /**

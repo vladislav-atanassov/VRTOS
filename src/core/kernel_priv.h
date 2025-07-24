@@ -8,8 +8,8 @@
 #ifndef KERNEL_PRIV_H
 #define KERNEL_PRIV_H
 
-#include "../include/VRTOS/config.h"
-#include "../include/VRTOS/rtos_types.h"
+#include "VRTOS/config.h"
+#include "VRTOS/rtos_types.h"
 
 /**
  * @file kernel_priv.h

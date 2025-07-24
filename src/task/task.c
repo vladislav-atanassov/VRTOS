@@ -5,8 +5,9 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "../include/VRTOS/task.h"
-#include "../core/kernel_priv.h"
+#include "VRTOS/task.h"
+#include "VRTOS/VRTOS.h"
+#include "core/kernel_priv.h"
 #include "rtos_port.h"
 #include "task_priv.h"
 #include <string.h>
