@@ -9,7 +9,8 @@ typedef enum {
     LOG_LEVEL_NONE = 0,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
-    LOG_LEVEL_DEBUG 
+    LOG_LEVEL_DEBUG,
+    LOG_LEVEL_ALL
 } log_level_t;
 
 extern log_level_t g_log_level;
