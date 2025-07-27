@@ -17,7 +17,7 @@
  */
 
 /* Include the generic RTOS configuration */
-#include "/VRTOS/config.h"
+#include "VRTOS/config.h"
 
 /* STM32F446RE Specific Overrides */
 #undef RTOS_SYSTEM_CLOCK_HZ
