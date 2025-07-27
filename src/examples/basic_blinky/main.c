@@ -6,9 +6,9 @@
  ******************************************************************************/
 
 #include "VRTOS.h"
-#include "task.h"
-#include "stm32f4xx_hal.h"
 #include "log.h"
+#include "stm32f4xx_hal.h"
+#include "task.h"
 
 /**
  * @file main.c
@@ -25,12 +25,14 @@
 
 /* Task priorities */
 #define BLINK_TASK_PRIORITY (2U)
+#define PRINT_TASK_PRIORITY (3U)
 
 /* Task stack sizes */
-#define BLINK_TASK_STACK_SIZE (256U)
+#define TASK_STACK_SIZE (256U)
 
-/* Blink timing */
+/* Blink & Print timing */
 #define LED_BLINK_DELAY_MS (5000U)
+#define PRINT_DELAY_MS (8000U)
 
 void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -60,11 +62,29 @@ static void blink_task(void *param) {
     while (1) {
         /* Toggle LED */
         led_toggle();
-
+        log_info("BLINK");
         /* Delay for specified time */
-        // rtos_delay_ms(LED_BLINK_DELAY_MS);
-        for (volatile int i = 0; i < 5000000; i++)
-            ;
+        rtos_delay_ms(LED_BLINK_DELAY_MS);
+        // for (volatile int i = 0; i < 5000000; i++)
+        //     ;
+    }
+}
+
+/**
+ * @brief Print UART task
+ *
+ * @param param Task parameter (unused)
+ */
+static void print_task(void *param) {
+    (void)param; /* Suppress unused parameter warning */
+    log_info("IN print_task()");
+    /* Task main loop */
+    while (1) {
+        log_info("PRINT");
+        /* Delay for specified time */
+        rtos_delay_ms(PRINT_DELAY_MS);
+        // for (volatile int i = 0; i < 5000000; i++)
+        //     ;
     }
 }
 
@@ -76,6 +96,7 @@ static void blink_task(void *param) {
 int main(void) {
     rtos_status_t      status;
     rtos_task_handle_t blink_task_handle;
+    rtos_task_handle_t print_task_handle;
 
     /* System initializations */
     SCB->VTOR = FLASH_BASE; /* Set vector table location */
@@ -98,7 +119,22 @@ int main(void) {
 
     /* Create blink task */
     status =
-        rtos_task_create(blink_task, "BLINK", BLINK_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, &blink_task_handle);
+        rtos_task_create(blink_task, "BLINK", TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, &blink_task_handle);
+
+    log_info("EXIT CODE OF rtos_task_create(): %d, expected: %d", status, RTOS_SUCCESS);
+
+    if (status != RTOS_SUCCESS) {
+        /* Task creation failed */
+        while (1) {
+            led_toggle();
+            for (volatile uint32_t i = 0; i < 200000; i++)
+                ;
+        }
+    }
+
+    /* Create print task */
+    status =
+        rtos_task_create(print_task, "PRINT", TASK_STACK_SIZE, NULL, PRINT_TASK_PRIORITY, &print_task_handle);
 
     log_info("EXIT CODE OF rtos_task_create(): %d, expected: %d", status, RTOS_SUCCESS);
 
@@ -112,6 +148,7 @@ int main(void) {
     }
 
     log_info("Blink task func: 0x%08X", (uint32_t)blink_task);
+    log_info("Print task func: 0x%08X", (uint32_t)print_task);
     log_info("ENTERING rtos_start_scheduler()");
 
     /* Start the RTOS scheduler */
