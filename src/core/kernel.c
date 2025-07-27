@@ -7,9 +7,10 @@
 
 #include "VRTOS/VRTOS.h"
 #include "VRTOS/task.h"
+#include "kernel_priv.h"
+#include "log.h"
 #include "rtos_port.h"
 #include "task/task_priv.h"
-#include "kernel_priv.h"
 
 /**
  * @file kernel.c
@@ -19,7 +20,13 @@
  */
 
 /* Global kernel control block */
-rtos_kernel_cb_t g_kernel = {0};
+rtos_kernel_cb_t g_kernel = {
+    .state = RTOS_KERNEL_STATE_INACTIVE,
+    .tick_count = 0,
+    .current_task = NULL,
+    .next_task = NULL,
+    .scheduler_suspended = 0
+};
 
 /**
  * @brief Initialize the RTOS system
@@ -41,12 +48,18 @@ rtos_status_t rtos_init(void) {
 
     /* Initialize task management system */
     status = rtos_task_init_system();
+
+    log_debug("EXIT CODE OF rtos_task_init_system(): %d, expected: %d", (int)status, RTOS_SUCCESS);
+
     if (status != RTOS_SUCCESS) {
         return status;
     }
 
     /* Initialize porting layer */
     status = rtos_port_init();
+
+    log_debug("EXIT CODE OF rtos_port_init(): %d, expected: %d", (int)status, RTOS_SUCCESS);
+
     if (status != RTOS_SUCCESS) {
         return status;
     }
@@ -55,11 +68,17 @@ rtos_status_t rtos_init(void) {
     rtos_task_handle_t idle_task;
     status = rtos_task_create(rtos_task_idle_function, "IDLE", RTOS_DEFAULT_TASK_STACK_SIZE, NULL,
                               RTOS_IDLE_TASK_PRIORITY, &idle_task);
+
+    log_debug("EXIT CODE OF rtos_task_create(): %d, expected: %d", (int)status, RTOS_SUCCESS);
+
     if (status != RTOS_SUCCESS) {
         return status;
     }
 
     g_kernel.state = RTOS_KERNEL_STATE_READY;
+
+    log_debug("EXITING rtos_init() g_kernel.state: %d, expected: %d", (int)g_kernel.state, RTOS_KERNEL_STATE_READY);
+
     return RTOS_SUCCESS;
 }
 
@@ -71,16 +90,32 @@ rtos_status_t rtos_start_scheduler(void) {
         return RTOS_ERROR_INVALID_STATE;
     }
 
+    log_debug("g_kernel.state: %d, expected: %d", g_kernel.state, RTOS_KERNEL_STATE_READY);
+
+    log_info("ENTERING rtos_task_get_highest_priority_ready()");
+
     /* Find the first task to run */
     g_kernel.next_task = rtos_task_get_highest_priority_ready();
+
+    log_debug("RETURN VALUE OF rtos_task_get_highest_priority_ready() %p", g_kernel.next_task);
+    log_debug("g_kernel.next_task->name: %s", g_kernel.next_task->name);
+    log_debug("g_kernel.next_task->priority: %d", g_kernel.next_task->priority);
+    log_debug("g_kernel.next_task->task_id: %d", g_kernel.next_task->task_id);
+    log_debug("g_kernel.next_task->state: %d", g_kernel.next_task->state);
+    log_debug("g_kernel.next_task->task_function: %p", g_kernel.next_task->task_function);
+
     if (g_kernel.next_task == NULL) {
         return RTOS_ERROR_GENERAL;
     }
 
     g_kernel.state = RTOS_KERNEL_STATE_RUNNING;
 
+    log_info("ENTERING rtos_port_start_systick()");
+
     /* Start the system tick */
     rtos_port_start_systick();
+
+    log_info("ENTERING rtos_port_start_first_task()");
 
     /* Start the first task */
     rtos_port_start_first_task();
@@ -140,7 +175,9 @@ void rtos_kernel_tick_handler(void) {
     g_kernel.tick_count++;
 
     /* Update delayed tasks */
+    rtos_port_enter_critical();
     rtos_task_update_delayed_tasks();
+    rtos_port_exit_critical();
 
     /* Handle time slicing for round-robin scheduling */
     if (g_kernel.current_task != NULL && g_kernel.current_task->time_slice_remaining > 0) {
@@ -157,24 +194,31 @@ void rtos_kernel_tick_handler(void) {
  * @brief Context switch handler (called by scheduler)
  */
 void rtos_kernel_switch_context(void) {
-    if (g_kernel.scheduler_suspended > 0) {
-        return; /* Scheduler is suspended */
-    }
+    if (g_kernel.scheduler_suspended > 0)
+        return;
 
-    /* Save current task state */
+    log_debug("Switching from %s to %s", g_kernel.current_task ? g_kernel.current_task->name : "NULL",
+              g_kernel.next_task ? g_kernel.next_task->name : "NULL");
+
+    rtos_port_enter_critical();
+
+    /* Always put current task back to ready list */
     if (g_kernel.current_task != NULL && g_kernel.current_task->state == RTOS_TASK_STATE_RUNNING) {
         g_kernel.current_task->state = RTOS_TASK_STATE_READY;
+        rtos_task_add_to_ready_list(g_kernel.current_task);
     }
 
-    /* Find next task to run */
+    /* Get next task */
     g_kernel.next_task = rtos_task_get_highest_priority_ready();
 
-    /* Context switch if different task */
-    if (g_kernel.next_task != g_kernel.current_task) {
+    if (g_kernel.next_task) {
+        /* Remove from ready list */
+        rtos_task_remove_from_ready_list(g_kernel.next_task);
+
+        g_kernel.next_task->state = RTOS_TASK_STATE_RUNNING;
         g_kernel.current_task = g_kernel.next_task;
-        if (g_kernel.current_task != NULL) {
-            g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
-            g_kernel.current_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
-        }
+        g_kernel.current_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
     }
+
+    rtos_port_exit_critical();
 }
