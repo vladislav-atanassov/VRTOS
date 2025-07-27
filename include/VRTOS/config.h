@@ -17,7 +17,7 @@
  */
 
 /* System Configuration */
-#define RTOS_SYSTEM_CLOCK_HZ                (84000000U)    /**< System clock frequency in Hz */
+#define RTOS_SYSTEM_CLOCK_HZ                (16000000U)    /**< System clock frequency in Hz */
 #define RTOS_TICK_RATE_HZ                   (1000U)        /**< System tick frequency in Hz (1ms tick) */
 #define RTOS_TICK_PERIOD_MS                 (1000U / RTOS_TICK_RATE_HZ)  /**< Tick period in milliseconds */
 
