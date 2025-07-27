@@ -8,6 +8,7 @@
 #include "VRTOS/task.h"
 #include "VRTOS/VRTOS.h"
 #include "core/kernel_priv.h"
+#include "log.h"
 #include "rtos_port.h"
 #include "task_priv.h"
 #include <string.h>
@@ -67,6 +68,8 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
                                void                *parameter,
                                rtos_priority_t      priority,
                                rtos_task_handle_t  *task_handle) {
+    log_info("ENTERING for task with name %s", name);
+
     /* Validate parameters */
     if (task_function == NULL || task_handle == NULL) {
         return RTOS_ERROR_INVALID_PARAM;
@@ -93,7 +96,11 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
     /* Align stack size */
     stack_size = (stack_size + RTOS_STACK_ALIGNMENT - 1) & ~(RTOS_STACK_ALIGNMENT - 1);
 
+    log_info("ENTERING rtos_port_enter_critical()");
+
     rtos_port_enter_critical();
+
+    log_info("ENTERING rtos_task_allocate_tcb()");
 
     /* Allocate TCB */
     rtos_tcb_t *new_task = rtos_task_allocate_tcb();
@@ -101,6 +108,8 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
         rtos_port_exit_critical();
         return RTOS_ERROR_NO_MEMORY;
     }
+
+    log_info("ENTERING rtos_task_allocate_stack()");
 
     /* Allocate stack */
     uint32_t *stack_memory = rtos_task_allocate_stack(stack_size);
@@ -124,17 +133,27 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
     new_task->next = NULL;
     new_task->prev = NULL;
 
-    /* Initialize task stack */
-    new_task->stack_pointer =
-        rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
+    log_debug("new_task->name: %s, expected: %s", new_task->name, name);
 
+    log_info("ENTERING rtos_port_init_task_stack()");
+
+    /* Initialize task stack */
+    new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
+
+    log_info("ENTERING rtos_task_add_to_ready_list()");
+
+    // TODO: Inspect rtos_task_add_to_ready_list()
     /* Add to ready list */
     rtos_task_add_to_ready_list(new_task);
 
     g_task_count++;
     *task_handle = new_task;
 
+    log_info("ENTERING rtos_port_exit_critical()");
+
     rtos_port_exit_critical();
+
+    log_info("EXITING rtos_task_create()");
 
     return RTOS_SUCCESS;
 }
@@ -285,8 +304,7 @@ void rtos_task_idle_function(void *param) {
     (void)param; /* Unused parameter */
 
     while (1) {
-        /* Idle task - could implement power saving here */
-        __asm volatile("nop");
+        __asm volatile("wfi"); /* Wait for interrupt */
     }
 }
 
@@ -306,14 +324,23 @@ static rtos_tcb_t *rtos_task_allocate_tcb(void) {
  * @brief Allocate stack memory
  */
 static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size) {
+    // Ensure size is multiple of 8
+    size = (size + 7) & ~0x7;
+    
+    // Align memory index to 8 bytes
+    g_stack_memory_index = (g_stack_memory_index + 7) & ~0x7;
+    
     if (g_stack_memory_index + size > RTOS_TOTAL_HEAP_SIZE) {
-        return NULL; /* Not enough memory */
+        return NULL;
     }
-
-    uint32_t *stack = (uint32_t *)&g_task_stack_memory[g_stack_memory_index];
+    
+    uint8_t *stack_base = &g_task_stack_memory[g_stack_memory_index];
     g_stack_memory_index += size;
 
-    return stack;
+    log_info("Allocated stack top: 0x%08X", (uint32_t)(stack_base + size));
+    
+    // Return aligned top of stack
+    return (uint32_t *)((uint32_t)(stack_base + size) & ~0x7);
 }
 
 /**

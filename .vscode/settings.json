@@ -156,7 +156,8 @@
     "stm32f446xx.h": "c",
     "task.h": "c",
     "vrtos.h": "c",
-    "stm32f4xx_hal.h": "c"
+    "stm32f4xx_hal.h": "c",
+    "rtos_assert.h": "c"
   },
   "[m68k]": {
     "editor.rulers": []
