@@ -48,9 +48,7 @@ void rtos_port_start_first_task(void);
  * @param parameter Parameter to pass to task function
  * @return Initial stack pointer value
  */
-uint32_t *rtos_port_init_task_stack(uint32_t            *stack_top,
-                                    rtos_task_function_t task_function,
-                                    void                *parameter);
+uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter);
 
 /**
  * @brief Enter critical section (disable interrupts)
@@ -73,13 +71,6 @@ void rtos_port_yield(void);
  * This function should be called from the SysTick interrupt handler.
  */
 void rtos_port_systick_handler(void);
-
-/**
- * @brief PendSV interrupt handler
- *
- * This function handles context switching.
- */
-void rtos_port_pendsv_handler(void);
 
 #ifdef __cplusplus
 }
