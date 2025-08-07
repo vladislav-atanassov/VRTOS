@@ -1,32 +1,26 @@
-/*******************************************************************************
- * File: README.md
- * Description: Project README
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 # STM32F446RE RTOS Implementation
 
 A custom Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch as an educational and production-grade project.
 
 ## Project Overview
 
-This RTOS provides essential real-time scheduling capabilities with a clean, modular architecture designed for extensibility and maintainability. The current MVP (Minimum Viable Product) includes:
+This RTOS provides essential real-time scheduling capabilities with a clean, modular architecture. The current MVP includes:
 
-- **Preemptive Round-Robin Scheduler** with priority-based task selection
-- **Task Management** with creation, deletion, and state management
+- **Rate Monotonic Scheduler (RMS)** with strict priority-based preemption
+- **Task Management** with creation and state management
 - **System Tick** with configurable frequency (default 1ms)
 - **Delay Functions** for task timing control
 - **Context Switching** optimized for Cortex-M4 architecture
-- **Memory Management** with static stack allocation
-- **Porting Layer** abstraction for hardware independence
+- **Static Memory Management** with stack allocation
+- **Porting Layer** for Cortex-M4
+- **Comprehensive Debugging** with logging system
 
 ## Architecture
 
 The RTOS follows a layered architecture with clear separation of concerns:
 
 ```
-Application Layer    (User Tasks)
+Application Layer   (User Tasks)
     ↓
 RTOS API Layer      (Public Interface)
     ↓
@@ -43,14 +37,16 @@ Hardware Layer      (STM32F446RE HAL)
 
 ### Current (MVP)
 - Task creation and management
-- Priority-based preemptive scheduling
-- Round-robin scheduling for equal priority tasks
+- Strict Rate Monotonic Scheduling (RMS)
+- Preemptive priority-based scheduling
 - System tick and timing services
 - Task delay functions (ms and ticks)
-- Context switching for Cortex-M4
+- Cortex-M4 context switching
 - Critical section management
-- Stack overflow protection
-- Configurable system parameters
+- Static stack allocation
+- Extensive logging system
+- HardFault diagnostics
+- Priority inversion prevention
 
 ### Planned (Future Releases)
 - Mutexes (binary and recursive)
@@ -99,18 +95,18 @@ The included blinky example demonstrates basic RTOS functionality:
 - Uses RTOS delay functions for timing
 - Demonstrates task scheduling and context switching
 
-The LED should blink at 1Hz (500ms on, 500ms off) if the RTOS is working correctly.
+The LED should blink at 5Hz if the RTOS is working correctly.
 
 ## Configuration
 
 RTOS behavior can be customized through configuration files:
 
-- `include/rtos/config.h` - Generic RTOS configuration
+- `include/VRTOS/config.h` - Generic RTOS configuration
 - `config/stm32f446re/rtos_config.h` - STM32F446RE specific settings
 
 Key configuration parameters:
 ```c
-#define RTOS_SYSTEM_CLOCK_HZ        (84000000U)  // 84MHz
+#define RTOS_SYSTEM_CLOCK_HZ       (84000000U)   // 84MHz
 #define RTOS_TICK_RATE_HZ          (1000U)       // 1ms tick
 #define RTOS_MAX_TASKS             (10U)         // Max tasks
 #define RTOS_TIME_SLICE_MS         (10U)         // Round-robin slice
@@ -187,16 +183,32 @@ Typical memory usage for the MVP:
 4. **Memory corruption**: Enable stack overflow checking
 
 ### Debug Features
-- Stack overflow detection (configurable)
-- Assertion macros for parameter validation
-- Build information tracking
-- Memory usage analysis
+- Detailed task state logging
+- HardFault register dumps
+- Stack initialization patterns
+- Ready list monitoring
+- Task transition tracing
 
-## Contributing
+## Common Issues & Solutions
+1. **Priority Inversion**:
+    - Verify idle task has lowest priority
+    - Check preemption logic in tick handler
+3. **Context Switch Failures**:
+    - Confirm PendSV/SVC handler alignment
+    - Validate stack pointer initialization
+3. **Task Starvation**:
+    - Ensure delayed tasks are readded to ready list
+    - Verify RMS priority assignment
 
-This is an educational project following embedded systems best practices:
-- Clean, documented code with Doxygen comments
-- Modular architecture with clear interfaces
-- Comprehensive error handling
-- Extensive configuration options
-- Production-grade code quality
+## Development Status
+
+### Current Focus Areas:
+
+- Robust context switching validation
+- Scheduling edge case handling
+- Memory protection enhancements
+- System stability under load
+### Next Steps:
+- Add mutex/semaphore support
+- Implement software timers
+- Add power management features
