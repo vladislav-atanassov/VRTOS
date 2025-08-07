@@ -11,6 +11,7 @@
 
 #include "VRTOS/config.h"
 #include "VRTOS/rtos_types.h"
+#include "rtos_assert.h"
 
 /**
  * @file task_priv.h
@@ -21,6 +22,12 @@
 
 /* Task Control Block */
 struct rtos_task_control_block {
+    /* Stack management */
+    uint32_t         *stack_pointer; /**< Current stack pointer */
+    uint32_t         *stack_base;    /**< Base of task stack */
+    uint32_t         *stack_top;     /**< Top of task stack */
+    rtos_stack_size_t stack_size;    /**< Stack size in bytes */
+
     /* Task identification */
     rtos_task_id_t task_id; /**< Unique task identifier */
     const char    *name;    /**< Task name for debugging */
@@ -33,12 +40,6 @@ struct rtos_task_control_block {
     rtos_task_state_t state;    /**< Current task state */
     rtos_priority_t   priority; /**< Task priority */
 
-    /* Stack management */
-    uint32_t         *stack_base;    /**< Base of task stack */
-    uint32_t         *stack_top;     /**< Top of task stack */
-    uint32_t         *stack_pointer; /**< Current stack pointer */
-    rtos_stack_size_t stack_size;    /**< Stack size in bytes */
-
     /* Scheduling */
     rtos_tick_t delay_until;          /**< Tick count until task ready */
     rtos_tick_t time_slice_remaining; /**< Remaining time slice */
@@ -47,6 +48,7 @@ struct rtos_task_control_block {
     struct rtos_task_control_block *next; /**< Next task in list */
     struct rtos_task_control_block *prev; /**< Previous task in list */
 };
+RTOS_STATIC_ASSERT(offsetof(rtos_tcb_t, stack_pointer) == 0, "stack_pointer must be first in TCB");
 
 /* Task management variables */
 extern rtos_tcb_t  g_task_pool[RTOS_MAX_TASKS];
@@ -62,5 +64,6 @@ void          rtos_task_add_to_delayed_list(rtos_tcb_t *task, rtos_tick_t delay_
 void          rtos_task_update_delayed_tasks(void);
 rtos_tcb_t   *rtos_task_get_highest_priority_ready(void);
 void          rtos_task_idle_function(void *param);
+rtos_tcb_t   *rtos_task_get_idle_task(void);
 
 #endif // TASK_PRIV_H
