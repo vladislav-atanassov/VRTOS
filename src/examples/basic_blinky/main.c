@@ -6,6 +6,7 @@
  ******************************************************************************/
 
 #include "VRTOS.h"
+#include "kernel_priv.h"
 #include "log.h"
 #include "stm32f4xx_hal.h"
 #include "task.h"
@@ -27,12 +28,8 @@
 #define BLINK_TASK_PRIORITY (2U)
 #define PRINT_TASK_PRIORITY (3U)
 
-/* Task stack sizes */
-#define TASK_STACK_SIZE (256U)
-
 /* Blink & Print timing */
 #define LED_BLINK_DELAY_MS (5000U)
-#define PRINT_DELAY_MS (8000U)
 
 void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -51,40 +48,34 @@ static void led_toggle(void) {
 }
 
 /**
+ * @brief Indicate system failure
+ *
+ * Fast toggling the integrated led with artifitial software delay
+ */
+static void indicate_system_failure(void) {
+    /* Infinite loop with LED blink */
+    while (1) {
+        led_toggle();
+        for (volatile int i = 0; i < 100000; i++) {
+        }
+    }
+}
+
+/**
  * @brief LED blink task
  *
  * @param param Task parameter (unused)
  */
 static void blink_task(void *param) {
     (void)param; /* Suppress unused parameter warning */
-    log_info("IN blink_task()");
+    log_print("IN blink_task()");
     /* Task main loop */
     while (1) {
         /* Toggle LED */
         led_toggle();
-        log_info("BLINK");
+        log_print("BLINK");
         /* Delay for specified time */
         rtos_delay_ms(LED_BLINK_DELAY_MS);
-        // for (volatile int i = 0; i < 5000000; i++)
-        //     ;
-    }
-}
-
-/**
- * @brief Print UART task
- *
- * @param param Task parameter (unused)
- */
-static void print_task(void *param) {
-    (void)param; /* Suppress unused parameter warning */
-    log_info("IN print_task()");
-    /* Task main loop */
-    while (1) {
-        log_info("PRINT");
-        /* Delay for specified time */
-        rtos_delay_ms(PRINT_DELAY_MS);
-        // for (volatile int i = 0; i < 5000000; i++)
-        //     ;
     }
 }
 
@@ -96,7 +87,6 @@ static void print_task(void *param) {
 int main(void) {
     rtos_status_t      status;
     rtos_task_handle_t blink_task_handle;
-    rtos_task_handle_t print_task_handle;
 
     /* System initializations */
     SCB->VTOR = FLASH_BASE; /* Set vector table location */
@@ -104,74 +94,38 @@ int main(void) {
     MX_GPIO_Init();
     __enable_irq(); /* Enable global interrupts */
 
-    log_uart_init(LOG_LEVEL_ALL);
+    log_uart_init(LOG_LEVEL_PRINT);
 
     /* Initialize RTOS */
     status = rtos_init();
+
     if (status != RTOS_SUCCESS) {
         /* Initialization failed - indicate with LED */
-        while (1) {
-            led_toggle();
-            for (volatile uint32_t i = 0; i < 100000; i++)
-                ;
-        }
+        indicate_system_failure();
     }
 
     /* Create blink task */
-    status =
-        rtos_task_create(blink_task, "BLINK", TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY, &blink_task_handle);
-
-    log_info("EXIT CODE OF rtos_task_create(): %d, expected: %d", status, RTOS_SUCCESS);
+    status = rtos_task_create(blink_task, "BLINK", NULL, NULL, BLINK_TASK_PRIORITY, &blink_task_handle);
 
     if (status != RTOS_SUCCESS) {
         /* Task creation failed */
-        while (1) {
-            led_toggle();
-            for (volatile uint32_t i = 0; i < 200000; i++)
-                ;
-        }
+        indicate_system_failure();
     }
-
-    /* Create print task */
-    status =
-        rtos_task_create(print_task, "PRINT", TASK_STACK_SIZE, NULL, PRINT_TASK_PRIORITY, &print_task_handle);
-
-    log_info("EXIT CODE OF rtos_task_create(): %d, expected: %d", status, RTOS_SUCCESS);
-
-    if (status != RTOS_SUCCESS) {
-        /* Task creation failed */
-        while (1) {
-            led_toggle();
-            for (volatile uint32_t i = 0; i < 200000; i++)
-                ;
-        }
-    }
-
-    log_info("Blink task func: 0x%08X", (uint32_t)blink_task);
-    log_info("Print task func: 0x%08X", (uint32_t)print_task);
-    log_info("ENTERING rtos_start_scheduler()");
 
     /* Start the RTOS scheduler */
     status = rtos_start_scheduler();
 
     /* Should never reach here */
     while (1) {
-        /* Error indication */
-        led_toggle();
-        for (volatile uint32_t i = 0; i < 50000; i++)
-            ;
     }
 
     return 0;
 }
 
 void Error_Handler(void) {
-    /* USER CODE BEGIN Error_Handler_Debug */
-    /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
     while (1) {
     }
-    /* USER CODE END Error_Handler_Debug */
 }
 
 void SystemClock_Config(void) {
@@ -218,8 +172,29 @@ static void MX_GPIO_Init(void) {
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-void HardFault_Handler(void) {
-    /* Capture fault registers immediately */
+__attribute__((naked)) void HardFault_Handler(void) {
+    __asm volatile("TST LR, #4              \n"
+                   "ITE EQ                  \n"
+                   "MRSEQ R0, MSP           \n"
+                   "MRSNE R0, PSP           \n"
+                   "MOV R1, R0              \n"
+                   "B HardFault_Handler_C");
+}
+
+void HardFault_Handler_C(uint32_t *stack_frame) {
+    uint32_t r0 = stack_frame[0];
+    uint32_t r1 = stack_frame[1];
+    uint32_t r2 = stack_frame[2];
+    uint32_t r3 = stack_frame[3];
+    uint32_t r12 = stack_frame[4];
+    uint32_t lr = stack_frame[5];
+    uint32_t pc = stack_frame[6];
+    uint32_t psr = stack_frame[7];
+
+    log_error("HardFault: PC=0x%08X PSR=0x%08X", pc, psr);
+    log_error("R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X", r0, r1, r2, r3);
+    log_error("R12=0x%08X LR=0x%08X", r12, lr);
+
     uint32_t cfsr = SCB->CFSR;
     uint32_t hfsr = SCB->HFSR;
     uint32_t mmfar = SCB->MMFAR;
@@ -229,14 +204,9 @@ void HardFault_Handler(void) {
 
     /* Direct register access for debugging */
     log_error("HardFault Registers:");
-    log_error(" CFSR=0x%08X HFSR=0x%08X", cfsr, hfsr);
-    log_error(" MMFAR=0x%08X BFAR=0x%08X", mmfar, bfar);
-    log_error(" PSP=0x%08X MSP=0x%08X", psp, msp);
+    log_error("CFSR=0x%08X HFSR=0x%08X", cfsr, hfsr);
+    log_error("MMFAR=0x%08X BFAR=0x%08X", mmfar, bfar);
+    log_error("PSP=0x%08X MSP=0x%08X", psp, msp);
 
-    /* Infinite loop with LED blink */
-    while (1) {
-        led_toggle();
-        for (volatile int i = 0; i < 100000; i++)
-            ;
-    }
+    indicate_system_failure();
 }
