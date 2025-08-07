@@ -159,7 +159,7 @@ void SysTick_Handler(void) { rtos_port_systick_handler(); }
 
 void rtos_port_systick_handler(void) { rtos_kernel_tick_handler(); }
 
-static void log_svc_handler(void) { log_debug("Triggered SVC handler, PSP=%08X", __get_PSP()); }
+void log_svc_handler(void) { log_debug("Triggered SVC handler, PSP=%08X", __get_PSP()); }
 
 /**
  * @brief SVC interrupt handler
@@ -177,7 +177,7 @@ __attribute__((naked)) void SVC_Handler(void) {
                    ::: "memory");
 }
 
-static void log_pendsv_handler(void) { log_debug("Triggered PendSV handler, PSP=%08X", __get_PSP()); }
+void log_pendsv_handler(void) { log_debug("Triggered PendSV handler, PSP=%08X", __get_PSP()); }
 
 /**
  * @brief PendSV interrupt handler
