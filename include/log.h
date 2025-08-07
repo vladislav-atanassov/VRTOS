@@ -7,6 +7,7 @@
 
 typedef enum { 
     LOG_LEVEL_NONE = 0,
+    LOG_LEVEL_PRINT,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
     LOG_LEVEL_DEBUG,
@@ -26,6 +27,7 @@ void log_uart_init(log_level_t level);
     } while (0)
 
 /* Public logging macros */
+#define log_print(msg, ...) log_printf(LOG_LEVEL_PRINT, "PRINT", msg, ##__VA_ARGS__)
 #define log_error(msg, ...) log_printf(LOG_LEVEL_ERROR, "ERROR", msg, ##__VA_ARGS__)
 #define log_info(msg, ...) log_printf(LOG_LEVEL_INFO, "INFO", msg, ##__VA_ARGS__)
 #define log_debug(msg, ...) log_printf(LOG_LEVEL_DEBUG, "DEBUG", msg, ##__VA_ARGS__)

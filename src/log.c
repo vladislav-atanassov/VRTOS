@@ -31,6 +31,8 @@ void log_uart_init(log_level_t level) {
 
 // Retarget printf
 int _write(int file, char *ptr, int len) {
+    __disable_irq();
     HAL_UART_Transmit(&g_huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    __enable_irq();
     return len;
 }
