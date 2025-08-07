@@ -41,6 +41,13 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
                                rtos_task_handle_t  *task_handle);
 
 /**
+ * @brief Get the idle task's TCB (Task Control Block)
+ *
+ * @return Pointer to the idle task's TCB
+ */
+rtos_tcb_t *rtos_task_get_idle_task(void);
+
+/**
  * @brief Get the current running task handle
  *
  * @return Handle of the currently running task, NULL if no task running

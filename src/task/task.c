@@ -22,13 +22,13 @@
  */
 
 /* Task management global variables */
-rtos_tcb_t  g_task_pool[RTOS_MAX_TASKS];            /**< Pool of task control blocks */
-rtos_tcb_t *g_ready_list[RTOS_MAX_TASK_PRIORITIES]; /**< Ready task lists per priority */
-rtos_tcb_t *g_delayed_task_list = NULL;             /**< List of delayed tasks */
-uint8_t     g_task_count = 0;                       /**< Current number of tasks */
+rtos_tcb_t  g_task_pool[RTOS_MAX_TASKS] = {0};            /**< Pool of task control blocks */
+rtos_tcb_t *g_ready_list[RTOS_MAX_TASK_PRIORITIES] = {0}; /**< Ready task lists per priority */
+rtos_tcb_t *g_delayed_task_list = NULL;                   /**< List of delayed tasks */
+uint8_t     g_task_count = 0;                             /**< Current number of tasks */
 
 /* Static memory for task stacks */
-static uint8_t  g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE];
+static uint8_t  g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE] __attribute__((aligned(RTOS_STACK_ALIGNMENT))) = {0};
 static uint32_t g_stack_memory_index = 0;
 
 /* Static function prototypes */
@@ -41,20 +41,18 @@ static void        rtos_task_list_remove(rtos_tcb_t **list, rtos_tcb_t *task);
  * @brief Initialize the task management system
  */
 rtos_status_t rtos_task_init_system(void) {
-    /* Initialize task pool */
     memset(g_task_pool, 0, sizeof(g_task_pool));
-
-    /* Initialize ready lists */
-    for (uint8_t i = 0; i < RTOS_MAX_TASK_PRIORITIES; i++) {
-        g_ready_list[i] = NULL;
-    }
-
-    /* Initialize delayed task list */
+    memset(g_ready_list, 0, sizeof(g_ready_list));
     g_delayed_task_list = NULL;
-
-    /* Reset counters */
     g_task_count = 0;
+
+    /* Initialize stack memory to known pattern */
+    memset(g_task_stack_memory, 0xAA, sizeof(g_task_stack_memory));
     g_stack_memory_index = 0;
+
+    if (((uint32_t)g_task_stack_memory & (RTOS_STACK_ALIGNMENT - 1U)) != 0) {
+        log_error("Stack memory not aligned! 0x%08X", (uint32_t)g_task_stack_memory);
+    }
 
     return RTOS_SUCCESS;
 }
@@ -68,8 +66,6 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
                                void                *parameter,
                                rtos_priority_t      priority,
                                rtos_task_handle_t  *task_handle) {
-    log_info("ENTERING for task with name %s", name);
-
     /* Validate parameters */
     if (task_function == NULL || task_handle == NULL) {
         return RTOS_ERROR_INVALID_PARAM;
@@ -96,11 +92,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
     /* Align stack size */
     stack_size = (stack_size + RTOS_STACK_ALIGNMENT - 1) & ~(RTOS_STACK_ALIGNMENT - 1);
 
-    log_info("ENTERING rtos_port_enter_critical()");
-
     rtos_port_enter_critical();
-
-    log_info("ENTERING rtos_task_allocate_tcb()");
 
     /* Allocate TCB */
     rtos_tcb_t *new_task = rtos_task_allocate_tcb();
@@ -108,8 +100,6 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
         rtos_port_exit_critical();
         return RTOS_ERROR_NO_MEMORY;
     }
-
-    log_info("ENTERING rtos_task_allocate_stack()");
 
     /* Allocate stack */
     uint32_t *stack_memory = rtos_task_allocate_stack(stack_size);
@@ -127,36 +117,29 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
     new_task->priority = priority;
     new_task->stack_base = stack_memory;
     new_task->stack_size = stack_size;
-    new_task->stack_top = stack_memory + (stack_size / sizeof(uint32_t));
+    new_task->stack_top = stack_memory;
     new_task->delay_until = 0;
     new_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
     new_task->next = NULL;
     new_task->prev = NULL;
 
-    log_debug("new_task->name: %s, expected: %s", new_task->name, name);
-
-    log_info("ENTERING rtos_port_init_task_stack()");
-
     /* Initialize task stack */
     new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
 
-    log_info("ENTERING rtos_task_add_to_ready_list()");
-
-    // TODO: Inspect rtos_task_add_to_ready_list()
-    /* Add to ready list */
     rtos_task_add_to_ready_list(new_task);
 
     g_task_count++;
     *task_handle = new_task;
 
-    log_info("ENTERING rtos_port_exit_critical()");
-
     rtos_port_exit_critical();
-
-    log_info("EXITING rtos_task_create()");
 
     return RTOS_SUCCESS;
 }
+
+/**
+ * @brief Get the idle task
+ */
+rtos_tcb_t *rtos_task_get_idle_task(void) { return &g_task_pool[RTOS_IDLE_TASK_PRIORITY]; }
 
 /**
  * @brief Get current running task
@@ -191,21 +174,20 @@ void rtos_task_add_to_ready_list(rtos_tcb_t *task) {
         return;
     }
 
-    /* Add to end of ready list for round-robin */
-    rtos_tcb_t **list_head = &g_ready_list[task->priority];
+    /* RMS: Add to head of priority list */
+    rtos_tcb_t **list = &g_ready_list[task->priority];
 
-    if (*list_head == NULL) {
-        /* First task in this priority level */
-        *list_head = task;
-        task->next = task;
-        task->prev = task;
+    if (*list == NULL) {
+        *list = task;
+        task->next = NULL;
     } else {
-        /* Insert at end of circular list */
-        rtos_tcb_t *last = (*list_head)->prev;
-        task->next = *list_head;
-        task->prev = last;
-        last->next = task;
-        (*list_head)->prev = task;
+        // Append to END of list
+        rtos_tcb_t *current = *list;
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = task;
+        task->next = NULL;
     }
 }
 
@@ -217,28 +199,24 @@ void rtos_task_remove_from_ready_list(rtos_tcb_t *task) {
         return;
     }
 
+    /* RMS: Remove from priority list */
     rtos_tcb_t **list_head = &g_ready_list[task->priority];
+    rtos_tcb_t  *prev = NULL;
+    rtos_tcb_t  *curr = *list_head;
 
-    if (*list_head == NULL) {
-        return; /* List is empty */
-    }
-
-    if (task->next == task) {
-        /* Only task in list */
-        *list_head = NULL;
-    } else {
-        /* Remove from circular list */
-        task->prev->next = task->next;
-        task->next->prev = task->prev;
-
-        /* Update list head if necessary */
-        if (*list_head == task) {
-            *list_head = task->next;
+    while (curr != NULL) {
+        if (curr == task) {
+            if (prev == NULL) {
+                *list_head = curr->next;
+            } else {
+                prev->next = curr->next;
+            }
+            task->next = NULL;
+            return;
         }
+        prev = curr;
+        curr = curr->next;
     }
-
-    task->next = NULL;
-    task->prev = NULL;
 }
 
 /**
@@ -257,8 +235,10 @@ void rtos_task_add_to_delayed_list(rtos_tcb_t *task, rtos_tick_t delay_ticks) {
  * @brief Update delayed tasks (called from tick handler)
  */
 void rtos_task_update_delayed_tasks(void) {
+    rtos_port_enter_critical();
+
     rtos_tcb_t *task = g_delayed_task_list;
-    rtos_tick_t current_tick = g_kernel.tick_count;
+    rtos_tick_t current_tick = rtos_get_tick_count();
 
     /* Check all delayed tasks */
     while (task != NULL) {
@@ -276,21 +256,17 @@ void rtos_task_update_delayed_tasks(void) {
 
         task = next_task;
     }
+
+    rtos_port_exit_critical();
 }
 
 /**
  * @brief Get highest priority ready task
  */
 rtos_tcb_t *rtos_task_get_highest_priority_ready(void) {
-    /* Find highest priority with ready tasks */
     for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--) {
         if (g_ready_list[priority] != NULL) {
-            rtos_tcb_t *task = g_ready_list[priority];
-
-            /* Move to next task for round-robin */
-            g_ready_list[priority] = task->next;
-
-            return task;
+            return g_ready_list[priority];
         }
     }
 
@@ -324,23 +300,17 @@ static rtos_tcb_t *rtos_task_allocate_tcb(void) {
  * @brief Allocate stack memory
  */
 static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size) {
-    // Ensure size is multiple of 8
-    size = (size + 7) & ~0x7;
-    
-    // Align memory index to 8 bytes
-    g_stack_memory_index = (g_stack_memory_index + 7) & ~0x7;
-    
-    if (g_stack_memory_index + size > RTOS_TOTAL_HEAP_SIZE) {
+    uint32_t aligned_index = (g_stack_memory_index + (RTOS_STACK_ALIGNMENT - 1U)) & ~(RTOS_STACK_ALIGNMENT - 1U);
+
+    if (aligned_index + size > sizeof(g_task_stack_memory)) {
         return NULL;
     }
-    
-    uint8_t *stack_base = &g_task_stack_memory[g_stack_memory_index];
-    g_stack_memory_index += size;
 
-    log_info("Allocated stack top: 0x%08X", (uint32_t)(stack_base + size));
-    
-    // Return aligned top of stack
-    return (uint32_t *)((uint32_t)(stack_base + size) & ~0x7);
+    uint8_t *stack_base = &g_task_stack_memory[aligned_index];
+    uint8_t *stack_top = stack_base + size;
+    g_stack_memory_index = aligned_index + size;
+
+    return (uint32_t *)((uint32_t)stack_top & ~(RTOS_STACK_ALIGNMENT - 1U));
 }
 
 /**

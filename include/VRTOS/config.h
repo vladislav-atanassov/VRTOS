@@ -29,9 +29,10 @@
 #define RTOS_MINIMUM_TASK_STACK_SIZE        (128U)         /**< Minimum allowed task stack size */
 
 /* Scheduler Configuration */
-#define RTOS_SCHEDULER_TYPE_ROUND_ROBIN     (1U)           /**< Round-robin scheduler enabled */
+#define RTOS_SCHEDULER_TYPE_ROUND_ROBIN     (0U)           /**< Round-robin scheduler enabled */
 #define RTOS_TIME_SLICE_MS                  (10U)          /**< Time slice for round-robin in ms */
 #define RTOS_TIME_SLICE_TICKS               (RTOS_TIME_SLICE_MS / RTOS_TICK_PERIOD_MS)
+#define RTOS_SCHEDULER_TYPE_RMS             (1U)           /**< Rate Monotonic Scheduling enabled */
 
 /* Memory Configuration */
 #define RTOS_TOTAL_HEAP_SIZE                (4096U)        /**< Total heap size for task stacks */
