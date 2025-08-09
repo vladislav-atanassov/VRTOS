@@ -1,6 +1,6 @@
 # STM32F446RE RTOS Implementation
 
-A custom Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch as an educational and production-grade project.
+A custom Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch as an educational project.
 
 ## Project Overview
 
@@ -70,7 +70,6 @@ Hardware Layer      (STM32F446RE HAL)
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd rtos-stm32f446re
 ```
 
 2. Build the project:
@@ -95,7 +94,7 @@ The included blinky example demonstrates basic RTOS functionality:
 - Uses RTOS delay functions for timing
 - Demonstrates task scheduling and context switching
 
-The LED should be togglong every 5 seconds if the RTOS is working correctly.
+The LED should be toggling every 5 seconds if the RTOS is working correctly.
 
 ## Configuration
 
@@ -156,7 +155,7 @@ void rtos_yield(void);
 
 Typical memory usage for the MVP:
 - **Flash**: ~8-12KB (depending on optimization)
-- **RAM**: ~2-4KB (plus task stacks)
+- **RAM**: ~4-6KB (plus task stacks)
 - **Stack per task**: 256-768 bytes (configurable)
 
 ## Development Guidelines
@@ -193,7 +192,7 @@ Typical memory usage for the MVP:
 1. **Priority Inversion**:
     - Verify idle task has lowest priority
     - Check preemption logic in tick handler
-3. **Context Switch Failures**:
+2. **Context Switch Failures**:
     - Confirm PendSV/SVC handler alignment
     - Validate stack pointer initialization
 3. **Task Starvation**:
@@ -208,6 +207,7 @@ Typical memory usage for the MVP:
 - Scheduling edge case handling
 - Memory protection enhancements
 - System stability under load
+
 ### Next Steps:
 - Add mutex/semaphore support
 - Implement software timers
