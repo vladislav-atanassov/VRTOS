@@ -26,7 +26,6 @@
 
 /* Task priorities */
 #define BLINK_TASK_PRIORITY (2U)
-#define PRINT_TASK_PRIORITY (3U)
 
 /* Blink & Print timing */
 #define LED_BLINK_DELAY_MS (5000U)
@@ -48,15 +47,28 @@ static void led_toggle(void) {
 }
 
 /**
- * @brief Indicate system failure
+ * @brief Indicate system failure by blinking the onboard LED.
  *
- * Fast toggling the integrated led with artifitial software delay
+ * This function never returns.
+ * It leaves interrupts enabled so that other fault handlers or logging
+ * can still work, unless explicitly disabled beforehand.
+ *
+ * Works in both pre-RTOS and RTOS contexts.
  */
-static void indicate_system_failure(void) {
-    /* Infinite loop with LED blink */
-    while (1) {
+__attribute__((__noreturn__))
+static void indicate_system_failure(void)
+{
+    const uint32_t delay_cycles = SystemCoreClock / 20; // ~50 ms blink step
+    volatile uint32_t counter;
+
+    while(1)
+    {
         led_toggle();
-        for (volatile int i = 0; i < 100000; i++) {
+
+        // crude software delay — does not block interrupts
+        for (counter = 0; counter < delay_cycles; counter++)
+        {
+            __NOP();
         }
     }
 }
@@ -84,6 +96,7 @@ static void blink_task(void *param) {
  *
  * @return Should never return
  */
+__attribute__((__noreturn__))
 int main(void) {
     rtos_status_t      status;
     rtos_task_handle_t blink_task_handle;
@@ -118,10 +131,9 @@ int main(void) {
     /* Should never reach here */
     while (1) {
     }
-
-    return 0;
 }
 
+__attribute__((__noreturn__))
 void Error_Handler(void) {
     __disable_irq();
     while (1) {
@@ -172,7 +184,8 @@ static void MX_GPIO_Init(void) {
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-__attribute__((naked)) void HardFault_Handler(void) {
+__attribute__((naked))
+void HardFault_Handler(void) {
     __asm volatile("TST LR, #4              \n"
                    "ITE EQ                  \n"
                    "MRSEQ R0, MSP           \n"
@@ -181,6 +194,7 @@ __attribute__((naked)) void HardFault_Handler(void) {
                    "B HardFault_Handler_C");
 }
 
+__attribute__((__noreturn__))
 void HardFault_Handler_C(uint32_t *stack_frame) {
     uint32_t r0 = stack_frame[0];
     uint32_t r1 = stack_frame[1];

@@ -95,7 +95,7 @@ The included blinky example demonstrates basic RTOS functionality:
 - Uses RTOS delay functions for timing
 - Demonstrates task scheduling and context switching
 
-The LED should blink at 5Hz if the RTOS is working correctly.
+The LED should be togglong every 5 seconds if the RTOS is working correctly.
 
 ## Configuration
 

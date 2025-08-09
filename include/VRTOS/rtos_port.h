@@ -8,7 +8,7 @@
 #ifndef RTOS_PORT_H
 #define RTOS_PORT_H
 
-#include "VRTOS/rtos_types.h"
+#include "rtos_types.h"
 
 /**
  * @file rtos_port.h

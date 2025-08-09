@@ -5,12 +5,12 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "VRTOS/config.h"
-#include "VRTOS/rtos_assert.h"
-#include "core/kernel_priv.h"
+#include "config.h"
+#include "rtos_assert.h"
+#include "kernel_priv.h"
 #include "log.h"
 #include "rtos_port.h"
-#include "task/task_priv.h"
+#include "task_priv.h"
 
 // Include CMSIS for Cortex-M4
 #include "stm32f4xx.h"
@@ -93,7 +93,7 @@ void rtos_port_enter_critical(void) {
 
     __asm volatile("MRS %0, PRIMASK    \n"
                    "CPSID I            \n"
-                   : "=r"(primask) 
+                   : "=r"(primask)
                    :
                    : "memory");
 
@@ -131,8 +131,9 @@ void rtos_port_yield(void) {
 }
 
 /**
- * @brief Start first task (never returns)
+ * @brief Start first task
  */
+__attribute__((__noreturn__))
 void rtos_port_start_first_task(void) {
     /* Ensure 8-byte stack alignment */
     uint32_t psp_val = (uint32_t)g_kernel.next_task->stack_pointer & ~(RTOS_STACK_ALIGNMENT - 1U);
@@ -148,8 +149,8 @@ void rtos_port_start_first_task(void) {
     log_error("Should never reach here");
 
     /* Should never reach here */
-    while (1)
-        ;
+    while (1) {
+    }
 }
 
 /**
@@ -166,15 +167,17 @@ void log_svc_handler(void) { log_debug("Triggered SVC handler, PSP=%08X", __get_
  * 
  * This function should start the first task
  */
-__attribute__((naked)) void SVC_Handler(void) {
-    __asm volatile("BL log_svc_handler      \n" /* Debug log */
-                   "MRS R0, PSP             \n" /* Get PSP */
-                   "LDMIA R0!, {R4-R11}     \n" /* Restore R4-R11 from stack */
-                   "MSR PSP, R0             \n" /* Update PSP to point after registers */
-                   "ISB                     \n" /* Instruction barrier */
-                   "LDR LR, =0xFFFFFFFD     \n" /* EXC_RETURN: thread mode + PSP */
-                   "BX LR                   \n" /* Return to thread mode */
-                   ::: "memory");
+__attribute__((naked))
+void SVC_Handler(void) {
+    __asm volatile(
+        "BL log_svc_handler      \n" /* Debug log */
+        "MRS R0, PSP             \n" /* Get PSP */
+        "LDMIA R0!, {R4-R11}     \n" /* Restore R4-R11 from stack */
+        "MSR PSP, R0             \n" /* Update PSP to point after registers */
+        "ISB                     \n" /* Instruction barrier */
+        "LDR LR, =0xFFFFFFFD     \n" /* EXC_RETURN: thread mode + PSP */
+        "BX LR                   \n" /* Return to thread mode */
+        ::: "memory");
 }
 
 void log_pendsv_handler(void) { log_debug("Triggered PendSV handler, PSP=%08X", __get_PSP()); }
@@ -184,30 +187,32 @@ void log_pendsv_handler(void) { log_debug("Triggered PendSV handler, PSP=%08X", 
  *
  * This function handles context switching.
  */
-__attribute__((naked)) void PendSV_Handler(void) {
-    __asm volatile("BL log_pendsv_handler              \n" /* Debug log */
-                   "MRS     R0, PSP                    \n" /* Get current PSP */
-                   "CBZ     R0, pendsv_nosave          \n" /* Skip save if first run */
+__attribute__((naked))
+void PendSV_Handler(void) {
+    __asm volatile(
+        "BL log_pendsv_handler              \n" /* Debug log */
+        "MRS     R0, PSP                    \n" /* Get current PSP */
+        "CBZ     R0, pendsv_nosave          \n" /* Skip save if first run */
 
-                   "STMDB   R0!, {R4-R11}              \n" /* Save current context - R4-R11 */
-                   "LDR     R1, =g_kernel              \n" /* Save stack pointer to TCB */
-                   "LDR     R2, [R1, #0]               \n" /* current_task */
-                   "STR     R0, [R2]                   \n" /* stack_pointer */
+        "STMDB   R0!, {R4-R11}              \n" /* Save current context - R4-R11 */
+        "LDR     R1, =g_kernel              \n" /* Save stack pointer to TCB */
+        "LDR     R2, [R1, #0]               \n" /* current_task */
+        "STR     R0, [R2]                   \n" /* stack_pointer */
 
-                   "pendsv_nosave:                     \n"
-                   "PUSH    {R3, LR}                   \n" /* Preserve LR (EXC_RETURN) */
-                   "BL      rtos_kernel_switch_context \n" /* Call scheduler */
-                   "POP     {R3, LR}                   \n" /* Restore LR */
+        "pendsv_nosave:                     \n"
+        "PUSH    {R3, LR}                   \n" /* Preserve LR (EXC_RETURN) */
+        "BL      rtos_kernel_switch_context \n" /* Call scheduler */
+        "POP     {R3, LR}                   \n" /* Restore LR */
 
-                   "LDR     R1, =g_kernel              \n" /* Load next task context */
-                   "LDR     R2, [R1, #0]               \n" /* current_task */
-                   "LDR     R0, [R2]                   \n" /* stack_pointer */
+        "LDR     R1, =g_kernel              \n" /* Load next task context */
+        "LDR     R2, [R1, #0]               \n" /* current_task */
+        "LDR     R0, [R2]                   \n" /* stack_pointer */
 
-                   "LDMIA   R0!, {R4-R11}              \n" /* Restore R4-R11 */
+        "LDMIA   R0!, {R4-R11}              \n" /* Restore R4-R11 */
 
-                   "MSR     PSP, R0                    \n" /* Update PSP */
-                   "MOV     LR, #0xFFFFFFFD            \n" /* Set EXC_RETURN value, Thread mode + PSP */
+        "MSR     PSP, R0                    \n" /* Update PSP */
+        "MOV     LR, #0xFFFFFFFD            \n" /* Set EXC_RETURN value, Thread mode + PSP */
 
-                   "BX      LR                         \n" /* Return to thread mode */
-                   ::: "r0", "r1", "r2", "memory");
+        "BX      LR                         \n" /* Return to thread mode */
+        ::: "r0", "r1", "r2", "memory");
 }

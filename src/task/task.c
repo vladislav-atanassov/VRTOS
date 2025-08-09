@@ -5,9 +5,9 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "VRTOS/task.h"
-#include "VRTOS/VRTOS.h"
-#include "core/kernel_priv.h"
+#include "task.h"
+#include "VRTOS.h"
+#include "kernel_priv.h"
 #include "log.h"
 #include "rtos_port.h"
 #include "task_priv.h"
@@ -276,11 +276,12 @@ rtos_tcb_t *rtos_task_get_highest_priority_ready(void) {
 /**
  * @brief Idle task function
  */
+__attribute__((__noreturn__))
 void rtos_task_idle_function(void *param) {
     (void)param; /* Unused parameter */
 
     while (1) {
-        __asm volatile("wfi"); /* Wait for interrupt */
+        __WFI(); /* Wait for interrupt */
     }
 }
 

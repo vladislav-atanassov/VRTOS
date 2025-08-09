@@ -11,7 +11,7 @@
 #include "log.h"
 #include "rtos_port.h"
 #include "task.h"
-#include "task/task_priv.h"
+#include "task_priv.h"
 
 /**
  * @file kernel.c
@@ -21,11 +21,12 @@
  */
 
 /* Global kernel control block */
-rtos_kernel_cb_t g_kernel = {.state = RTOS_KERNEL_STATE_INACTIVE,
-                             .tick_count = 0,
-                             .current_task = NULL,
-                             .next_task = NULL,
-                             .scheduler_suspended = 0};
+rtos_kernel_cb_t g_kernel = {
+    .state = RTOS_KERNEL_STATE_INACTIVE,
+    .tick_count = 0,
+    .current_task = NULL,
+    .next_task = NULL,
+    .scheduler_suspended = 0};
 
 /**
  * @brief Initialize the RTOS system
@@ -61,8 +62,7 @@ rtos_status_t rtos_init(void) {
 
     /* Create idle task */
     rtos_task_handle_t idle_task;
-    status = rtos_task_create(rtos_task_idle_function, "IDLE", RTOS_DEFAULT_TASK_STACK_SIZE, NULL,
-                              RTOS_IDLE_TASK_PRIORITY, &idle_task);
+    status = rtos_task_create(rtos_task_idle_function, "IDLE", NULL, NULL, RTOS_IDLE_TASK_PRIORITY, &idle_task);
 
     if (status != RTOS_SUCCESS) {
         return status;
