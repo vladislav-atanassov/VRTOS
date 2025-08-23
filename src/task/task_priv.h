@@ -10,7 +10,6 @@
 #define TASK_PRIV_H
 
 #include "config.h"
-#include "rtos_types.h"
 #include "rtos_assert.h"
 
 /**
@@ -58,9 +57,6 @@ extern uint8_t     g_task_count;
 
 /* Internal task functions */
 rtos_status_t rtos_task_init_system(void);
-void          rtos_task_add_to_ready_list(rtos_tcb_t *task);
-void          rtos_task_remove_from_ready_list(rtos_tcb_t *task);
-void          rtos_task_add_to_delayed_list(rtos_tcb_t *task, rtos_tick_t delay_ticks);
 void          rtos_task_update_delayed_tasks(void);
 rtos_tcb_t   *rtos_task_get_highest_priority_ready(void);
 void          rtos_task_idle_function(void *param);

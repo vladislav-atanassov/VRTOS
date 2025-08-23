@@ -8,6 +8,7 @@
 #include "task.h"
 #include "VRTOS.h"
 #include "kernel_priv.h"
+#include "list.h"
 #include "log.h"
 #include "rtos_port.h"
 #include "task_priv.h"
@@ -28,14 +29,12 @@ rtos_tcb_t *g_delayed_task_list = NULL;                   /**< List of delayed t
 uint8_t     g_task_count = 0;                             /**< Current number of tasks */
 
 /* Static memory for task stacks */
-static uint8_t  g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE] __attribute__((aligned(RTOS_STACK_ALIGNMENT))) = {0};
+__attribute__((aligned(RTOS_STACK_ALIGNMENT))) static uint8_t  g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE] = {0};
 static uint32_t g_stack_memory_index = 0;
 
 /* Static function prototypes */
 static rtos_tcb_t *rtos_task_allocate_tcb(void);
 static uint32_t   *rtos_task_allocate_stack(rtos_stack_size_t size);
-static void        rtos_task_list_insert_sorted(rtos_tcb_t **list, rtos_tcb_t *task);
-static void        rtos_task_list_remove(rtos_tcb_t **list, rtos_tcb_t *task);
 
 /**
  * @brief Initialize the task management system
@@ -167,71 +166,6 @@ rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle) {
 }
 
 /**
- * @brief Add task to ready list
- */
-void rtos_task_add_to_ready_list(rtos_tcb_t *task) {
-    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES) {
-        return;
-    }
-
-    /* RMS: Add to head of priority list */
-    rtos_tcb_t **list = &g_ready_list[task->priority];
-
-    if (*list == NULL) {
-        *list = task;
-        task->next = NULL;
-    } else {
-        // Append to END of list
-        rtos_tcb_t *current = *list;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = task;
-        task->next = NULL;
-    }
-}
-
-/**
- * @brief Remove task from ready list
- */
-void rtos_task_remove_from_ready_list(rtos_tcb_t *task) {
-    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES) {
-        return;
-    }
-
-    /* RMS: Remove from priority list */
-    rtos_tcb_t **list_head = &g_ready_list[task->priority];
-    rtos_tcb_t  *prev = NULL;
-    rtos_tcb_t  *curr = *list_head;
-
-    while (curr != NULL) {
-        if (curr == task) {
-            if (prev == NULL) {
-                *list_head = curr->next;
-            } else {
-                prev->next = curr->next;
-            }
-            task->next = NULL;
-            return;
-        }
-        prev = curr;
-        curr = curr->next;
-    }
-}
-
-/**
- * @brief Add task to delayed list
- */
-void rtos_task_add_to_delayed_list(rtos_tcb_t *task, rtos_tick_t delay_ticks) {
-    if (task == NULL) {
-        return;
-    }
-
-    task->delay_until = g_kernel.tick_count + delay_ticks;
-    rtos_task_list_insert_sorted(&g_delayed_task_list, task);
-}
-
-/**
  * @brief Update delayed tasks (called from tick handler)
  */
 void rtos_task_update_delayed_tasks(void) {
@@ -246,7 +180,7 @@ void rtos_task_update_delayed_tasks(void) {
 
         if (current_tick >= task->delay_until) {
             /* Task delay expired */
-            rtos_task_list_remove(&g_delayed_task_list, task);
+            rtos_task_remove_from_delayed_list(task);
             task->state = RTOS_TASK_STATE_READY;
             rtos_task_add_to_ready_list(task);
         } else {
@@ -264,7 +198,7 @@ void rtos_task_update_delayed_tasks(void) {
  * @brief Get highest priority ready task
  */
 rtos_tcb_t *rtos_task_get_highest_priority_ready(void) {
-    for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--) {
+    for (uint8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--) {
         if (g_ready_list[priority] != NULL) {
             return g_ready_list[priority];
         }
@@ -312,59 +246,4 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size) {
     g_stack_memory_index = aligned_index + size;
 
     return (uint32_t *)((uint32_t)stack_top & ~(RTOS_STACK_ALIGNMENT - 1U));
-}
-
-/**
- * @brief Insert task into sorted list by delay_until
- */
-static void rtos_task_list_insert_sorted(rtos_tcb_t **list, rtos_tcb_t *task) {
-    if (*list == NULL) {
-        /* Empty list */
-        *list = task;
-        task->next = NULL;
-        task->prev = NULL;
-        return;
-    }
-
-    rtos_tcb_t *current = *list;
-    rtos_tcb_t *prev = NULL;
-
-    /* Find insertion point */
-    while (current != NULL && current->delay_until <= task->delay_until) {
-        prev = current;
-        current = current->next;
-    }
-
-    /* Insert task */
-    task->next = current;
-    task->prev = prev;
-
-    if (prev == NULL) {
-        /* Insert at head */
-        *list = task;
-    } else {
-        prev->next = task;
-    }
-
-    if (current != NULL) {
-        current->prev = task;
-    }
-}
-
-/**
- * @brief Remove task from list
- */
-static void rtos_task_list_remove(rtos_tcb_t **list, rtos_tcb_t *task) {
-    if (task->prev != NULL) {
-        task->prev->next = task->next;
-    } else {
-        *list = task->next;
-    }
-
-    if (task->next != NULL) {
-        task->next->prev = task->prev;
-    }
-
-    task->next = NULL;
-    task->prev = NULL;
 }

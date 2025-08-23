@@ -158,19 +158,9 @@ void rtos_kernel_tick_handler(void) {
     rtos_port_enter_critical();
     rtos_task_update_delayed_tasks();
 
-#if RTOS_SCHEDULER_TYPE_ROUND_ROBIN
-    if (g_kernel.current_task != NULL && g_kernel.current_task->time_slice_remaining > 0) {
-        g_kernel.current_task->time_slice_remaining--;
-        if (g_kernel.current_task->time_slice_remaining == 0) {
-            rtos_port_exit_critical();
-            rtos_yield();
-            return;
-        }
-    }
-#endif
-#if RTOS_SCHEDULER_TYPE_RMS
     rtos_tcb_t *task = rtos_task_get_highest_priority_ready();
 
+#if RTOS_SCHEDULER_TYPE_RMS
     if (task != NULL && task != g_kernel.current_task && task->priority > g_kernel.current_task->priority) {
         rtos_port_exit_critical();
         rtos_yield();
