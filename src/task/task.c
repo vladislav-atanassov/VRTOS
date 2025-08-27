@@ -12,6 +12,7 @@
 #include "log.h"
 #include "rtos_port.h"
 #include "task_priv.h"
+#include "utils.h"
 #include <string.h>
 
 /**
@@ -29,7 +30,7 @@ rtos_tcb_t *g_delayed_task_list = NULL;                   /**< List of delayed t
 uint8_t     g_task_count = 0;                             /**< Current number of tasks */
 
 /* Static memory for task stacks */
-__attribute__((aligned(RTOS_STACK_ALIGNMENT))) static uint8_t  g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE] = {0};
+__attribute__((aligned(RTOS_STACK_ALIGNMENT))) static uint8_t g_task_stack_memory[RTOS_TOTAL_HEAP_SIZE] = {0};
 static uint32_t g_stack_memory_index = 0;
 
 /* Static function prototypes */
@@ -89,7 +90,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function,
     }
 
     /* Align stack size */
-    stack_size = (stack_size + RTOS_STACK_ALIGNMENT - 1) & ~(RTOS_STACK_ALIGNMENT - 1);
+    ALIGN8_UP(stack_size);
 
     rtos_port_enter_critical();
 
@@ -198,7 +199,7 @@ void rtos_task_update_delayed_tasks(void) {
  * @brief Get highest priority ready task
  */
 rtos_tcb_t *rtos_task_get_highest_priority_ready(void) {
-    for (uint8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--) {
+    for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--) {
         if (g_ready_list[priority] != NULL) {
             return g_ready_list[priority];
         }
@@ -235,7 +236,7 @@ static rtos_tcb_t *rtos_task_allocate_tcb(void) {
  * @brief Allocate stack memory
  */
 static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size) {
-    uint32_t aligned_index = (g_stack_memory_index + (RTOS_STACK_ALIGNMENT - 1U)) & ~(RTOS_STACK_ALIGNMENT - 1U);
+    uint32_t aligned_index = ALIGN8_UP_VALUE(g_stack_memory_index);
 
     if (aligned_index + size > sizeof(g_task_stack_memory)) {
         return NULL;
@@ -245,5 +246,5 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size) {
     uint8_t *stack_top = stack_base + size;
     g_stack_memory_index = aligned_index + size;
 
-    return (uint32_t *)((uint32_t)stack_top & ~(RTOS_STACK_ALIGNMENT - 1U));
+    return (uint32_t *)ALIGN8_DOWN_VALUE((uint32_t)stack_top);
 }

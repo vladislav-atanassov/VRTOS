@@ -9,6 +9,7 @@
 #include "rtos_assert.h"
 #include "kernel_priv.h"
 #include "log.h"
+#include "utils.h"
 #include "rtos_port.h"
 #include "task_priv.h"
 
@@ -59,7 +60,7 @@ void rtos_port_start_systick(void) {
  */
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter) {
     /* Convert to byte address for alignment */
-    uint32_t *stack_ptr = (uint32_t *)((uint32_t)stack_top & ~(RTOS_STACK_ALIGNMENT - 1));
+    uint32_t *stack_ptr = (uint32_t *)ALIGN8_DOWN_VALUE((uint32_t)stack_top);
 
     /* Initial exception frame */
     *--stack_ptr = 0x01000000;                  /* xPSR (Thumb bit set) */
@@ -136,7 +137,7 @@ void rtos_port_yield(void) {
 __attribute__((__noreturn__))
 void rtos_port_start_first_task(void) {
     /* Ensure 8-byte stack alignment */
-    uint32_t psp_val = (uint32_t)g_kernel.next_task->stack_pointer & ~(RTOS_STACK_ALIGNMENT - 1U);
+    uint32_t psp_val = ALIGN8_DOWN_VALUE((uint32_t)g_kernel.next_task->stack_pointer);
 
     /* Set PSP to point to saved registers (R4-R11) */
     __set_PSP(psp_val);
