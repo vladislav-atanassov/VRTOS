@@ -1,214 +1,101 @@
-# STM32F446RE RTOS Implementation
+# VRTOS - Educational Real-Time Operating System
 
-A custom Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch as an educational project.
+A modular, educational Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch with pluggable scheduler architecture.
 
 ## Project Overview
 
-This RTOS provides essential real-time scheduling capabilities with a clean, modular architecture. The current MVP includes:
+VRTOS is a lightweight RTOS designed for learning and experimentation. It features a clean, modular architecture with interchangeable scheduling policies and comprehensive debugging capabilities.
 
-- **Rate Monotonic Scheduler (RMS)** with strict priority-based preemption
-- **Task Management** with creation and state management
-- **System Tick** with configurable frequency (default 1ms)
-- **Delay Functions** for task timing control
-- **Context Switching** optimized for Cortex-M4 architecture
-- **Static Memory Management** with stack allocation
-- **Porting Layer** for Cortex-M4
-- **Comprehensive Debugging** with logging system
+### Key Features
+
+- **Modular Scheduler Architecture** - Pluggable scheduler implementations via vtable interface
+- **Multiple Scheduling Policies**:
+  - Preemptive Static Priority (default)
+  - Cooperative Round-Robin
+- **Task Management** - Dynamic task creation with configurable priorities and stack sizes
+- **Timing Services** - System tick with 1ms resolution and delay functions
+- **Cortex-M4 Optimization** - Efficient context switching and interrupt handling
+- **Static Memory Management** - Predictable memory allocation with stack overflow detection
+- **Comprehensive Logging** - Multi-level debug output via UART
 
 ## Architecture
 
-The RTOS follows a layered architecture with clear separation of concerns:
+### Layered Design
 
 ```
-Application Layer   (User Tasks)
-    ↓
-RTOS API Layer      (Public Interface)
-    ↓
-RTOS Core Layer     (Scheduler, Tasks, Memory)
-    ↓
-Kernel Core Layer   (Tick, Context Switch)
-    ↓
-Porting Layer       (Cortex-M4 Specific)
-    ↓
-Hardware Layer      (STM32F446RE HAL)
+┌─────────────────────────────────────┐
+│      Application Layer              │
+│      (User Tasks)                   │
+├─────────────────────────────────────┤
+│      RTOS API Layer                 │
+│      (Public Interface)             │
+├─────────────────────────────────────┤
+│      Scheduler Manager              │
+│      (Vtable Interface)             │
+├─────────────┬───────────────────────┤
+│ Preemptive  │  Cooperative  │ ...   │
+│ Scheduler   │  Scheduler    │       │
+├─────────────┴───────────────────────┤
+│      Kernel Core                    │
+│      (Context Switch, Tick)         │
+├─────────────────────────────────────┤
+│      Porting Layer                  │
+│      (Cortex-M4)                    │
+├─────────────────────────────────────┤
+│      Hardware Abstraction           │
+│      (STM32F446RE HAL)              │
+└─────────────────────────────────────┘
 ```
 
-## Features
+### Scheduler Architecture
 
-### Current (MVP)
-- Task creation and management
-- Strict Rate Monotonic Scheduling (RMS)
-- Preemptive priority-based scheduling
-- System tick and timing services
-- Task delay functions (ms and ticks)
-- Cortex-M4 context switching
-- Critical section management
-- Static stack allocation
-- Extensive logging system
-- HardFault diagnostics
-- Priority inversion prevention
+The scheduler system uses a vtable-based design allowing runtime scheduler selection:
 
-### Planned (Future Releases)
-- Mutexes (binary and recursive)
-- Semaphores (counting and binary)
-- Message queues
-- Software timers
-- Event flags
-- Memory pools
-- Tickless idle mode
-- Power management
-
-## Getting Started
-
-### Prerequisites
-- PlatformIO IDE or PlatformIO Core
-- STM32F446RE Nucleo board
-- ARM GCC toolchain (automatically handled by PlatformIO)
-
-### Building the Project
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-```
-
-2. Build the project:
-```bash
-pio build
-```
-
-3. Upload to the board:
-```bash
-pio upload
-```
-
-4. Monitor serial output:
-```bash
-pio device monitor
-```
-
-### Running the Example
-
-The included blinky example demonstrates basic RTOS functionality:
-- Creates a task that blinks the onboard LED (PA5)
-- Uses RTOS delay functions for timing
-- Demonstrates task scheduling and context switching
-
-The LED should be toggling every 5 seconds if the RTOS is working correctly.
-
-## Configuration
-
-RTOS behavior can be customized through configuration files:
-
-- `include/VRTOS/config.h` - Generic RTOS configuration
-- `config/stm32f446re/rtos_config.h` - STM32F446RE specific settings
-
-Key configuration parameters:
 ```c
-#define RTOS_SYSTEM_CLOCK_HZ       (84000000U)   // 84MHz
-#define RTOS_TICK_RATE_HZ          (1000U)       // 1ms tick
-#define RTOS_MAX_TASKS             (10U)         // Max tasks
-#define RTOS_TIME_SLICE_MS         (10U)         // Round-robin slice
+struct rtos_scheduler {
+    // Core scheduling operations
+    rtos_status_t (*init)(rtos_scheduler_instance_t *instance);
+    rtos_task_handle_t (*get_next_task)(rtos_scheduler_instance_t *instance);
+    bool (*should_preempt)(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task);
+    void (*task_completed)(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task);
+    
+    // List management operations
+    void (*add_to_ready_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
+    void (*remove_from_ready_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
+    void (*add_to_delayed_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle, rtos_tick_t delay_ticks);
+    void (*remove_from_delayed_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
+    void (*update_delayed_tasks)(rtos_scheduler_instance_t *instance);
+    
+    // Optional statistics
+    size_t (*get_statistics)(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size);
+};
 ```
 
-## API Reference
+## Scheduling Policies
 
-### Task Management
-```c
-// Create a new task
-rtos_status_t rtos_task_create(rtos_task_function_t task_function,
-                              const char *name,
-                              rtos_stack_size_t stack_size,
-                              void *parameter,
-                              rtos_priority_t priority,
-                              rtos_task_handle_t *task_handle);
+### Preemptive Static Priority (Default)
 
-// Get current task
-rtos_task_handle_t rtos_task_get_current(void);
-```
+- **Algorithm**: Highest priority task always runs
+- **Preemption**: Immediate when higher priority task becomes ready
+- **Data Structure**: Per-priority ready lists with bitmask for O(1) lookup
+- **Use Case**: Hard real-time systems requiring deterministic behavior
 
-### Timing Services
-```c
-// Delay in milliseconds
-void rtos_delay_ms(uint32_t ms);
+**Key Characteristics**:
+- Priority-based preemption
+- FIFO ordering within same priority level
+- Time-sorted delayed list for efficient timeout management
+- Bitmask optimization for fast highest-priority search
 
-// Delay in ticks
-void rtos_delay_ticks(rtos_tick_t ticks);
+### Cooperative (Yield-Based Round-Robin)
 
-// Get current tick count
-rtos_tick_t rtos_get_tick_count(void);
-```
+- **Algorithm**: FIFO queue with round-robin on yield
+- **Preemption**: None - tasks must explicitly yield
+- **Data Structure**: Single FIFO ready list
+- **Use Case**: Simple applications, reduced context switch overhead
 
-### System Control
-```c
-// Initialize RTOS
-rtos_status_t rtos_init(void);
-
-// Start scheduler (never returns)
-rtos_status_t rtos_start_scheduler(void);
-
-// Force task yield
-void rtos_yield(void);
-```
-
-## Memory Usage
-
-Typical memory usage for the MVP:
-- **Flash**: ~8-12KB (depending on optimization)
-- **RAM**: ~4-6KB (plus task stacks)
-- **Stack per task**: 256-768 bytes (configurable)
-
-## Development Guidelines
-
-### Adding New Features
-1. Follow the existing modular structure
-2. Add public APIs to appropriate header files
-3. Implement private functions in corresponding .c files
-4. Update configuration options if needed
-5. Add documentation and examples
-
-### Porting to Other Hardware
-1. Create new port directory (e.g., `port/cortex_m3/`)
-2. Implement the porting layer interface (`rtos_port.h`)
-3. Update configuration for target hardware
-4. Test thoroughly with target-specific examples
-
-## Debugging
-
-### Common Issues
-1. **Hard Fault**: Check stack sizes and overflow protection
-2. **Tasks not switching**: Verify SysTick and PendSV configuration  
-3. **Timing issues**: Check system clock configuration
-4. **Memory corruption**: Enable stack overflow checking
-
-### Debug Features
-- Detailed task state logging
-- HardFault register dumps
-- Stack initialization patterns
-- Ready list monitoring
-- Task transition tracing
-
-## Common Issues & Solutions
-1. **Priority Inversion**:
-    - Verify idle task has lowest priority
-    - Check preemption logic in tick handler
-2. **Context Switch Failures**:
-    - Confirm PendSV/SVC handler alignment
-    - Validate stack pointer initialization
-3. **Task Starvation**:
-    - Ensure delayed tasks are readded to ready list
-    - Verify RMS priority assignment
-
-## Development Status
-
-### Current Focus Areas:
-
-- Robust context switching validation
-- Scheduling edge case handling
-- Memory protection enhancements
-- System stability under load
-
-### Next Steps:
-- Add mutex/semaphore support
-- Implement software timers
-- Add power management features
+**Key Characteristics**:
+- Non-preemptive execution
+- Tasks run until voluntary yield (`rtos_yield()` or delay)
+- Yielding tasks move to end of queue (round-robin behavior)
+- Lower interrupt overhead
+- No time-slicing - task scheduling is purely voluntary
