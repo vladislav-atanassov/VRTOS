@@ -1,4 +1,3 @@
-
 /*******************************************************************************
  * File: src/task/task_priv.h
  * Description: Private Task Definitions
@@ -11,6 +10,7 @@
 
 #include "config.h"
 #include "rtos_assert.h"
+#include "rtos_types.h"
 
 /**
  * @file task_priv.h
@@ -49,17 +49,39 @@ struct rtos_task_control_block {
 };
 RTOS_STATIC_ASSERT(offsetof(rtos_tcb_t, stack_pointer) == 0, "stack_pointer must be first in TCB");
 
+/**
+ * @brief Task memory usage statistics
+ */
+typedef struct {
+    uint32_t total_stack_memory;                        /**< Total stack memory available */
+    uint32_t used_stack_memory;                         /**< Stack memory currently used */
+    uint32_t free_stack_memory;                         /**< Stack memory available */
+    uint8_t  total_task_slots;                          /**< Total task slots */
+    uint8_t  used_task_slots;                           /**< Task slots currently used */
+    uint8_t  free_task_slots;                           /**< Task slots available */
+    uint32_t per_task_stack_size[RTOS_MAX_TASKS];       /**< Stack size per task */
+    uint32_t per_task_stack_unused[RTOS_MAX_TASKS];     /**< Unused stack per task */
+} rtos_task_memory_stats_t;
+
 /* Task management variables */
-extern rtos_tcb_t  g_task_pool[RTOS_MAX_TASKS];
-extern rtos_tcb_t *g_ready_list[RTOS_MAX_TASK_PRIORITIES];
-extern rtos_tcb_t *g_delayed_task_list;
-extern uint8_t     g_task_count;
+extern rtos_tcb_t  g_task_pool[RTOS_MAX_TASKS];  /**< Pool of task control blocks */
+extern uint8_t     g_task_count;                 /**< Current number of tasks */
 
 /* Internal task functions */
 rtos_status_t rtos_task_init_system(void);
-void          rtos_task_update_delayed_tasks(void);
-rtos_tcb_t   *rtos_task_get_highest_priority_ready(void);
-void          rtos_task_idle_function(void *param);
 rtos_tcb_t   *rtos_task_get_idle_task(void);
+void          rtos_task_idle_function(void *param);
 
-#endif // TASK_PRIV_H
+/* Extended task management functions */
+rtos_task_handle_t rtos_task_get_by_id(rtos_task_id_t task_id);
+rtos_task_handle_t rtos_task_get_by_name(const char *name);
+uint8_t           rtos_task_get_count(void);
+void              rtos_task_get_memory_stats(void);
+void              rtos_task_debug_print_all(void);
+
+/* Kernel helper functions for task state transitions */
+void rtos_kernel_task_ready(rtos_task_handle_t task);
+void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks);
+void rtos_kernel_task_unblock(rtos_task_handle_t task);
+
+#endif /* TASK_PRIV_H */

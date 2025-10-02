@@ -10,6 +10,7 @@
 #include "kernel_priv.h"
 #include "log.h"
 #include "rtos_port.h"
+#include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
 
@@ -21,12 +22,11 @@
  */
 
 /* Global kernel control block */
-rtos_kernel_cb_t g_kernel = {
-    .state = RTOS_KERNEL_STATE_INACTIVE,
-    .tick_count = 0,
-    .current_task = NULL,
-    .next_task = NULL,
-    .scheduler_suspended = 0};
+rtos_kernel_cb_t g_kernel = {.state = RTOS_KERNEL_STATE_INACTIVE,
+                             .tick_count = 0,
+                             .current_task = NULL,
+                             .next_task = NULL,
+                             .scheduler_suspended = 0};
 
 /**
  * @brief Initialize the RTOS system
@@ -48,28 +48,31 @@ rtos_status_t rtos_init(void) {
 
     /* Initialize task management system */
     status = rtos_task_init_system();
+    if (status != RTOS_SUCCESS) {
+        return status;
+    }
 
+    /* Initialize scheduler subsystem */
+    status = rtos_scheduler_init(RTOS_SCHEDULER_TYPE);
     if (status != RTOS_SUCCESS) {
         return status;
     }
 
     /* Initialize porting layer */
     status = rtos_port_init();
-
     if (status != RTOS_SUCCESS) {
         return status;
     }
 
     /* Create idle task */
     rtos_task_handle_t idle_task;
-    status = rtos_task_create(rtos_task_idle_function, "IDLE", NULL, NULL, RTOS_IDLE_TASK_PRIORITY, &idle_task);
-
+    status = rtos_task_create(rtos_task_idle_function, "IDLE", NULL, NULL,
+                              RTOS_IDLE_TASK_PRIORITY, &idle_task);
     if (status != RTOS_SUCCESS) {
         return status;
     }
 
     g_kernel.state = RTOS_KERNEL_STATE_READY;
-
     return RTOS_SUCCESS;
 }
 
@@ -81,9 +84,8 @@ rtos_status_t rtos_start_scheduler(void) {
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    /* Find the first task to run */
-    g_kernel.next_task = rtos_task_get_highest_priority_ready();
-
+    /* Find the first task to run using scheduler */
+    g_kernel.next_task = rtos_scheduler_get_next_task();
     if (g_kernel.next_task == NULL) {
         return RTOS_ERROR_GENERAL;
     }
@@ -91,12 +93,12 @@ rtos_status_t rtos_start_scheduler(void) {
     g_kernel.current_task = g_kernel.next_task;
     g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
 
-    rtos_task_remove_from_ready_list(g_kernel.current_task);
+    /* Remove from ready list using scheduler */
+    rtos_scheduler_remove_from_ready_list(g_kernel.current_task);
 
     g_kernel.state = RTOS_KERNEL_STATE_RUNNING;
 
     rtos_port_start_systick();
-
     rtos_port_start_first_task();
 
     /* Should never return */
@@ -125,8 +127,9 @@ void rtos_delay_ticks(rtos_tick_t ticks) {
 
     /* Block current task */
     g_kernel.current_task->state = RTOS_TASK_STATE_BLOCKED;
-    rtos_task_add_to_delayed_list(g_kernel.current_task, ticks);
-    rtos_task_remove_from_ready_list(g_kernel.current_task);
+
+    /* Use scheduler-specific delayed list management */
+    rtos_scheduler_add_to_delayed_list(g_kernel.current_task, ticks);
 
     rtos_port_exit_critical();
     rtos_yield();
@@ -154,21 +157,24 @@ void rtos_yield(void) { rtos_port_yield(); }
 void rtos_kernel_tick_handler(void) {
     g_kernel.tick_count++;
 
-    /* Update delayed tasks */
-    rtos_port_enter_critical();
-    rtos_task_update_delayed_tasks();
+    if (g_scheduler_instance.initialized) {
+        rtos_port_enter_critical();
 
-    rtos_tcb_t *task = rtos_task_get_highest_priority_ready();
+        /* Update delayed tasks using scheduler */
+        rtos_scheduler_update_delayed_tasks();
 
-#if RTOS_SCHEDULER_TYPE_RMS
-    if (task != NULL && task != g_kernel.current_task && task->priority > g_kernel.current_task->priority) {
+        /* Get next task from scheduler */
+        rtos_task_handle_t next_task = rtos_scheduler_get_next_task();
+
+        /* Check if preemption is needed */
+        if (rtos_scheduler_should_preempt(next_task)) {
+            rtos_port_exit_critical();
+            rtos_yield();
+            return;
+        }
+
         rtos_port_exit_critical();
-        rtos_yield();
-        return;
     }
-#endif
-
-    rtos_port_exit_critical();
 }
 
 /**
@@ -182,26 +188,131 @@ void rtos_kernel_switch_context(void) {
 
     /* Handle current task state */
     if (g_kernel.current_task != NULL) {
-        /* Only add to ready list if NOT unblocking */
-        if (g_kernel.current_task->state != RTOS_TASK_STATE_BLOCKED) {
+        /* Only add to ready list if NOT blocked/suspended */
+        if (g_kernel.current_task->state != RTOS_TASK_STATE_BLOCKED &&
+            g_kernel.current_task->state != RTOS_TASK_STATE_SUSPENDED) {
+
             g_kernel.current_task->state = RTOS_TASK_STATE_READY;
-            rtos_task_add_to_ready_list(g_kernel.current_task);
+
+            /* Use scheduler-specific ready list management */
+            rtos_scheduler_add_to_ready_list(g_kernel.current_task);
         }
+
+        /* Notify scheduler about task completion/yield */
+        rtos_scheduler_task_completed(g_kernel.current_task);
     }
 
-    /* Select next task */
-    g_kernel.next_task = rtos_task_get_highest_priority_ready();
+    /* Select next task using scheduler */
+    g_kernel.next_task = rtos_scheduler_get_next_task();
 
     /* Handle next task activation */
     if (g_kernel.next_task != NULL) {
-        rtos_task_remove_from_ready_list(g_kernel.next_task);
+        /* Remove from ready list using scheduler */
+        rtos_scheduler_remove_from_ready_list(g_kernel.next_task);
+
         g_kernel.next_task->state = RTOS_TASK_STATE_RUNNING;
         g_kernel.current_task = g_kernel.next_task;
     } else {
+        /* Fallback to idle task */
         g_kernel.current_task = rtos_task_get_idle_task();
-        rtos_task_remove_from_ready_list(g_kernel.current_task);
-        g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
+        if (g_kernel.current_task != NULL) {
+            /* Remove idle task from ready list */
+            rtos_scheduler_remove_from_ready_list(g_kernel.current_task);
+            g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
+        }
     }
+
+    rtos_port_exit_critical();
+}
+
+/* =================== Task State Transition Helpers =================== */
+
+/**
+ * @brief Move task to ready state
+ * @param task Task to make ready
+ *
+ * This helper function handles the state transition and list management
+ * when a task becomes ready to run.
+ */
+void rtos_kernel_task_ready(rtos_task_handle_t task) {
+    if (task == NULL) {
+        return;
+    }
+
+    rtos_port_enter_critical();
+
+    /* Update task state */
+    task->state = RTOS_TASK_STATE_READY;
+
+    /* Add to ready list using scheduler */
+    rtos_scheduler_add_to_ready_list(task);
+
+    /* Check if preemption is needed */
+    if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING) {
+        if (rtos_scheduler_should_preempt(task)) {
+            rtos_port_exit_critical();
+            rtos_yield();
+            return;
+        }
+    }
+
+    rtos_port_exit_critical();
+}
+
+/**
+ * @brief Move task to blocked state
+ * @param task Task to block
+ * @param delay_ticks Delay in ticks (0 = indefinite block)
+ *
+ * This helper function handles the state transition and list management
+ * when a task becomes blocked.
+ */
+void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks) {
+    if (task == NULL) {
+        return;
+    }
+
+    rtos_port_enter_critical();
+
+    /* Update task state */
+    task->state = RTOS_TASK_STATE_BLOCKED;
+
+    /* Remove from ready list if it was there */
+    rtos_scheduler_remove_from_ready_list(task);
+
+    /* Add to delayed list if delay specified */
+    if (delay_ticks > 0) {
+        rtos_scheduler_add_to_delayed_list(task, delay_ticks);
+    }
+
+    /* If this is the current task, force context switch */
+    if (task == g_kernel.current_task) {
+        rtos_port_exit_critical();
+        rtos_yield();
+        return;
+    }
+
+    rtos_port_exit_critical();
+}
+
+/**
+ * @brief Unblock a task
+ * @param task Task to unblock
+ *
+ * This helper function moves a blocked task back to ready state.
+ */
+void rtos_kernel_task_unblock(rtos_task_handle_t task) {
+    if (task == NULL || task->state != RTOS_TASK_STATE_BLOCKED) {
+        return;
+    }
+
+    rtos_port_enter_critical();
+
+    /* Remove from delayed list if it was there */
+    rtos_scheduler_remove_from_delayed_list(task);
+
+    /* Move to ready state */
+    rtos_kernel_task_ready(task);
 
     rtos_port_exit_critical();
 }

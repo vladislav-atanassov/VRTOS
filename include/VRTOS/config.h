@@ -29,10 +29,28 @@
 #define RTOS_MINIMUM_TASK_STACK_SIZE        (128U)         /**< Minimum allowed task stack size */
 
 /* Scheduler Configuration */
-#define RTOS_SCHEDULER_TYPE_ROUND_ROBIN     (0U)           /**< Round-robin scheduler enabled */
-#define RTOS_TIME_SLICE_MS                  (10U)          /**< Time slice for round-robin in ms */
-#define RTOS_TIME_SLICE_TICKS               (RTOS_TIME_SLICE_MS / RTOS_TICK_PERIOD_MS)
-#define RTOS_SCHEDULER_TYPE_RMS             (1U)           /**< Rate Monotonic Scheduling enabled */
+#ifndef RTOS_SCHEDULER_TYPE
+#define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_COOPERATIVE     /**< Default scheduler type */
+#endif
+
+/* Ensure the macro expands to the correct enum value */
+#if !defined(RTOS_SCHEDULER_PREEMPTIVE_SP) || !defined(RTOS_SCHEDULER_COOPERATIVE)
+#include "scheduler.h"  /* Include to get enum definitions */
+#endif
+
+/* Scheduler-specific configurations */
+#if (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_PREEMPTIVE_SP)
+    /* Preemptive static priority-based Scheduler uses priority-based scheduling */
+    #define RTOS_USE_PRIORITY_SCHEDULING    1
+#elif (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_COOPERATIVE)
+    /* Cooperative scheduling */
+    #define RTOS_USE_COOPERATIVE_SCHEDULING 1
+#endif
+
+/* Time slice configuration for round-robin within same priority */
+#ifndef RTOS_TIME_SLICE_TICKS
+#define RTOS_TIME_SLICE_TICKS  5  /**< Time slice in ticks */
+#endif
 
 /* Memory Configuration */
 #define RTOS_TOTAL_HEAP_SIZE                (4096U)        /**< Total heap size for task stacks */

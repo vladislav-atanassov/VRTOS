@@ -8,35 +8,39 @@
  * ============================================================ */
 
 /* Return-value version: returns the aligned value (for assignment) */
-#define ALIGN_UP(value, alignment)                                                                                     \
-    ({                                                                                                                 \
-        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0, "alignment must be a power of 2");                         \
-        typeof(value) _v = (value);                                                                                    \
-        _v = (_v + (alignment - 1)) & ~(alignment - 1);                                                                \
-        _v;                                                                                                            \
+#define ALIGN_UP(value, alignment)                                             \
+    ({                                                                         \
+        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0,             \
+                           "alignment must be a power of 2");                  \
+        typeof(value) _v = (value);                                            \
+        _v = (_v + (alignment - 1)) & ~(alignment - 1);                        \
+        _v;                                                                    \
     })
 
-#define ALIGN_DOWN(value, alignment)                                                                                   \
-    ({                                                                                                                 \
-        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0, "alignment must be a power of 2");                         \
-        typeof(value) _v = (value);                                                                                    \
-        _v = _v & ~(alignment - 1);                                                                                    \
-        _v;                                                                                                            \
+#define ALIGN_DOWN(value, alignment)                                           \
+    ({                                                                         \
+        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0,             \
+                           "alignment must be a power of 2");                  \
+        typeof(value) _v = (value);                                            \
+        _v = _v & ~(alignment - 1);                                            \
+        _v;                                                                    \
     })
 
 /** ============================================================
  * In-place version: modifies variable directly
  * ============================================================ */
-#define ALIGN_UP_INPLACE(var, alignment)                                                                               \
-    do {                                                                                                               \
-        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0, "alignment must be a power of 2");                         \
-        (var) = ((var) + ((alignment) - 1)) & ~((alignment) - 1);                                                      \
+#define ALIGN_UP_INPLACE(var, alignment)                                       \
+    do {                                                                       \
+        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0,             \
+                           "alignment must be a power of 2");                  \
+        (var) = ((var) + ((alignment) - 1)) & ~((alignment) - 1);              \
     } while (0)
 
-#define ALIGN_DOWN_INPLACE(var, alignment)                                                                             \
-    do {                                                                                                               \
-        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0, "alignment must be a power of 2");                         \
-        (var) = (var) & ~((alignment) - 1);                                                                            \
+#define ALIGN_DOWN_INPLACE(var, alignment)                                     \
+    do {                                                                       \
+        RTOS_STATIC_ASSERT(((alignment) & ((alignment) - 1)) == 0,             \
+                           "alignment must be a power of 2");                  \
+        (var) = (var) & ~((alignment) - 1);                                    \
     } while (0)
 
 /** ============================================================

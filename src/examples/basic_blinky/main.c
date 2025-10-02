@@ -10,6 +10,7 @@
 #include "log.h"
 #include "stm32f4xx_hal.h"
 #include "task.h"
+#include "task_priv.h"
 
 /**
  * @file main.c
@@ -26,9 +27,11 @@
 
 /* Task priorities */
 #define BLINK_TASK_PRIORITY (2U)
+#define PRINT_TASK_PRIORITY (3U)
 
 /* Blink & Print timing */
-#define LED_BLINK_DELAY_MS (5000U)
+#define LED_BLINK_DELAY_MS (1000U)
+#define PRINT_DELAY_MS (300U)
 
 void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -55,19 +58,15 @@ static void led_toggle(void) {
  *
  * Works in both pre-RTOS and RTOS contexts.
  */
-__attribute__((__noreturn__))
-static void indicate_system_failure(void)
-{
-    const uint32_t delay_cycles = SystemCoreClock / 20; // ~50 ms blink step
+__attribute__((__noreturn__)) static void indicate_system_failure(void) {
+    const uint32_t    delay_cycles = SystemCoreClock / 50;
     volatile uint32_t counter;
 
-    while(1)
-    {
+    while (1) {
         led_toggle();
 
         // crude software delay — does not block interrupts
-        for (counter = 0; counter < delay_cycles; counter++)
-        {
+        for (counter = 0; counter < delay_cycles; counter++) {
             __NOP();
         }
     }
@@ -80,7 +79,7 @@ static void indicate_system_failure(void)
  */
 static void blink_task(void *param) {
     (void)param; /* Suppress unused parameter warning */
-    log_print("IN blink_task()");
+    log_debug("IN blink_task()");
     /* Task main loop */
     while (1) {
         /* Toggle LED */
@@ -92,14 +91,46 @@ static void blink_task(void *param) {
 }
 
 /**
+ * @brief Print task
+ *
+ * @param param Task parameter (unused)
+ */
+static void print_task(void *param) {
+    (void)param; /* Suppress unused parameter warning */
+    log_debug("IN print_task()");
+    /* Task main loop */
+    while (1) {
+        log_print("PRINT");
+        /* Delay for specified time */
+        rtos_delay_ms(PRINT_DELAY_MS);
+    }
+}
+
+/**
+ * @brief Print task
+ *
+ * @param param Task parameter (unused)
+ */
+static void memory_mang_task(void *param) {
+    (void)param; /* Suppress unused parameter warning */
+    log_debug("IN memory_mang_task()");
+    /* Task main loop */
+    while (1) {
+        rtos_task_debug_print_all();
+        rtos_delay_ms(1500);
+    }
+}
+
+/**
  * @brief Main function
  *
  * @return Should never return
  */
-__attribute__((__noreturn__))
-int main(void) {
+__attribute__((__noreturn__)) int main(void) {
     rtos_status_t      status;
     rtos_task_handle_t blink_task_handle;
+    rtos_task_handle_t print_task_handle;
+    rtos_task_handle_t memory_mang_task_handle;
 
     /* System initializations */
     SCB->VTOR = FLASH_BASE; /* Set vector table location */
@@ -107,7 +138,7 @@ int main(void) {
     MX_GPIO_Init();
     __enable_irq(); /* Enable global interrupts */
 
-    log_uart_init(LOG_LEVEL_PRINT);
+    log_uart_init(LOG_LEVEL_ALL);
 
     /* Initialize RTOS */
     status = rtos_init();
@@ -116,9 +147,28 @@ int main(void) {
         /* Initialization failed - indicate with LED */
         indicate_system_failure();
     }
+    
+    /* Create mem task */
+    status = rtos_task_create(memory_mang_task, "MEM", NULL, NULL, 1,
+                              &memory_mang_task_handle);
+
+    if (status != RTOS_SUCCESS) {
+        /* Task creation failed */
+        indicate_system_failure();
+    }
 
     /* Create blink task */
-    status = rtos_task_create(blink_task, "BLINK", NULL, NULL, BLINK_TASK_PRIORITY, &blink_task_handle);
+    status = rtos_task_create(blink_task, "BLINK", NULL, NULL,
+                              BLINK_TASK_PRIORITY, &blink_task_handle);
+
+    if (status != RTOS_SUCCESS) {
+        /* Task creation failed */
+        indicate_system_failure();
+    }
+
+    /* Create print task */
+    status = rtos_task_create(print_task, "PRINT", NULL, NULL,
+                              PRINT_TASK_PRIORITY, &print_task_handle);
 
     if (status != RTOS_SUCCESS) {
         /* Task creation failed */
@@ -133,8 +183,7 @@ int main(void) {
     }
 }
 
-__attribute__((__noreturn__))
-void Error_Handler(void) {
+__attribute__((__noreturn__)) void Error_Handler(void) {
     __disable_irq();
     while (1) {
     }
@@ -148,7 +197,10 @@ void SystemClock_Config(void) {
     __HAL_RCC_PWR_CLK_ENABLE();
     __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
 
-    /* Initializes the RCC Oscillators according to the specified parameters in the RCC_OscInitTypeDef structure. */
+    /** 
+     * Initializes the RCC Oscillators according to the specified parameters in
+     * the RCC_OscInitTypeDef structure. 
+     */
     RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState = RCC_HSI_ON;
     RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
@@ -158,7 +210,8 @@ void SystemClock_Config(void) {
     }
 
     /* Initializes the CPU, AHB and APB buses clocks */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
+                                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
     RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
     RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
@@ -184,8 +237,7 @@ static void MX_GPIO_Init(void) {
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-__attribute__((naked))
-void HardFault_Handler(void) {
+__attribute__((naked)) void HardFault_Handler(void) {
     __asm volatile("TST LR, #4              \n"
                    "ITE EQ                  \n"
                    "MRSEQ R0, MSP           \n"
@@ -194,8 +246,7 @@ void HardFault_Handler(void) {
                    "B HardFault_Handler_C");
 }
 
-__attribute__((__noreturn__))
-void HardFault_Handler_C(uint32_t *stack_frame) {
+__attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame) {
     uint32_t r0 = stack_frame[0];
     uint32_t r1 = stack_frame[1];
     uint32_t r2 = stack_frame[2];
