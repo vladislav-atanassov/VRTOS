@@ -6,7 +6,9 @@
  ******************************************************************************/
 
 #include "rtos_assert.h"
+
 #include "config.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stm32f4xx_hal.h>
@@ -37,7 +39,8 @@
  * @param func Function name where assertion failed
  * @param expr Expression that failed
  */
-void rtos_assert_failed(const char *file, uint32_t line, const char *func, const char *expr) {
+void rtos_assert_failed(const char *file, uint32_t line, const char *func, const char *expr)
+{
 /* Disable interrupts to prevent further issues */
 #if defined(__GNUC__)
     __disable_irq();
@@ -58,10 +61,10 @@ void rtos_assert_failed(const char *file, uint32_t line, const char *func, const
     assert_expr = expr;
 
     /* Prevent compiler from optimizing away the variables */
-    (void)assert_file;
-    (void)assert_line;
-    (void)assert_func;
-    (void)assert_expr;
+    (void) assert_file;
+    (void) assert_line;
+    (void) assert_func;
+    (void) assert_expr;
 
 /* In debug builds, break to debugger */
 #ifdef DEBUG
@@ -73,7 +76,8 @@ void rtos_assert_failed(const char *file, uint32_t line, const char *func, const
 #endif
 
     /* Infinite loop to halt execution */
-    while (1) {
+    while (1)
+    {
 /* Could implement watchdog reset here */
 #if defined(__GNUC__)
         __NOP();

@@ -8,9 +8,8 @@
 #ifndef KERNEL_PRIV_H
 #define KERNEL_PRIV_H
 
-#include "config.h"
-#include "rtos_types.h"
 #include "rtos_assert.h"
+#include "rtos_types.h"
 
 /**
  * @file kernel_priv.h
@@ -21,7 +20,8 @@
  */
 
 /* Kernel States */
-typedef enum {
+typedef enum
+{
     RTOS_KERNEL_STATE_INACTIVE = 0, /**< Kernel not initialized */
     RTOS_KERNEL_STATE_READY,        /**< Kernel initialized but not started */
     RTOS_KERNEL_STATE_RUNNING,      /**< Kernel running */
@@ -29,7 +29,8 @@ typedef enum {
 } rtos_kernel_state_t;
 
 /* Kernel Control Block */
-typedef struct {
+typedef struct
+{
     rtos_task_handle_t  current_task;        /**< Currently running task */
     rtos_task_handle_t  next_task;           /**< Next task to run */
     rtos_kernel_state_t state;               /**< Current kernel state */

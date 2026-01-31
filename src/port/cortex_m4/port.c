@@ -6,15 +6,14 @@
  ******************************************************************************/
 
 #include "config.h"
-#include "rtos_assert.h"
 #include "kernel_priv.h"
 #include "log.h"
-#include "utils.h"
 #include "rtos_port.h"
 #include "task_priv.h"
+#include "utils.h"
 
-// Include CMSIS for Cortex-M4
-#include "stm32f4xx.h"
+/* Include CMSIS for Cortex-M4 */
+#include "stm32f4xx.h" // IWYU pragma: keep
 
 /**
  * @file port.c
@@ -23,17 +22,28 @@
 
 /* Critical section nesting counter */
 static volatile uint32_t g_critical_nesting = 0;
-static volatile uint32_t g_critical_primask = 0;
+static volatile uint32_t g_critical_basepri = 0;
 
 /**
  * @brief Initialize the porting layer
  */
-rtos_status_t rtos_port_init(void) {
-    /* Set interrupt priorities */
-    NVIC_SetPriority(PendSV_IRQn, 0xFF);  /* Lowest priority */
-    NVIC_SetPriority(SysTick_IRQn, 0xE0); /* Higher priority */
+rtos_status_t rtos_port_init(void)
+{
+    /* Configure interrupt priorities */
+    NVIC_SetPriority(PendSV_IRQn, RTOS_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
+    NVIC_SetPriority(SysTick_IRQn, RTOS_IRQ_PRIORITY_KERNEL >> 4); /* Kernel level */
+
+    /* Initialize BASEPRI to 0 (no masking) */
+    __set_BASEPRI(0);
 
     g_critical_nesting = 0;
+    g_critical_basepri = 0;
+
+    log_info("Interrupt priorities configured:");
+    log_info("  Critical:  0x%02X (never masked)", RTOS_IRQ_PRIORITY_CRITICAL);
+    log_info("  High:      0x%02X (preempts RTOS)", RTOS_IRQ_PRIORITY_HIGH);
+    log_info("  Kernel:    0x%02X (SysTick)", RTOS_IRQ_PRIORITY_KERNEL);
+    log_info("  PendSV:    0x%02X (context switch)", RTOS_IRQ_PRIORITY_PENDSV);
 
     return RTOS_SUCCESS;
 }
@@ -41,12 +51,14 @@ rtos_status_t rtos_port_init(void) {
 /**
  * @brief Start system tick timer
  */
-void rtos_port_start_systick(void) {
+void rtos_port_start_systick(void)
+{
     /* Calculate reload value for desired tick rate */
     uint32_t reload_value = (SystemCoreClock / RTOS_TICK_RATE_HZ) - 1;
 
     /* Use CMSIS SysTick functions for reliability */
-    if (SysTick_Config(reload_value) != 0) {
+    if (SysTick_Config(reload_value) != 0)
+    {
         log_error("SysTick configuration failed!");
         return;
     }
@@ -58,19 +70,20 @@ void rtos_port_start_systick(void) {
 /**
  * @brief Initialize task stack
  */
-uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter) {
+uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter)
+{
     /* Convert to byte address for alignment */
-    uint32_t *stack_ptr = (uint32_t *)ALIGN8_DOWN_VALUE((uint32_t)stack_top);
+    uint32_t *stack_ptr = (uint32_t *) ALIGN8_DOWN_VALUE((uint32_t) stack_top);
 
     /* Initial exception frame */
-    *--stack_ptr = 0x01000000;                  /* xPSR (Thumb bit set) */
-    *--stack_ptr = (uint32_t)task_function | 1; /* PC (task entry point) */
-    *--stack_ptr = 0xFFFFFFFD;                  /* LR (EXC_RETURN to thread mode with PSP) */
-    *--stack_ptr = 0;                           /* R12 */
-    *--stack_ptr = 0;                           /* R3 */
-    *--stack_ptr = 0;                           /* R2 */
-    *--stack_ptr = 0;                           /* R1 */
-    *--stack_ptr = (uint32_t)parameter;         /* R0 (task parameter) */
+    *--stack_ptr = 0x01000000;                   /* xPSR (Thumb bit set) */
+    *--stack_ptr = (uint32_t) task_function | 1; /* PC (task entry point) */
+    *--stack_ptr = 0xFFFFFFFD;                   /* LR (EXC_RETURN to thread mode with PSP) */
+    *--stack_ptr = 0;                            /* R12 */
+    *--stack_ptr = 0;                            /* R3 */
+    *--stack_ptr = 0;                            /* R2 */
+    *--stack_ptr = 0;                            /* R1 */
+    *--stack_ptr = (uint32_t) parameter;         /* R0 (task parameter) */
 
     /* Manual save registers (R4-R11) */
     *--stack_ptr = 0; /* R11 */
@@ -85,44 +98,69 @@ uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t ta
     return stack_ptr;
 }
 
-/**
- * @brief Enter critical section
- */
-void rtos_port_enter_critical(void) {
-    /* Disable interrupts and save current PRIMASK */
-    uint32_t primask;
+void rtos_port_enter_critical(void)
+{
+    /* Read current BASEPRI, set to kernel priority threshold */
+    uint32_t basepri;
 
-    __asm volatile("MRS %0, PRIMASK    \n"
-                   "CPSID I            \n"
-                   : "=r"(primask)
-                   :
-                   : "memory");
+    __asm volatile("MRS %0, BASEPRI                    \n" /* Read current BASEPRI */
+                   "MOV R1, %1                         \n" /* Load kernel priority */
+                   "MSR BASEPRI, R1                    \n" /* Set BASEPRI threshold */
+                   "DSB                                \n" /* Data sync barrier */
+                   "ISB                                \n" /* Instruction sync barrier */
+                   : "=r"(basepri)
+                   : "i"(RTOS_KERNEL_INTERRUPT_PRIORITY)
+                   : "r1", "memory");
 
     g_critical_nesting++;
 
-    if (g_critical_nesting == 1) {
-        g_critical_primask = primask;
+    if (g_critical_nesting == 1)
+    {
+        /* First entry - save original BASEPRI */
+        g_critical_basepri = basepri;
     }
 }
 
-/**
- * @brief Exit critical section
- */
-void rtos_port_exit_critical(void) {
-    if (g_critical_nesting > 0) {
+void rtos_port_exit_critical(void)
+{
+    if (g_critical_nesting > 0)
+    {
         g_critical_nesting--;
 
-        if (g_critical_nesting == 0) {
-            /* Restore PRIMASK */
-            __asm volatile("MSR PRIMASK, %0    \n" : : "r"(g_critical_primask) : "memory");
+        if (g_critical_nesting == 0)
+        {
+            /* Last exit - restore original BASEPRI */
+            __asm volatile("MSR BASEPRI, %0            \n"
+                           "DSB                        \n"
+                           "ISB                        \n"
+                           :
+                           : "r"(g_critical_basepri)
+                           : "memory");
         }
     }
+}
+
+uint32_t rtos_port_enter_critical_from_isr(void)
+{
+    uint32_t saved_basepri = __get_BASEPRI();
+    __set_BASEPRI(RTOS_KERNEL_INTERRUPT_PRIORITY);
+    __DSB();
+    __ISB();
+    return saved_basepri;
+}
+
+void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
+{
+    __set_BASEPRI(saved_priority);
+    __DSB();
+    __ISB();
 }
 
 /**
  * @brief Force context switch
  */
-void rtos_port_yield(void) {
+void rtos_port_yield(void)
+{
     /* Trigger PendSV interrupt for context switch */
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 
@@ -134,10 +172,10 @@ void rtos_port_yield(void) {
 /**
  * @brief Start first task
  */
-__attribute__((__noreturn__))
-void rtos_port_start_first_task(void) {
+__attribute__((__noreturn__)) void rtos_port_start_first_task(void)
+{
     /* Ensure 8-byte stack alignment */
-    uint32_t psp_val = ALIGN8_DOWN_VALUE((uint32_t)g_kernel.next_task->stack_pointer);
+    uint32_t psp_val = ALIGN8_DOWN_VALUE((uint32_t) g_kernel.next_task->stack_pointer);
 
     /* Set PSP to point to saved registers (R4-R11) */
     __set_PSP(psp_val);
@@ -150,70 +188,83 @@ void rtos_port_start_first_task(void) {
     log_error("Should never reach here");
 
     /* Should never reach here */
-    while (1) {
+    while (1)
+    {
     }
 }
 
 /**
  * @brief System tick interrupt handler
  */
-void SysTick_Handler(void) { rtos_port_systick_handler(); }
+void SysTick_Handler(void)
+{
+    rtos_port_systick_handler();
+}
 
-void rtos_port_systick_handler(void) { rtos_kernel_tick_handler(); }
+void rtos_port_systick_handler(void)
+{
+    rtos_kernel_tick_handler();
+}
 
-void log_svc_handler(void) { log_debug("Triggered SVC handler, PSP=%08X", __get_PSP()); }
+void log_svc_handler(void)
+{
+    log_debug("Triggered SVC handler, PSP=%08X", (unsigned int) __get_PSP());
+}
 
 /**
  * @brief SVC interrupt handler
- * 
+ *
  * This function should start the first task
  */
-__attribute__((naked))
-void SVC_Handler(void) {
-    __asm volatile(
-        "BL log_svc_handler      \n" /* Debug log */
-        "MRS R0, PSP             \n" /* Get PSP */
-        "LDMIA R0!, {R4-R11}     \n" /* Restore R4-R11 from stack */
-        "MSR PSP, R0             \n" /* Update PSP to point after registers */
-        "ISB                     \n" /* Instruction barrier */
-        "LDR LR, =0xFFFFFFFD     \n" /* EXC_RETURN: thread mode + PSP */
-        "BX LR                   \n" /* Return to thread mode */
-        ::: "memory");
+__attribute__((naked)) void SVC_Handler(void)
+{
+    __asm volatile("BL log_svc_handler      \n" /* Debug log */
+                   "MRS R0, PSP             \n" /* Get PSP */
+                   "LDMIA R0!, {R4-R11}     \n" /* Restore R4-R11 from stack */
+                   "MSR PSP, R0             \n" /* Update PSP to point after registers */
+                   "ISB                     \n" /* Instruction barrier */
+                   "LDR LR, =0xFFFFFFFD     \n" /* EXC_RETURN: thread mode + PSP */
+                   "BX LR                   \n" /* Return to thread mode */
+                   ::
+                       : "memory");
 }
 
-void log_pendsv_handler(void) { log_debug("Triggered PendSV handler, PSP=%08X", __get_PSP()); }
+void log_pendsv_handler(void)
+{
+    log_debug("Triggered PendSV handler, PSP=%08X", (unsigned int) __get_PSP());
+}
 
 /**
  * @brief PendSV interrupt handler
  *
  * This function handles context switching.
  */
-__attribute__((naked))
-void PendSV_Handler(void) {
-    __asm volatile(
-        "BL log_pendsv_handler              \n" /* Debug log */
-        "MRS     R0, PSP                    \n" /* Get current PSP */
-        "CBZ     R0, pendsv_nosave          \n" /* Skip save if first run */
+__attribute__((naked)) void PendSV_Handler(void)
+{
+    __asm volatile("BL log_pendsv_handler              \n" /* Debug log */
+                   "MRS     R0, PSP                    \n" /* Get current PSP */
+                   "CBZ     R0, pendsv_nosave          \n" /* Skip save if first run */
 
-        "STMDB   R0!, {R4-R11}              \n" /* Save current context - R4-R11 */
-        "LDR     R1, =g_kernel              \n" /* Save stack pointer to TCB */
-        "LDR     R2, [R1, #0]               \n" /* current_task */
-        "STR     R0, [R2]                   \n" /* stack_pointer */
+                   "STMDB   R0!, {R4-R11}              \n" /* Save current context - R4-R11 */
+                   "LDR     R1, =g_kernel              \n" /* Save stack pointer to TCB */
+                   "LDR     R2, [R1, #0]               \n" /* current_task */
+                   "STR     R0, [R2]                   \n" /* stack_pointer */
 
-        "pendsv_nosave:                     \n"
-        "PUSH    {R3, LR}                   \n" /* Preserve LR (EXC_RETURN) */
-        "BL      rtos_kernel_switch_context \n" /* Call scheduler */
-        "POP     {R3, LR}                   \n" /* Restore LR */
+                   "pendsv_nosave:                     \n"
+                   "PUSH    {R3, LR}                   \n" /* Preserve LR (EXC_RETURN) */
+                   "BL      rtos_kernel_switch_context \n" /* Call scheduler */
+                   "POP     {R3, LR}                   \n" /* Restore LR */
 
-        "LDR     R1, =g_kernel              \n" /* Load next task context */
-        "LDR     R2, [R1, #0]               \n" /* current_task */
-        "LDR     R0, [R2]                   \n" /* stack_pointer */
+                   "LDR     R1, =g_kernel              \n" /* Load next task context */
+                   "LDR     R2, [R1, #0]               \n" /* current_task */
+                   "LDR     R0, [R2]                   \n" /* stack_pointer */
 
-        "LDMIA   R0!, {R4-R11}              \n" /* Restore R4-R11 */
+                   "LDMIA   R0!, {R4-R11}              \n" /* Restore R4-R11 */
 
-        "MSR     PSP, R0                    \n" /* Update PSP */
-        "MOV     LR, #0xFFFFFFFD            \n" /* Set EXC_RETURN value, Thread mode + PSP */
+                   "MSR     PSP, R0                    \n" /* Update PSP */
+                   "MOV     LR, #0xFFFFFFFD            \n" /* Set EXC_RETURN value, Thread mode + PSP */
 
-        "BX      LR                         \n" /* Return to thread mode */
-        ::: "r0", "r1", "r2", "memory");
+                   "BX      LR                         \n" /* Return to thread mode */
+                   ::
+                       : "r0", "r1", "r2", "memory");
 }

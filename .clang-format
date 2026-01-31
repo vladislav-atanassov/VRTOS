@@ -1,10 +1,45 @@
+# .clang-format
 BasedOnStyle: LLVM
-IndentWidth: 4
-UseTab: Never
+
+# General formatting rules
+Language: C
 ColumnLimit: 120
-AlignAfterOpenBracket: Align
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# Braces and indentation
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Alignment options
+AlignConsecutiveAssignments: true
 AlignConsecutiveDeclarations: true
-AllowAllParametersOfDeclarationOnNextLine: false
-BinPackParameters: false
-PenaltyReturnTypeOnItsOwnLine: 1000
-AlwaysBreakAfterReturnType: None
+AlignConsecutiveMacros: true
+AlignOperands: true
+ReflowComments: false
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+SpaceBeforeParens: ControlStatements
+
+# Namespace and access specifier handling
+IndentExternBlock: NoIndent
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+IndentCaseLabels: true
+NamespaceIndentation: All
+
+# Other readability tweaks
+SpaceAfterCStyleCast: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpacesInAngles: false
+PointerAlignment: Right
+KeepEmptyLinesAtTheStartOfBlocks: false
+BreakConstructorInitializers: BeforeColon
+
+# Sort includes (optional)
+SortIncludes: true
+IncludeBlocks: Regroup

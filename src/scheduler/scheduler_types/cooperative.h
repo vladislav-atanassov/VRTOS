@@ -19,7 +19,8 @@
  */
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /**
@@ -35,7 +36,8 @@ extern const rtos_scheduler_t cooperative_scheduler;
  * Cooperative scheduler uses a simple FIFO ready list and time-sorted
  * delayed list
  */
-typedef struct {
+typedef struct
+{
     rtos_tcb_t *ready_list;    /**< FIFO ready list */
     rtos_tcb_t *delayed_list;  /**< Time-sorted delayed list */
     uint8_t     ready_count;   /**< Number of ready tasks */
@@ -43,10 +45,8 @@ typedef struct {
 } cooperative_private_data_t;
 
 /* Static private data instance */
-static cooperative_private_data_t g_cooperative_data = {.ready_list = NULL,
-                                                        .delayed_list = NULL,
-                                                        .ready_count = 0,
-                                                        .delayed_count = 0};
+__attribute__((used)) static cooperative_private_data_t g_cooperative_data = {
+    .ready_list = NULL, .delayed_list = NULL, .ready_count = 0, .delayed_count = 0};
 
 #ifdef __cplusplus
 }

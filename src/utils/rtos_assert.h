@@ -9,6 +9,7 @@
 #define RTOS_ASSERT_H
 
 #include "config.h"
+
 #include <assert.h>
 #include <stdint.h>
 
@@ -36,11 +37,13 @@ void rtos_assert_failed(const char *file, uint32_t line, const char *func, const
  *
  * @param expr Expression to evaluate
  */
-#define RTOS_ASSERT(expr)                                                                                              \
-    do {                                                                                                               \
-        if (!(expr)) {                                                                                                 \
-            rtos_assert_failed(__FILE__, __LINE__, __func__, #expr);                                                   \
-        }                                                                                                              \
+#define RTOS_ASSERT(expr)                                                                          \
+    do                                                                                             \
+    {                                                                                              \
+        if (!(expr))                                                                               \
+        {                                                                                          \
+            rtos_assert_failed(__FILE__, __LINE__, __func__, #expr);                               \
+        }                                                                                          \
     } while (0)
 
 /**
@@ -60,9 +63,9 @@ void rtos_assert_failed(const char *file, uint32_t line, const char *func, const
 #else /* RTOS_ASSERT_ENABLED */
 
 /* Assertions disabled - define as empty macros */
-#define RTOS_ASSERT(expr) ((void)0)
-#define RTOS_ASSERT_PARAM(expr) ((void)0)
-#define RTOS_ASSERT_CRITICAL(expr) ((void)0)
+#define RTOS_ASSERT(expr)          ((void) 0)
+#define RTOS_ASSERT_PARAM(expr)    ((void) 0)
+#define RTOS_ASSERT_CRITICAL(expr) ((void) 0)
 
 #endif /* RTOS_ASSERT_ENABLED */
 

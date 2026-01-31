@@ -22,7 +22,7 @@ VRTOS is a lightweight RTOS designed for learning and experimentation. It featur
 
 ### Layered Design
 
-```
+```md
 ┌─────────────────────────────────────┐
 │      Application Layer              │
 │      (User Tasks)                   │
@@ -81,6 +81,7 @@ struct rtos_scheduler {
 - **Use Case**: Hard real-time systems requiring deterministic behavior
 
 **Key Characteristics**:
+
 - Priority-based preemption
 - FIFO ordering within same priority level
 - Time-sorted delayed list for efficient timeout management
@@ -94,6 +95,7 @@ struct rtos_scheduler {
 - **Use Case**: Simple applications, reduced context switch overhead
 
 **Key Characteristics**:
+
 - Non-preemptive execution
 - Tasks run until voluntary yield (`rtos_yield()` or delay)
 - Yielding tasks move to end of queue (round-robin behavior)

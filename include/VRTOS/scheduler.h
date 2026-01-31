@@ -8,7 +8,6 @@
 #ifndef RTOS_SCHEDULER_H
 #define RTOS_SCHEDULER_H
 
-#include "config.h"
 #include "rtos_types.h"
 
 /**
@@ -21,7 +20,8 @@
  */
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /* Forward declarations */
@@ -29,9 +29,11 @@ typedef struct rtos_scheduler          rtos_scheduler_t;
 typedef struct rtos_scheduler_instance rtos_scheduler_instance_t;
 
 /* Scheduler Types */
-typedef enum {
-    RTOS_SCHEDULER_PREEMPTIVE_SP = 0,         /**< Preemptive static priority-based Scheduler */
-    RTOS_SCHEDULER_COOPERATIVE = 1  /**< Cooperative Scheduler */
+typedef enum
+{
+    RTOS_SCHEDULER_PREEMPTIVE_SP = 0, /**< Preemptive static priority-based Scheduler */
+    RTOS_SCHEDULER_COOPERATIVE   = 1, /**< Cooperative Scheduler */
+    RTOS_SCHEDULER_ROUND_ROBIN   = 2  /**< Round Robin Scheduler */
 } rtos_scheduler_type_t;
 
 /* Deadline Types for EDF */
@@ -44,9 +46,10 @@ typedef uint32_t rtos_period_t;   /**< Task period in ticks */
  * All scheduler implementations must provide these function pointers.
  * This version includes list management operations that are scheduler-specific.
  */
-struct rtos_scheduler {
+struct rtos_scheduler
+{
     /* =================== Core Scheduling Functions =================== */
-    
+
     /**
      * @brief Initialize the scheduler
      * @param instance Scheduler instance
@@ -82,9 +85,10 @@ struct rtos_scheduler {
      * @brief Add task to scheduler's ready list
      * @param instance Scheduler instance
      * @param task_handle Task to add
-     * 
+     *
      * This function should add the task to the scheduler's ready list
-     * using the appropriate ordering (priority for Preemptive static priority-based Scheduler, deadline for EDF).
+     * using the appropriate ordering (priority for Preemptive static priority-based Scheduler,
+     * deadline for EDF).
      */
     void (*add_to_ready_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
 
@@ -100,13 +104,12 @@ struct rtos_scheduler {
      * @param instance Scheduler instance
      * @param task_handle Task to add
      * @param delay_ticks Delay in ticks (0 = add to blocked list)
-     * 
+     *
      * This function handles both delayed tasks (delay > 0) and blocked tasks (delay = 0).
      * The scheduler can use different lists for these as needed.
      */
-    void (*add_to_delayed_list)(rtos_scheduler_instance_t *instance, 
-                               rtos_task_handle_t task_handle, 
-                               rtos_tick_t delay_ticks);
+    void (*add_to_delayed_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle,
+                                rtos_tick_t delay_ticks);
 
     /**
      * @brief Remove task from scheduler's delayed/blocked list
@@ -118,7 +121,7 @@ struct rtos_scheduler {
     /**
      * @brief Update delayed tasks (called from tick handler)
      * @param instance Scheduler instance
-     * 
+     *
      * This function should check for delayed tasks that are ready to run
      * and move them from delayed list to ready list.
      */
@@ -141,11 +144,12 @@ struct rtos_scheduler {
  *
  * Contains the vtable and instance-specific data
  */
-struct rtos_scheduler_instance {
-    const rtos_scheduler_t *vtable;              /**< Function pointer table */
-    rtos_scheduler_type_t   type;                /**< Scheduler type */
-    void                   *private_data;        /**< Scheduler-specific data */
-    bool                    initialized;         /**< Initialization flag */
+struct rtos_scheduler_instance
+{
+    const rtos_scheduler_t *vtable;       /**< Function pointer table */
+    rtos_scheduler_type_t   type;         /**< Scheduler type */
+    void                   *private_data; /**< Scheduler-specific data */
+    bool                    initialized;  /**< Initialization flag */
 };
 
 /* =================== Public Scheduler Manager API =================== */

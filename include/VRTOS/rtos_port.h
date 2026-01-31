@@ -18,7 +18,8 @@
  */
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /**
@@ -51,14 +52,33 @@ void rtos_port_start_first_task(void);
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter);
 
 /**
- * @brief Enter critical section (disable interrupts)
+ * @brief Enter critical section
+ * 
+ * Disables interrupts at or below kernel priority level.
+ * Critical (priority 0x00-0x70) interrupts can still occur.
  */
 void rtos_port_enter_critical(void);
 
 /**
- * @brief Exit critical section (enable interrupts)
+ * @brief Exit critical section
  */
 void rtos_port_exit_critical(void);
+
+/**
+ * @brief Enter critical section from ISR
+ * 
+ * For use in ISR context. Returns saved BASEPRI value.
+ * 
+ * @return Previous BASEPRI value (for restore)
+ */
+uint32_t rtos_port_enter_critical_from_isr(void);
+
+/**
+ * @brief Exit critical section from ISR
+ * 
+ * @param saved_priority Value returned from enter_critical_from_isr
+ */
+void rtos_port_exit_critical_from_isr(uint32_t saved_priority);
 
 /**
  * @brief Force a context switch

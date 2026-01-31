@@ -6,9 +6,8 @@
  ******************************************************************************/
 
 #include "VRTOS.h"
-#include "kernel_priv.h"
 #include "log.h"
-#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
 #include "task_priv.h"
 
@@ -21,8 +20,8 @@
  */
 
 /* LED Configuration for STM32F446RE Nucleo */
-#define LED_PORT GPIOA
-#define LED_PIN 5 /* PA5 - User LED (LD2) */
+#define LED_PORT     GPIOA
+#define LED_PIN      5 /* PA5 - User LED (LD2) */
 #define LED_PIN_MASK (1U << LED_PIN)
 
 /* Task priorities */
@@ -31,7 +30,7 @@
 
 /* Blink & Print timing */
 #define LED_BLINK_DELAY_MS (1000U)
-#define PRINT_DELAY_MS (300U)
+#define PRINT_DELAY_MS     (300U)
 
 void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -39,11 +38,15 @@ static void MX_GPIO_Init(void);
 /**
  * @brief Toggle LED state using direct register access
  */
-static void led_toggle(void) {
-    if (LED_PORT->ODR & LED_PIN_MASK) {
+static void led_toggle(void)
+{
+    if (LED_PORT->ODR & LED_PIN_MASK)
+    {
         /* LED is on, turn it off */
         LED_PORT->BSRR = LED_PIN_MASK << 16; /* Reset bit */
-    } else {
+    }
+    else
+    {
         /* LED is off, turn it on */
         LED_PORT->BSRR = LED_PIN_MASK; /* Set bit */
     }
@@ -58,15 +61,18 @@ static void led_toggle(void) {
  *
  * Works in both pre-RTOS and RTOS contexts.
  */
-__attribute__((__noreturn__)) static void indicate_system_failure(void) {
+__attribute__((__noreturn__)) static void indicate_system_failure(void)
+{
     const uint32_t    delay_cycles = SystemCoreClock / 50;
     volatile uint32_t counter;
 
-    while (1) {
+    while (1)
+    {
         led_toggle();
 
-        // crude software delay — does not block interrupts
-        for (counter = 0; counter < delay_cycles; counter++) {
+        /* crude software delay — does not block interrupts */
+        for (counter = 0; counter < delay_cycles; counter++)
+        {
             __NOP();
         }
     }
@@ -77,11 +83,13 @@ __attribute__((__noreturn__)) static void indicate_system_failure(void) {
  *
  * @param param Task parameter (unused)
  */
-static void blink_task(void *param) {
-    (void)param; /* Suppress unused parameter warning */
+static void blink_task(void *param)
+{
+    (void) param; /* Suppress unused parameter warning */
     log_debug("IN blink_task()");
     /* Task main loop */
-    while (1) {
+    while (1)
+    {
         /* Toggle LED */
         led_toggle();
         log_print("BLINK");
@@ -95,11 +103,13 @@ static void blink_task(void *param) {
  *
  * @param param Task parameter (unused)
  */
-static void print_task(void *param) {
-    (void)param; /* Suppress unused parameter warning */
+static void print_task(void *param)
+{
+    (void) param; /* Suppress unused parameter warning */
     log_debug("IN print_task()");
     /* Task main loop */
-    while (1) {
+    while (1)
+    {
         log_print("PRINT");
         /* Delay for specified time */
         rtos_delay_ms(PRINT_DELAY_MS);
@@ -111,11 +121,13 @@ static void print_task(void *param) {
  *
  * @param param Task parameter (unused)
  */
-static void memory_mang_task(void *param) {
-    (void)param; /* Suppress unused parameter warning */
+static void memory_mang_task(void *param)
+{
+    (void) param; /* Suppress unused parameter warning */
     log_debug("IN memory_mang_task()");
     /* Task main loop */
-    while (1) {
+    while (1)
+    {
         rtos_task_debug_print_all();
         rtos_delay_ms(1500);
     }
@@ -126,7 +138,8 @@ static void memory_mang_task(void *param) {
  *
  * @return Should never return
  */
-__attribute__((__noreturn__)) int main(void) {
+__attribute__((__noreturn__)) int main(void)
+{
     rtos_status_t      status;
     rtos_task_handle_t blink_task_handle;
     rtos_task_handle_t print_task_handle;
@@ -138,39 +151,42 @@ __attribute__((__noreturn__)) int main(void) {
     MX_GPIO_Init();
     __enable_irq(); /* Enable global interrupts */
 
-    log_uart_init(LOG_LEVEL_ALL);
+    log_uart_init(LOG_LEVEL_INFO);
 
     /* Initialize RTOS */
     status = rtos_init();
 
-    if (status != RTOS_SUCCESS) {
+    if (status != RTOS_SUCCESS)
+    {
         /* Initialization failed - indicate with LED */
         indicate_system_failure();
     }
-    
-    /* Create mem task */
-    status = rtos_task_create(memory_mang_task, "MEM", NULL, NULL, 1,
-                              &memory_mang_task_handle);
 
-    if (status != RTOS_SUCCESS) {
+    /* Create mem task */
+    status = rtos_task_create(memory_mang_task, "MEM", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &memory_mang_task_handle);
+
+    if (status != RTOS_SUCCESS)
+    {
         /* Task creation failed */
         indicate_system_failure();
     }
 
     /* Create blink task */
-    status = rtos_task_create(blink_task, "BLINK", NULL, NULL,
-                              BLINK_TASK_PRIORITY, &blink_task_handle);
+    status = rtos_task_create(blink_task, "BLINK", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY,
+                              &blink_task_handle);
 
-    if (status != RTOS_SUCCESS) {
+    if (status != RTOS_SUCCESS)
+    {
         /* Task creation failed */
         indicate_system_failure();
     }
 
     /* Create print task */
-    status = rtos_task_create(print_task, "PRINT", NULL, NULL,
-                              PRINT_TASK_PRIORITY, &print_task_handle);
+    status = rtos_task_create(print_task, "PRINT", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, PRINT_TASK_PRIORITY,
+                              &print_task_handle);
 
-    if (status != RTOS_SUCCESS) {
+    if (status != RTOS_SUCCESS)
+    {
         /* Task creation failed */
         indicate_system_failure();
     }
@@ -179,17 +195,21 @@ __attribute__((__noreturn__)) int main(void) {
     status = rtos_start_scheduler();
 
     /* Should never reach here */
-    while (1) {
+    while (1)
+    {
     }
 }
 
-__attribute__((__noreturn__)) void Error_Handler(void) {
+__attribute__((__noreturn__)) void Error_Handler(void)
+{
     __disable_irq();
-    while (1) {
+    while (1)
+    {
     }
 }
 
-void SystemClock_Config(void) {
+void SystemClock_Config(void)
+{
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
     RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
@@ -201,28 +221,30 @@ void SystemClock_Config(void) {
      * Initializes the RCC Oscillators according to the specified parameters in
      * the RCC_OscInitTypeDef structure. 
      */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI;
+    RCC_OscInitStruct.HSIState            = RCC_HSI_ON;
     RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
+    RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_NONE;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+    {
         Error_Handler();
     }
 
     /* Initializes the CPU, AHB and APB buses clocks */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK |
-                                  RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
+    RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_HSI;
+    RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK) {
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+    {
         Error_Handler();
     }
 }
 
-static void MX_GPIO_Init(void) {
+static void MX_GPIO_Init(void)
+{
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
     __HAL_RCC_GPIOH_CLK_ENABLE();
@@ -230,14 +252,15 @@ static void MX_GPIO_Init(void) {
 
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
 
-    GPIO_InitStruct.Pin = GPIO_PIN_5;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Pin   = GPIO_PIN_5;
+    GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull  = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-__attribute__((naked)) void HardFault_Handler(void) {
+__attribute__((naked)) void HardFault_Handler(void)
+{
     __asm volatile("TST LR, #4              \n"
                    "ITE EQ                  \n"
                    "MRSEQ R0, MSP           \n"
@@ -246,32 +269,33 @@ __attribute__((naked)) void HardFault_Handler(void) {
                    "B HardFault_Handler_C");
 }
 
-__attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame) {
-    uint32_t r0 = stack_frame[0];
-    uint32_t r1 = stack_frame[1];
-    uint32_t r2 = stack_frame[2];
-    uint32_t r3 = stack_frame[3];
+__attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame)
+{
+    uint32_t r0  = stack_frame[0];
+    uint32_t r1  = stack_frame[1];
+    uint32_t r2  = stack_frame[2];
+    uint32_t r3  = stack_frame[3];
     uint32_t r12 = stack_frame[4];
-    uint32_t lr = stack_frame[5];
-    uint32_t pc = stack_frame[6];
+    uint32_t lr  = stack_frame[5];
+    uint32_t pc  = stack_frame[6];
     uint32_t psr = stack_frame[7];
 
-    log_error("HardFault: PC=0x%08X PSR=0x%08X", pc, psr);
-    log_error("R0=0x%08X R1=0x%08X R2=0x%08X R3=0x%08X", r0, r1, r2, r3);
-    log_error("R12=0x%08X LR=0x%08X", r12, lr);
+    log_error("HardFault: PC=0x%08lX PSR=0x%08lX", pc, psr);
+    log_error("R0=0x%08lX R1=0x%08lX R2=0x%08lX R3=0x%08lX", r0, r1, r2, r3);
+    log_error("R12=0x%08lX LR=0x%08lX", r12, lr);
 
-    uint32_t cfsr = SCB->CFSR;
-    uint32_t hfsr = SCB->HFSR;
+    uint32_t cfsr  = SCB->CFSR;
+    uint32_t hfsr  = SCB->HFSR;
     uint32_t mmfar = SCB->MMFAR;
-    uint32_t bfar = SCB->BFAR;
-    uint32_t psp = __get_PSP();
-    uint32_t msp = __get_MSP();
+    uint32_t bfar  = SCB->BFAR;
+    uint32_t psp   = __get_PSP();
+    uint32_t msp   = __get_MSP();
 
     /* Direct register access for debugging */
     log_error("HardFault Registers:");
-    log_error("CFSR=0x%08X HFSR=0x%08X", cfsr, hfsr);
-    log_error("MMFAR=0x%08X BFAR=0x%08X", mmfar, bfar);
-    log_error("PSP=0x%08X MSP=0x%08X", psp, msp);
+    log_error("CFSR=0x%08lX HFSR=0x%08lX", cfsr, hfsr);
+    log_error("MMFAR=0x%08lX BFAR=0x%08lX", mmfar, bfar);
+    log_error("PSP=0x%08lX MSP=0x%08lX", psp, msp);
 
     indicate_system_failure();
 }

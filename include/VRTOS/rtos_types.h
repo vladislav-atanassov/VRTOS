@@ -26,18 +26,24 @@ typedef uint16_t rtos_stack_size_t; /**< Stack size type */
 typedef uint8_t  rtos_task_id_t;    /**< Task ID type */
 
 /* Return Status Types */
-typedef enum {
+typedef enum
+{
     RTOS_SUCCESS = 0,          /**< Operation successful */
     RTOS_ERROR_INVALID_PARAM,  /**< Invalid parameter */
     RTOS_ERROR_NO_MEMORY,      /**< No memory available */
     RTOS_ERROR_TASK_NOT_FOUND, /**< Task not found */
     RTOS_ERROR_INVALID_STATE,  /**< Invalid system state */
     RTOS_ERROR_TIMEOUT,        /**< Operation timed out */
+    RTOS_ERROR_FULL,           /**< Queue/Buffer is full */
+    RTOS_ERROR_EMPTY,          /**< Queue/Buffer is empty */
     RTOS_ERROR_GENERAL         /**< General error */
 } rtos_status_t;
 
+#define RTOS_MAX_DELAY ((rtos_tick_t) - 1)
+
 /* Task States */
-typedef enum {
+typedef enum
+{
     RTOS_TASK_STATE_READY = 0, /**< Task is ready to run */
     RTOS_TASK_STATE_RUNNING,   /**< Task is currently running */
     RTOS_TASK_STATE_BLOCKED,   /**< Task is blocked (waiting) */
@@ -47,6 +53,15 @@ typedef enum {
 
 /* Task Function Type */
 typedef void (*rtos_task_function_t)(void *param);
+
+/* Synchronization Object Types */
+typedef enum
+{
+    RTOS_SYNC_TYPE_NONE = 0,
+    RTOS_SYNC_TYPE_MUTEX,
+    RTOS_SYNC_TYPE_SEMAPHORE,
+    RTOS_SYNC_TYPE_QUEUE
+} rtos_sync_type_t;
 
 /* Forward Declarations */
 struct rtos_task_control_block;

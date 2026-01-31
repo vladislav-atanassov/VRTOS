@@ -18,7 +18,8 @@
  */
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /**
@@ -33,12 +34,9 @@ extern "C" {
  *
  * @return RTOS_SUCCESS if task created successfully, error code otherwise
  */
-rtos_status_t rtos_task_create(rtos_task_function_t task_function,
-                               const char          *name,
-                               rtos_stack_size_t    stack_size,
-                               void                *parameter,
-                               rtos_priority_t      priority,
-                               rtos_task_handle_t  *task_handle);
+rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name,
+                               rtos_stack_size_t stack_size, void *parameter,
+                               rtos_priority_t priority, rtos_task_handle_t *task_handle);
 
 /**
  * @brief Get the idle task's TCB (Task Control Block)
@@ -69,6 +67,30 @@ rtos_task_state_t rtos_task_get_state(rtos_task_handle_t task_handle);
  * @return Task priority
  */
 rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle);
+
+/**
+ * @brief Suspend a task
+ *
+ * @param task_handle Task to suspend (NULL = suspend current task)
+ * @return RTOS_SUCCESS on success, error code otherwise
+ */
+rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle);
+
+/**
+ * @brief Resume a suspended task
+ *
+ * @param task_handle Task to resume
+ * @return RTOS_SUCCESS on success, error code otherwise
+ */
+rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle);
+
+/**
+ * @brief Check if a task's stack has overflowed
+ *
+ * @param task_handle Task to check (NULL = check all tasks)
+ * @return true if overflow detected, false if stack OK
+ */
+bool rtos_task_check_stack(rtos_task_handle_t task_handle);
 
 #ifdef __cplusplus
 }

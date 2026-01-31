@@ -157,9 +157,30 @@
     "task.h": "c",
     "vrtos.h": "c",
     "stm32f4xx_hal.h": "c",
-    "rtos_assert.h": "c"
+    "rtos_assert.h": "c",
+    "assert.h": "c",
+    "log.h": "c",
+    "task_priv.h": "c",
+    "stdio.h": "c",
+    "mutex.h": "c",
+    "string.h": "c",
+    "list.h": "c",
+    "stdalign.h": "c",
+    "type_traits": "cpp",
+    "stdint.h": "c",
+    "edf.h": "c",
+    "scheduler.h": "c",
+    "cooperative.h": "c",
+    "rms.h": "c"
   },
   "[m68k]": {
     "editor.rulers": []
-  }
+  },
+  "clangd.arguments": [
+      "--compile-commands-dir=${workspaceFolder}",
+      "--all-scopes-completion",
+      "--background-index",
+      "--clang-tidy"
+  ],
+  "C_Cpp.intelliSenseEngine": "Disabled"
 }

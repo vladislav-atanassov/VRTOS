@@ -8,13 +8,7 @@
 #ifndef VRTOS_H
 #define VRTOS_H
 
-#include "config.h"
 #include "rtos_types.h"
-#include "task.h"
-#include "mutex.h"
-#include "semaphore.h"
-#include "queue.h"
-#include "timer.h"
 
 /**
  * @file VRTOS.h
@@ -24,7 +18,8 @@
  */
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /**
