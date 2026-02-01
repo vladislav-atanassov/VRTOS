@@ -53,7 +53,7 @@
 
 /* Time slice configuration for round-robin within same priority */
 #ifndef RTOS_TIME_SLICE_TICKS
-#define RTOS_TIME_SLICE_TICKS 5 /**< Time slice in ticks */
+#define RTOS_TIME_SLICE_TICKS 20 /**< Time slice in ticks */
 #endif
 
 /* Memory Configuration */
