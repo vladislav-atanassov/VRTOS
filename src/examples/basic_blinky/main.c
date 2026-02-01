@@ -29,8 +29,8 @@
 #define PRINT_TASK_PRIORITY (3U)
 
 /* Blink & Print timing */
-#define LED_BLINK_DELAY_MS (1000U)
-#define PRINT_DELAY_MS     (300U)
+#define LED_BLINK_DELAY_MS (200U)
+#define PRINT_DELAY_MS     (200U)
 
 void        SystemClock_Config(void);
 static void MX_GPIO_Init(void);
@@ -92,7 +92,16 @@ static void blink_task(void *param)
     {
         /* Toggle LED */
         led_toggle();
-        log_print("BLINK");
+        
+        log_print("START BLINK - O");
+
+        for (int i = 0; i < 1000000; i++)
+        {
+            __asm volatile("nop");
+        }
+
+        log_print("STOP BLINK - X");
+
         /* Delay for specified time */
         rtos_delay_ms(LED_BLINK_DELAY_MS);
     }
@@ -110,7 +119,15 @@ static void print_task(void *param)
     /* Task main loop */
     while (1)
     {
-        log_print("PRINT");
+        log_print("START PRINT - O");
+        
+        for (int i = 0; i < 1000000; i++)
+        {
+            __asm volatile("nop");
+        }
+        
+        log_print("STOP PRINT - X");
+        
         /* Delay for specified time */
         rtos_delay_ms(PRINT_DELAY_MS);
     }
@@ -132,6 +149,23 @@ static void memory_mang_task(void *param)
         rtos_delay_ms(1500);
     }
 }
+
+/**
+ * What you should see with the different scheduling policies is the following outputs (change RTOS_SCHEDULER_TYPE in /VRTOS/config.h)
+ * 
+ * +-------------------------------------------+------------------------------------------+------------------------------------------+
+ * | Preemptive (RTOS_SCHEDULER_PREEMPTIVE_SP) | Cooperative (RTOS_SCHEDULER_COOPERATIVE) | Round Round (RTOS_SCHEDULER_ROUND_ROBIN) |
+ * |          [PRINT] START PRINT - O          |          [PRINT] START BLINK - O         |          [PRINT] START BLINK - O         |
+ * |          [PRINT] STOP PRINT - X           |          [PRINT] STOP BLINK - X          |          [PRINT] START PRINT - O         |
+ * |          [PRINT] START BLINK - O          |          [PRINT] START PRINT - O         |          [PRINT] STOP BLINK - X          |
+ * |          [PRINT] START PRINT - O          |          [PRINT] STOP PRINT - X          |          [PRINT] STOP PRINT - X          |
+ * |          [PRINT] STOP PRINT - X           |          [PRINT] START BLINK - O         |          [PRINT] START BLINK - O         |
+ * |          [PRINT] STOP BLINK - X           |          [PRINT] STOP BLINK - X          |          [PRINT] START PRINT - O         |
+ * |          [PRINT] START PRINT - O          |          [PRINT] START PRINT - O         |          [PRINT] STOP BLINK - X          |
+ * |          [PRINT] STOP PRINT - X           |          [PRINT] STOP PRINT - X          |          [PRINT] STOP PRINT - X          |
+ * +-------------------------------------------+------------------------------------------+------------------------------------------+
+ * 
+ */
 
 /**
  * @brief Main function
