@@ -272,7 +272,7 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
     /* Check if we were woken by receive (blocked_on cleared) or timeout */
     if (current_task->blocked_on == queue)
     {
-        /*
+        /**
          * Still blocked on queue = timeout occurred
          * We need to remove ourselves from the wait list
          */
@@ -398,7 +398,7 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
     /* Check if we were woken by send (blocked_on cleared) or timeout */
     if (current_task->blocked_on == queue)
     {
-        /*
+        /**
          * Still blocked on queue = timeout occurred
          * We need to remove ourselves from the wait list
          */

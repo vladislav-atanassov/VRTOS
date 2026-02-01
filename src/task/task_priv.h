@@ -26,7 +26,7 @@
  */
 
 /* Task Control Block */
-struct rtos_task_control_block
+typedef struct rtos_task_control_block
 {
     /* Stack management */
     uint32_t         *stack_pointer; /**< Current stack pointer */
@@ -59,7 +59,7 @@ struct rtos_task_control_block
     struct rtos_task_control_block *next_waiting;    /**< Next task in sync wait queue */
     void                           *blocked_on;      /**< Sync object task is waiting on */
     rtos_sync_type_t                blocked_on_type; /**< Type of sync object */
-};
+} rtos_tcb_t;
 RTOS_STATIC_ASSERT(offsetof(rtos_tcb_t, stack_pointer) == 0, "stack_pointer must be first in TCB");
 
 // TODO: To be used by rtos_task_get_memory_stats

@@ -20,7 +20,7 @@ rtos_mutex_t mutex_2; /* Held by M, needed by L */
 /* Flags */
 volatile bool test_complete = false;
 
-/*
+/**
  * SCENARIO:
  * 1. Low runs, locks Mutex 1.
  * 2. Medium runs, locks Mutex 2.

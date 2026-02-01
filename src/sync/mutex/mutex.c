@@ -128,7 +128,7 @@ static rtos_tcb_t *mutex_pop_highest_priority_waiter(rtos_mutex_t *m)
  */
 static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter)
 {
-    /*
+    /**
      * Transitive Priority Inheritance:
      * Walk the chain of mutex owners and boost them if necessary.
      */

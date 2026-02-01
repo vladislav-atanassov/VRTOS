@@ -15,7 +15,7 @@
 /* Global list head */
 rtos_timer_t *g_active_timers = NULL;
 
-/*
+/**
  * Helper to comparison time with wraparound handling
  * Returns true if t1 is "before" t2
  */
@@ -130,7 +130,7 @@ void rtos_timer_tick(void)
             /* Handle Auto-Reload */
             if (expired->mode == RTOS_TIMER_AUTO_RELOAD)
             {
-                /*
+                /**
                  * Calculate next expiry using expiry_time + period to avoid drift.
                  * If callback took longer than one period, catch up by advancing
                  * expiry_time until it's in the future to prevent repeated fires.

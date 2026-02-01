@@ -67,7 +67,7 @@ rtos_status_t rtos_timer_start(rtos_timer_handle_t timer_handle)
     rtos_tick_t current_tick = rtos_get_tick_count();
     timer->expiry_time       = current_tick + timer->period;
 
-    /*
+    /**
      * Note: Tick wraparound is handled correctly by signed comparison in
      * rtos_timer_tick(). Expiry might wrap around, but (expiry - current)
      * as signed int32_t gives correct "time until expiry" value.

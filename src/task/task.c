@@ -484,7 +484,7 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size)
         return NULL;
     }
 
-    /*
+    /**
      * Stack grows down on Cortex-M.
      * Return the TOP of the stack block (highest address).
      * rtos_malloc returns 8-byte aligned start address.
