@@ -13,12 +13,6 @@
 #include "rtos_types.h"
 
 /**
- * @brief Stack canary magic value for overflow detection
- * Written at stack bottom during task creation, checked periodically
- */
-#define RTOS_STACK_CANARY_VALUE 0xC0DEC0DEU
-
-/**
  * @file task_priv.h
  * @brief Private Task Management Definitions
  *

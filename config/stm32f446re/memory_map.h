@@ -37,16 +37,4 @@
 #define RTOS_MEMORY_START (SRAM_BASE_ADDR + 0x1000) /* After globals */
 #define RTOS_MEMORY_SIZE  (SRAM_SIZE - 0x2000)      /* Reserve space */
 
-/* Peripheral Memory Map */
-#define PERIPH_BASE     (0x40000000UL)
-#define APB1PERIPH_BASE (PERIPH_BASE)
-#define APB2PERIPH_BASE (PERIPH_BASE + 0x00010000UL)
-#define AHB1PERIPH_BASE (PERIPH_BASE + 0x00020000UL)
-#define AHB2PERIPH_BASE (PERIPH_BASE + 0x10000000UL)
-
-/* System Control Block */
-#define SCB_BASE     (0xE000ED00UL)
-#define SYSTICK_BASE (0xE000E010UL)
-#define NVIC_BASE    (0xE000E100UL)
-
 #endif /* MEMORY_MAP_H */

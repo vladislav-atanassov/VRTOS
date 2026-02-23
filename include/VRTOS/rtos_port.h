@@ -15,6 +15,7 @@
  * @brief RTOS Porting Layer Interface
  *
  * This file defines the interface between the RTOS core and the hardware platform.
+ * To add support for a new chip, see docs/porting_guide.md.
  */
 
 #ifdef __cplusplus

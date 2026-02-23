@@ -155,7 +155,7 @@ void rtos_delay_ticks(rtos_tick_t ticks)
  */
 void rtos_delay_ms(uint32_t ms)
 {
-    rtos_tick_t ticks = (ms * RTOS_TICK_RATE_HZ) / 1000U;
+    rtos_tick_t ticks = ms / RTOS_TICK_PERIOD_MS;
     if (ticks == 0)
     {
         ticks = 1; /* Minimum delay of 1 tick */

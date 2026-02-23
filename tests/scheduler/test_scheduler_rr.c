@@ -6,12 +6,12 @@
  ******************************************************************************/
 
 #include "VRTOS.h"
-#include "config.h"
+#include "config.h" // IWYU pragma: keep
 #include "hardware_env.h"
 #include "log.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
-#include "test_config.h"
+#include "test_config.h" // TODO: MOve that file to be in the /tests directory
 #include "timer.h"
 
 /**

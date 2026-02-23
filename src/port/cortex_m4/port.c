@@ -1,6 +1,6 @@
 /*******************************************************************************
  * File: src/port/cortex_m4/port.c
- * Description: Cortex-M4 Porting Layer Implementation - FIXED
+ * Description: Cortex-M4F Porting Layer Implementation
  * Author: Student
  * Date: 2025
  ******************************************************************************/
@@ -8,6 +8,9 @@
 #include "config.h"
 #include "kernel_priv.h"
 #include "log.h"
+#include "port_priv.h" /* chip-specific constants (must come first) */
+#define PORT_VERIFY_CONTRACT
+#include "port_common.h" /* contract checks + common types */
 #include "rtos_port.h"
 #include "task_priv.h"
 #include "utils.h"
@@ -29,6 +32,7 @@ static volatile uint32_t g_critical_basepri = 0;
  */
 rtos_status_t rtos_port_init(void)
 {
+#if PORT_HAS_FPU
     /**
      * Enable lazy FPU context stacking.
      * ASPEN: Automatic State Preservation ENable — hardware reserves FPU
@@ -37,10 +41,11 @@ rtos_status_t rtos_port_init(void)
      *        S0-S15/FPSCR until the ISR first touches the FPU.
      */
     FPU->FPCCR |= FPU_FPCCR_ASPEN_Msk | FPU_FPCCR_LSPEN_Msk;
+#endif
 
     /* Configure interrupt priorities */
-    NVIC_SetPriority(PendSV_IRQn, RTOS_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
-    NVIC_SetPriority(SysTick_IRQn, RTOS_IRQ_PRIORITY_KERNEL >> 4); /* Kernel level */
+    NVIC_SetPriority(PendSV_IRQn, PORT_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
+    NVIC_SetPriority(SysTick_IRQn, PORT_IRQ_PRIORITY_KERNEL >> 4); /* Kernel level */
 
     /* Initialize BASEPRI to 0 (no masking) */
     __set_BASEPRI(0);
@@ -49,10 +54,10 @@ rtos_status_t rtos_port_init(void)
     g_critical_basepri = 0;
 
     log_info("Interrupt priorities configured:");
-    log_info("  Critical:  0x%02X (never masked)", RTOS_IRQ_PRIORITY_CRITICAL);
-    log_info("  High:      0x%02X (preempts RTOS)", RTOS_IRQ_PRIORITY_HIGH);
-    log_info("  Kernel:    0x%02X (SysTick)", RTOS_IRQ_PRIORITY_KERNEL);
-    log_info("  PendSV:    0x%02X (context switch)", RTOS_IRQ_PRIORITY_PENDSV);
+    log_info("  Critical:  0x%02X (never masked)", PORT_IRQ_PRIORITY_CRITICAL);
+    log_info("  High:      0x%02X (preempts RTOS)", PORT_IRQ_PRIORITY_HIGH);
+    log_info("  Kernel:    0x%02X (SysTick)", PORT_IRQ_PRIORITY_KERNEL);
+    log_info("  PendSV:    0x%02X (context switch)", PORT_IRQ_PRIORITY_PENDSV);
 
     return RTOS_SUCCESS;
 }
@@ -82,12 +87,12 @@ void rtos_port_start_systick(void)
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter)
 {
     /* Convert to byte address for alignment */
-    uint32_t *stack_ptr = (uint32_t *) ALIGN8_DOWN_VALUE((uint32_t) stack_top);
+    uint32_t *stack_ptr = (uint32_t *) ALIGN_DOWN((uint32_t) stack_top, PORT_STACK_ALIGNMENT);
 
     /* Initial exception frame */
-    *--stack_ptr = 0x01000000;                   /* xPSR (Thumb bit set) */
+    *--stack_ptr = PORT_INITIAL_XPSR;            /* xPSR (Thumb bit set) */
     *--stack_ptr = (uint32_t) task_function | 1; /* PC (task entry point) */
-    *--stack_ptr = 0xFFFFFFFD;                   /* LR (EXC_RETURN to thread mode with PSP) */
+    *--stack_ptr = PORT_INITIAL_EXC_RETURN;      /* LR (EXC_RETURN to thread mode with PSP) */
     *--stack_ptr = 0;                            /* R12 */
     *--stack_ptr = 0;                            /* R3 */
     *--stack_ptr = 0;                            /* R2 */
@@ -99,7 +104,7 @@ uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t ta
      * own FPU-usage indication in bit 4.  Initial value = 0xFFFFFFFD:
      * thread mode, PSP, no FPU frame.
      */
-    *--stack_ptr = 0xFFFFFFFD;
+    *--stack_ptr = PORT_INITIAL_EXC_RETURN;
 
     /* Manually-saved core registers (R4-R11) */
     *--stack_ptr = 0; /* R11 */
@@ -125,7 +130,7 @@ void rtos_port_enter_critical(void)
                    "DSB                                \n" /* Data sync barrier */
                    "ISB                                \n" /* Instruction sync barrier */
                    : "=r"(basepri)
-                   : "i"(RTOS_KERNEL_INTERRUPT_PRIORITY)
+                   : "i"(PORT_MAX_INTERRUPT_PRIORITY)
                    : "r1", "memory");
 
     g_critical_nesting++;
@@ -159,7 +164,7 @@ void rtos_port_exit_critical(void)
 uint32_t rtos_port_enter_critical_from_isr(void)
 {
     uint32_t saved_basepri = __get_BASEPRI();
-    __set_BASEPRI(RTOS_KERNEL_INTERRUPT_PRIORITY);
+    __set_BASEPRI(PORT_MAX_INTERRUPT_PRIORITY);
     __DSB();
     __ISB();
     return saved_basepri;
@@ -191,13 +196,14 @@ void rtos_port_yield(void)
 __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 {
     /* Ensure 8-byte stack alignment */
-    uint32_t psp_val = ALIGN8_DOWN_VALUE((uint32_t) g_kernel.next_task->stack_pointer);
+    uint32_t psp_val = ALIGN_DOWN((uint32_t) g_kernel.next_task->stack_pointer, PORT_STACK_ALIGNMENT);
 
     /* Set PSP to point to saved registers (R4-R11, R14) */
     __set_PSP(psp_val);
     __DSB();
     __ISB();
 
+#if PORT_HAS_FPU
     /**
      * Clear the FPCA bit in CONTROL register to prevent the SVC exception
      * frame from including stale FPU state that may have been used before
@@ -206,6 +212,7 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
     __asm volatile("MOV R0, #0       \n"
                    "MSR CONTROL, R0  \n"
                    "ISB              \n");
+#endif
 
     /* Trigger SVC to start first task */
     __asm volatile("svc 0");
@@ -265,11 +272,13 @@ __attribute__((naked)) void PendSV_Handler(void)
                    "LDR     R3, =g_kernel              \n"
                    "LDR     R2, [R3]                   \n" /* R2 = current_task TCB */
 
+#if PORT_HAS_FPU
                    /* Conditionally save S16-S31 (callee-saved VFP regs) */
                    "TST     R14, #0x10                 \n" /* Bit 4: 0 = FPU frame */
                    "BNE     1f                         \n"
                    "VSTMDB  R0!, {S16-S31}             \n"
                    "1:                                 \n"
+#endif
 
                    /* Save core registers + EXC_RETURN */
                    "STMDB   R0!, {R4-R11, R14}         \n"
@@ -294,15 +303,17 @@ __attribute__((naked)) void PendSV_Handler(void)
                    /* Restore core registers + EXC_RETURN */
                    "LDMIA   R0!, {R4-R11, R14}         \n"
 
+#if PORT_HAS_FPU
                    /* Conditionally restore S16-S31 */
                    "TST     R14, #0x10                 \n"
                    "BNE     2f                         \n"
                    "VLDMIA  R0!, {S16-S31}             \n"
                    "2:                                 \n"
+#endif
 
                    "MSR     PSP, R0                    \n"
                    "ISB                                \n"
                    "BX      R14                        \n" /* Per-task EXC_RETURN */
-                   ::"i"(RTOS_KERNEL_INTERRUPT_PRIORITY)
+                   ::"i"(PORT_MAX_INTERRUPT_PRIORITY)
                    : "memory");
 }

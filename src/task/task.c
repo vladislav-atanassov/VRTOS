@@ -11,6 +11,7 @@
 #include "kernel_priv.h"
 #include "log.h"
 #include "memory.h"
+#include "port_common.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task_priv.h"
@@ -57,15 +58,13 @@ rtos_status_t rtos_task_init_system(void)
 /**
  * @brief Create a new task
  */
-rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name,
-                               rtos_stack_size_t stack_size, void *parameter,
-                               rtos_priority_t priority, rtos_task_handle_t *task_handle)
+rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name, rtos_stack_size_t stack_size,
+                               void *parameter, rtos_priority_t priority, rtos_task_handle_t *task_handle)
 {
     /* Validate parameters */
     if (task_function == NULL || task_handle == NULL)
     {
-        log_error("Invalid parameters: task_function=%p, task_handle=%p", task_function,
-                  task_handle);
+        log_error("Invalid parameters: task_function=%p, task_handle=%p", task_function, task_handle);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
@@ -119,7 +118,9 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     }
 
     /* Write stack canary at bottom of stack for overflow detection */
-    *stack_memory = RTOS_STACK_CANARY_VALUE;
+#if RTOS_ENABLE_STACK_OVERFLOW_CHECK
+    *stack_memory = PORT_STACK_CANARY_VALUE;
+#endif
 
     /* Initialize TCB */
     new_task->task_id              = g_task_count;
@@ -145,8 +146,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     new_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
     /* Initialize task stack */
-    new_task->stack_pointer =
-        rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
+    new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
 
     /* Add to ready list via scheduler */
     rtos_scheduler_add_to_ready_list(new_task);
@@ -156,8 +156,8 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
 
     rtos_port_exit_critical();
 
-    log_info("Created task '%s' (ID=%d, prio=%d, stack=%d bytes)", name ? name : "unnamed",
-             new_task->task_id, priority, stack_size);
+    log_info("Created task '%s' (ID=%d, prio=%d, stack=%d bytes)", name ? name : "unnamed", new_task->task_id, priority,
+             stack_size);
 
     return RTOS_SUCCESS;
 }
@@ -170,8 +170,7 @@ rtos_tcb_t *rtos_task_get_idle_task(void)
     /* Find the idle task (priority 0) */
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
-        if (g_task_pool[i].task_function != NULL &&
-            g_task_pool[i].priority == RTOS_IDLE_TASK_PRIORITY)
+        if (g_task_pool[i].task_function != NULL && g_task_pool[i].priority == RTOS_IDLE_TASK_PRIORITY)
         {
             return &g_task_pool[i];
         }
@@ -301,8 +300,8 @@ void rtos_task_debug_print_all(void)
             }
 
             log_debug("Task[%d]: '%s' prio=%d state=%s stack=%d SP=0x%08lX", task->task_id,
-                      task->name ? task->name : "unnamed", task->priority, state_str,
-                      task->stack_size, (unsigned long) task->stack_pointer);
+                      task->name ? task->name : "unnamed", task->priority, state_str, task->stack_size,
+                      (unsigned long) task->stack_pointer);
         }
     }
     log_debug("==============================");
@@ -336,12 +335,13 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
  */
 bool rtos_task_check_stack(rtos_task_handle_t task_handle)
 {
+#if RTOS_ENABLE_STACK_OVERFLOW_CHECK
     if (task_handle != NULL)
     {
         /* Check single task */
         if (task_handle->stack_base != NULL)
         {
-            if (*task_handle->stack_base != RTOS_STACK_CANARY_VALUE)
+            if (*task_handle->stack_base != PORT_STACK_CANARY_VALUE)
             {
                 log_error("STACK OVERFLOW detected in task '%s' (ID=%d)",
                           task_handle->name ? task_handle->name : "unnamed", task_handle->task_id);
@@ -358,15 +358,19 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         rtos_tcb_t *task = &g_task_pool[i];
         if (task->task_function != NULL && task->stack_base != NULL)
         {
-            if (*task->stack_base != RTOS_STACK_CANARY_VALUE)
+            if (*task->stack_base != PORT_STACK_CANARY_VALUE)
             {
-                log_error("STACK OVERFLOW detected in task '%s' (ID=%d)",
-                          task->name ? task->name : "unnamed", task->task_id);
+                log_error("STACK OVERFLOW detected in task '%s' (ID=%d)", task->name ? task->name : "unnamed",
+                          task->task_id);
                 overflow_found = true;
             }
         }
     }
     return overflow_found;
+#else
+    (void) task_handle;
+    return false;
+#endif /* RTOS_ENABLE_STACK_OVERFLOW_CHECK */
 }
 
 /**

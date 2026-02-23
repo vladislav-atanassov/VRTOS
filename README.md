@@ -261,7 +261,7 @@ rtos_profiling_print_stat(&my_stats);
 VRTOS/
 ├── include/VRTOS/          # Public API headers
 │   ├── VRTOS.h            # Main RTOS header
-│   ├── config.h           # Configuration parameters
+│   ├── config.h           # Configuration defaults
 │   ├── task.h             # Task management API
 │   ├── scheduler.h        # Scheduler interface
 │   ├── mutex.h            # Mutex API
@@ -286,17 +286,17 @@ VRTOS/
 │   │   ├── task.c         # Task creation and state management
 │   │   └── task_priv.h    # Private task definitions
 │   ├── sync/              # Synchronization primitives
-│   │   ├── mutex/
-│   │   │   └── mutex.c    # Mutex with priority inheritance
-│   │   ├── semaphore/
-│   │   │   └── semaphore.c # Counting semaphore
-│   │   └── queue/
-│   │       └── queue.c    # Message queue
+│   │   ├── mutex/         # Mutex with priority inheritance
+│   │   ├── semaphore/     # Counting semaphore
+│   │   └── queue/         # Message queue
 │   ├── timer/             # Software timers
 │   │   ├── timer.c        # Timer API
 │   │   └── timer_list.c   # Active timer list management
-│   ├── port/cortex_m4/    # ARM Cortex-M4 port
-│   │   └── port.c         # Context switch, critical sections
+│   ├── port/              # Architecture porting layer
+│   │   ├── common/        # Shared port contract (port_common.h)
+│   │   └── cortex_m4/     # ARM Cortex-M4F port
+│   │       ├── port_priv.h  # Arch constants + interrupt priorities
+│   │       └── port.c       # Context switch, critical sections
 │   ├── utils/             # Utilities
 │   │   ├── log.c          # UART logging
 │   │   ├── profiling.c    # DWT profiling
@@ -305,18 +305,28 @@ VRTOS/
 │   └── examples/          # Example applications
 │       ├── basic_blinky/
 │       ├── producer_consumer/
-│       └── profiling_demo/
+│       ├── profiling_demo/
+│       └── fpu_context_test/
 ├── tests/                 # Test suite
-│   └── scheduler/         # Scheduler tests
-│       ├── test_scheduler_preemptive.c
-│       ├── test_scheduler_cooperative.c
-│       └── test_scheduler_rr.c
-├── config/                # Configuration files
-│   ├── stm32f446re/       # Target-specific config
-│   │   ├── rtos_config.h
-│   │   └── memory_map.h
+│   ├── scheduler/         # Scheduler tests
+│   │   ├── test_scheduler_preemptive.c
+│   │   ├── test_scheduler_cooperative.c
+│   │   └── test_scheduler_rr.c
+│   └── integration/       # TO BE ADDED: Integration tests
+│       ├── test_mutex_priority_inheritance.c
+│       ├── test_semaphore_producer_consumer.c
+│       ├── test_queue_blocking.c
+│       └── test_state_transitions.c
+├── config/                # Board-specific configuration
+│   ├── rtos_config_template.h  # Skeleton for new boards
+│   ├── stm32f446re/       # STM32F446RE board config
+│   │   ├── rtos_config.h  # Board overrides
+│   │   ├── memory_map.h   # Flash/SRAM layout
+│   │   └── clock_config.h # Clock aliases
 │   └── test/              # Test configuration
 │       └── test_config.h
+├── docs/                  # Documentation
+│   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/                 # Development tools
 │   ├── scripts/           # Build scripts
 │   │   ├── pre_build.py
@@ -331,39 +341,53 @@ VRTOS/
 
 ## Configuration
 
-Main configuration in `include/VRTOS/config.h`:
+Configuration uses a hierarchical override system:
+
+```
+config/<board>/rtos_config.h   ← board-specific overrides (included first)
+    ├── memory_map.h           ← flash/SRAM layout
+    └── clock_config.h         ← clock aliases
+include/VRTOS/config.h         ← generic defaults (wrapped in #ifndef guards)
+```
+
+Board overrides are applied by defining macros **before** the defaults in `config.h`.
+To add a new board, copy `config/rtos_config_template.h` to `config/<board>/rtos_config.h`
+and uncomment the values you need to override.
+
+### Generic Defaults (`config.h`)
 
 ```c
-/* System Configuration */
+/* System */
 #define RTOS_SYSTEM_CLOCK_HZ    (16000000U)  // 16MHz HSI
 #define RTOS_TICK_RATE_HZ       (1000U)      // 1ms tick
 #define RTOS_MAX_TASKS          (8U)         // Max task slots
 #define RTOS_MAX_TASK_PRIORITIES (8U)        // Priority levels 0-7
 
-/* Scheduler Selection */
+/* Scheduler */
 #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
-// Options: RTOS_SCHEDULER_PREEMPTIVE_SP
-//          RTOS_SCHEDULER_COOPERATIVE
-//          RTOS_SCHEDULER_ROUND_ROBIN
-
-/* Round-Robin Time Slice */
 #define RTOS_TIME_SLICE_TICKS (20)  // 20ms @ 1ms tick
 
-/* Memory Configuration */
+/* Memory */
 #define RTOS_TOTAL_HEAP_SIZE         (16384U)  // 16KB heap
 #define RTOS_DEFAULT_TASK_STACK_SIZE (1024U)   // 1KB default
 #define RTOS_MINIMUM_TASK_STACK_SIZE (256U)    // 256B minimum
 
-/* Interrupt Priorities (Cortex-M4 4-bit) */
-#define RTOS_IRQ_PRIORITY_CRITICAL (0x00)  // Never masked
-#define RTOS_IRQ_PRIORITY_HIGH     (0x40)  // Can preempt RTOS
-#define RTOS_IRQ_PRIORITY_KERNEL   (0x80)  // SysTick level
-#define RTOS_IRQ_PRIORITY_PENDSV   (0xF0)  // Lowest (context switch)
-
-/* Debug Features */
-#define RTOS_DEBUG_ENABLED  (1U)
+/* Debug */
 #define RTOS_ASSERT_ENABLED (1U)
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
+```
+
+### Port-Layer Constants (`port_priv.h`)
+
+Interrupt priorities are architecture-specific and live in the port layer,
+not in `config.h`:
+
+```c
+/* Cortex-M4 interrupt priorities (src/port/cortex_m4/port_priv.h) */
+#define PORT_IRQ_PRIORITY_CRITICAL (0x00)  // Never masked
+#define PORT_IRQ_PRIORITY_HIGH     (0x40)  // Can preempt RTOS
+#define PORT_IRQ_PRIORITY_KERNEL   (0x80)  // SysTick level
+#define PORT_IRQ_PRIORITY_PENDSV   (0xF0)  // Lowest (context switch)
 ```
 
 ## Building and Running
@@ -399,12 +423,20 @@ python test_runner.py test_scheduler_rr --duration 10
 - `basic_blinky` - Simple LED blinking demonstration
 - `producer_consumer` - Queue-based sensor data processing
 - `profiling_demo` - Cycle counter profiling example
+- `fpu_context_test` - FPU context preservation verification
 
 **Scheduler Tests**:
 
 - `test_scheduler_preemptive` - Preemptive priority scheduling
 - `test_scheduler_cooperative` - Cooperative scheduling
 - `test_scheduler_rr` - Round-robin scheduling
+
+**Integration Tests**:
+
+- `test_mutex_priority` - Mutex priority inheritance
+- `test_semaphore_pc` - Semaphore producer-consumer
+- `test_queue_blocking` - Queue blocking operations
+- `test_states` - Task state transitions
 
 ## Test Automation
 

@@ -420,7 +420,7 @@ __attribute__((__noreturn__)) int main(void)
     /* Initialize hardware environment */
     hardware_env_config();
 
-    log_uart_init(LOG_LEVEL_ALL);
+    log_uart_init(LOG_LEVEL_INFO);
 
     log_info("\n\n");
     log_info("====================================");

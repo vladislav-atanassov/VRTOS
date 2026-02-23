@@ -12,79 +12,107 @@
  * @file config.h
  * @brief RTOS Configuration Parameters
  *
- * This file contains all configurable parameters for the RTOS system.
- * Modify these values to customize the RTOS behavior for your application.
+ * Board-specific overrides are defined in config/<board>/rtos_config.h.
+ * Every value here is a default — override by defining the macro before
+ * this file is processed (via rtos_config.h).
  */
 
-/* System Configuration */
-#define RTOS_SYSTEM_CLOCK_HZ (16000000U)                 /**< System clock frequency in Hz */
-#define RTOS_TICK_RATE_HZ    (1000U)                     /**< System tick frequency in Hz (1ms tick) */
-#define RTOS_TICK_PERIOD_MS  (1000U / RTOS_TICK_RATE_HZ) /**< Tick period in milliseconds */
+/* Board-specific overrides (resolved via -I config/<board>/) */
+#include "rtos_config.h" // IWYU pragma: keep
 
-/* Task Configuration */
-#define RTOS_MAX_TASKS               (8U)    /**< Maximum number of tasks */
-#define RTOS_MAX_TASK_PRIORITIES     (8U)    /**< Maximum number of priority levels */
-#define RTOS_IDLE_TASK_PRIORITY      (0U)    /**< Idle task priority (lowest) */
-#define RTOS_DEFAULT_TASK_STACK_SIZE (1024U) /**< Default task stack size in bytes */
-#define RTOS_MINIMUM_TASK_STACK_SIZE (128U)  /**< Minimum allowed task stack size */
+/* ======================== System Configuration ========================== */
 
-/* Scheduler Configuration */
-#ifndef RTOS_SCHEDULER_TYPE
-#define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP /**< Preemptive scheduler for sync demo */
+#ifndef RTOS_SYSTEM_CLOCK_HZ
+#define RTOS_SYSTEM_CLOCK_HZ (16000000U) /**< System clock frequency in Hz */
 #endif
 
-/* Ensure the macro expands to the correct enum value */
+#ifndef RTOS_TICK_RATE_HZ
+#define RTOS_TICK_RATE_HZ (1000U) /**< System tick frequency in Hz (1ms tick) */
+#endif
+
+#ifndef RTOS_TICK_PERIOD_MS
+#define RTOS_TICK_PERIOD_MS (1000U / RTOS_TICK_RATE_HZ) /**< Tick period in ms */
+#endif
+
+/* ======================== Task Configuration ============================ */
+
+#ifndef RTOS_MAX_TASKS
+#define RTOS_MAX_TASKS (8U) /**< Maximum number of tasks */
+#endif
+
+#ifndef RTOS_MAX_TASK_PRIORITIES
+#define RTOS_MAX_TASK_PRIORITIES (8U) /**< Maximum priority levels */
+#endif
+
+#ifndef RTOS_IDLE_TASK_PRIORITY
+#define RTOS_IDLE_TASK_PRIORITY (0U) /**< Idle task priority (lowest) */
+#endif
+
+#ifndef RTOS_DEFAULT_TASK_STACK_SIZE
+#define RTOS_DEFAULT_TASK_STACK_SIZE (1024U) /**< Default task stack size in bytes */
+#endif
+
+#ifndef RTOS_MINIMUM_TASK_STACK_SIZE
+#define RTOS_MINIMUM_TASK_STACK_SIZE (128U) /**< Minimum allowed task stack size */
+#endif
+
+/* ======================== Scheduler Configuration ======================= */
+
+#ifndef RTOS_SCHEDULER_TYPE
+#define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
+#endif
+
+/* Ensure enum values are available */
 #if !defined(RTOS_SCHEDULER_PREEMPTIVE_SP) || !defined(RTOS_SCHEDULER_COOPERATIVE) ||                                  \
     !defined(RTOS_SCHEDULER_ROUND_ROBIN)
-#include "scheduler.h" // IWYU pragma: keep - Include to get enum definitions
+#include "scheduler.h" // IWYU pragma: keep
 #endif
 
-/* Scheduler-specific configurations */
+/* Scheduler-specific flags */
 #if (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_PREEMPTIVE_SP)
-/* Preemptive static priority-based Scheduler uses priority-based scheduling */
 #define RTOS_USE_PRIORITY_SCHEDULING 1
 #elif (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_COOPERATIVE)
-/* Cooperative scheduling */
 #define RTOS_USE_COOPERATIVE_SCHEDULING 1
 #elif (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_ROUND_ROBIN)
-/* Round robin scheduling with time slicing */
 #define RTOS_USE_ROUND_ROBIN_SCHEDULING 1
 #endif
 
-/* Time slice configuration for round-robin within same priority */
 #ifndef RTOS_TIME_SLICE_TICKS
 #define RTOS_TIME_SLICE_TICKS 20 /**< Time slice in ticks */
 #endif
 
-/* Memory Configuration */
+/* ======================== Memory Configuration ========================== */
+
+#ifndef RTOS_TOTAL_HEAP_SIZE
 #define RTOS_TOTAL_HEAP_SIZE (16384U) /**< Total heap size for task stacks */
-#define RTOS_STACK_ALIGNMENT (8U)     /**< Stack alignment requirement */
+#endif
 
-/* Debug Configuration */
-#define RTOS_DEBUG_ENABLED  (1U) /**< Enable debug features */
+/* ======================== Debug Configuration =========================== */
+
+#ifndef RTOS_ASSERT_ENABLED
 #define RTOS_ASSERT_ENABLED (1U) /**< Enable assertions */
+#endif
 
-/**
- * @brief Interrupt Priority Configuration
- * 
- * Cortex-M4 uses 4-bit priority (16 levels) in upper bits of 8-bit field.
- * Lower numeric value = higher priority.
- */
+/* ======================== Feature Toggles =============================== */
 
-/* Highest priority - never masked (time-critical hardware) */
-#define RTOS_IRQ_PRIORITY_CRITICAL (0x00) /* DMA, critical timers */
+#ifndef RTOS_USE_FAST_INTERRUPTS
+#define RTOS_USE_FAST_INTERRUPTS (0U)
+#endif
 
-/* High priority - can preempt RTOS operations */
-#define RTOS_IRQ_PRIORITY_HIGH (0x40) /* UART RX, SPI, ADC */
+#ifndef RTOS_USE_TICKLESS_IDLE
+#define RTOS_USE_TICKLESS_IDLE (0U)
+#endif
 
-/* RTOS kernel priority level - SysTick, PendSV run here */
-#define RTOS_IRQ_PRIORITY_KERNEL (0x80) /* SysTick */
-#define RTOS_IRQ_PRIORITY_PENDSV (0xF0) /* PendSV (lowest for late reschedule) */
+#ifndef RTOS_ENABLE_STACK_OVERFLOW_CHECK
+#define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
+#endif
 
-/* Low priority - masked during critical sections */
-#define RTOS_IRQ_PRIORITY_LOW (0xC0) /* Non-critical peripherals */
+#ifndef RTOS_ENABLE_RUNTIME_STATS
+#define RTOS_ENABLE_RUNTIME_STATS (0U)
+#endif
 
-/* BASEPRI threshold - mask this priority and lower (numerically higher) */
-#define RTOS_KERNEL_INTERRUPT_PRIORITY (RTOS_IRQ_PRIORITY_KERNEL)
+#ifndef RTOS_ENABLE_TRACE
+#define RTOS_ENABLE_TRACE (0U)
+#endif
 
 #endif /* RTOS_CONFIG_H */
