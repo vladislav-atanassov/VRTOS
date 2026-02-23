@@ -29,6 +29,15 @@ static volatile uint32_t g_critical_basepri = 0;
  */
 rtos_status_t rtos_port_init(void)
 {
+    /**
+     * Enable lazy FPU context stacking.
+     * ASPEN: Automatic State Preservation ENable — hardware reserves FPU
+     *        stack space on exception entry when FPU was in use.
+     * LSPEN: Lazy State Preservation ENable — defer the actual save of
+     *        S0-S15/FPSCR until the ISR first touches the FPU.
+     */
+    FPU->FPCCR |= FPU_FPCCR_ASPEN_Msk | FPU_FPCCR_LSPEN_Msk;
+
     /* Configure interrupt priorities */
     NVIC_SetPriority(PendSV_IRQn, RTOS_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
     NVIC_SetPriority(SysTick_IRQn, RTOS_IRQ_PRIORITY_KERNEL >> 4); /* Kernel level */
@@ -85,7 +94,14 @@ uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t ta
     *--stack_ptr = 0;                            /* R1 */
     *--stack_ptr = (uint32_t) parameter;         /* R0 (task parameter) */
 
-    /* Manual save registers (R4-R11) */
+    /**
+     * EXC_RETURN value — saved/restored per-task so each task carries its
+     * own FPU-usage indication in bit 4.  Initial value = 0xFFFFFFFD:
+     * thread mode, PSP, no FPU frame.
+     */
+    *--stack_ptr = 0xFFFFFFFD;
+
+    /* Manually-saved core registers (R4-R11) */
     *--stack_ptr = 0; /* R11 */
     *--stack_ptr = 0; /* R10 */
     *--stack_ptr = 0; /* R9 */
@@ -177,10 +193,19 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
     /* Ensure 8-byte stack alignment */
     uint32_t psp_val = ALIGN8_DOWN_VALUE((uint32_t) g_kernel.next_task->stack_pointer);
 
-    /* Set PSP to point to saved registers (R4-R11) */
+    /* Set PSP to point to saved registers (R4-R11, R14) */
     __set_PSP(psp_val);
     __DSB();
     __ISB();
+
+    /**
+     * Clear the FPCA bit in CONTROL register to prevent the SVC exception
+     * frame from including stale FPU state that may have been used before
+     * the scheduler was started.
+     */
+    __asm volatile("MOV R0, #0       \n"
+                   "MSR CONTROL, R0  \n"
+                   "ISB              \n");
 
     /* Trigger SVC to start first task */
     __asm volatile("svc 0");
@@ -206,11 +231,6 @@ void rtos_port_systick_handler(void)
     rtos_kernel_tick_handler();
 }
 
-void log_svc_handler(void)
-{
-    log_debug("Triggered SVC handler, PSP=%08X", (unsigned int) __get_PSP());
-}
-
 /**
  * @brief SVC interrupt handler
  *
@@ -218,20 +238,17 @@ void log_svc_handler(void)
  */
 __attribute__((naked)) void SVC_Handler(void)
 {
-    __asm volatile("BL log_svc_handler      \n" /* Debug log */
-                   "MRS R0, PSP             \n" /* Get PSP */
-                   "LDMIA R0!, {R4-R11}     \n" /* Restore R4-R11 from stack */
-                   "MSR PSP, R0             \n" /* Update PSP to point after registers */
-                   "ISB                     \n" /* Instruction barrier */
-                   "LDR LR, =0xFFFFFFFD     \n" /* EXC_RETURN: thread mode + PSP */
-                   "BX LR                   \n" /* Return to thread mode */
+    __asm volatile("LDR  R3, =g_kernel       \n" /* Get current TCB address */
+                   "LDR  R1, [R3]            \n"
+                   "LDR  R0, [R1]            \n" /* First item = stack pointer */
+                   "LDMIA R0!, {R4-R11, R14} \n" /* Restore R4-R11 + EXC_RETURN */
+                   "MSR  PSP, R0             \n" /* Update PSP past restored regs */
+                   "ISB                      \n"
+                   "MOV  R0, #0              \n" /* Unmask interrupts (BASEPRI = 0) */
+                   "MSR  BASEPRI, R0         \n"
+                   "BX   R14                 \n" /* Return to thread mode */
                    ::
                        : "memory");
-}
-
-void log_pendsv_handler(void)
-{
-    log_debug("Triggered PendSV handler, PSP=%08X", (unsigned int) __get_PSP());
 }
 
 /**
@@ -241,30 +258,51 @@ void log_pendsv_handler(void)
  */
 __attribute__((naked)) void PendSV_Handler(void)
 {
-    __asm volatile("BL log_pendsv_handler              \n" /* Debug log */
-                   "MRS     R0, PSP                    \n" /* Get current PSP */
-                   "CBZ     R0, pendsv_nosave          \n" /* Skip save if first run */
+    __asm volatile("MRS     R0, PSP                    \n" /* Get current PSP */
+                   "ISB                                \n"
 
-                   "STMDB   R0!, {R4-R11}              \n" /* Save current context - R4-R11 */
-                   "LDR     R1, =g_kernel              \n" /* Save stack pointer to TCB */
-                   "LDR     R2, [R1, #0]               \n" /* current_task */
-                   "STR     R0, [R2]                   \n" /* stack_pointer */
+                   /* Save current task context */
+                   "LDR     R3, =g_kernel              \n"
+                   "LDR     R2, [R3]                   \n" /* R2 = current_task TCB */
 
-                   "pendsv_nosave:                     \n"
-                   "PUSH    {R3, LR}                   \n" /* Preserve LR (EXC_RETURN) */
-                   "BL      rtos_kernel_switch_context \n" /* Call scheduler */
-                   "POP     {R3, LR}                   \n" /* Restore LR */
+                   /* Conditionally save S16-S31 (callee-saved VFP regs) */
+                   "TST     R14, #0x10                 \n" /* Bit 4: 0 = FPU frame */
+                   "BNE     1f                         \n"
+                   "VSTMDB  R0!, {S16-S31}             \n"
+                   "1:                                 \n"
 
-                   "LDR     R1, =g_kernel              \n" /* Load next task context */
-                   "LDR     R2, [R1, #0]               \n" /* current_task */
-                   "LDR     R0, [R2]                   \n" /* stack_pointer */
+                   /* Save core registers + EXC_RETURN */
+                   "STMDB   R0!, {R4-R11, R14}         \n"
 
-                   "LDMIA   R0!, {R4-R11}              \n" /* Restore R4-R11 */
+                   /* Store updated SP in current TCB */
+                   "STR     R0, [R2]                   \n"
 
-                   "MSR     PSP, R0                    \n" /* Update PSP */
-                   "MOV     LR, #0xFFFFFFFD            \n" /* Set EXC_RETURN value, Thread mode + PSP */
+                   /* Call scheduler under BASEPRI protection */
+                   "MOV     R0, %0                     \n"
+                   "MSR     BASEPRI, R0                \n"
+                   "DSB                                \n"
+                   "ISB                                \n"
+                   "BL      rtos_kernel_switch_context \n"
+                   "MOV     R0, #0                     \n"
+                   "MSR     BASEPRI, R0                \n"
 
-                   "BX      LR                         \n" /* Return to thread mode */
-                   ::
-                       : "r0", "r1", "r2", "memory");
+                   /* Restore next task context */
+                   "LDR     R3, =g_kernel              \n"
+                   "LDR     R2, [R3]                   \n" /* R2 = (new) current_task */
+                   "LDR     R0, [R2]                   \n" /* R0 = stack_pointer */
+
+                   /* Restore core registers + EXC_RETURN */
+                   "LDMIA   R0!, {R4-R11, R14}         \n"
+
+                   /* Conditionally restore S16-S31 */
+                   "TST     R14, #0x10                 \n"
+                   "BNE     2f                         \n"
+                   "VLDMIA  R0!, {S16-S31}             \n"
+                   "2:                                 \n"
+
+                   "MSR     PSP, R0                    \n"
+                   "ISB                                \n"
+                   "BX      R14                        \n" /* Per-task EXC_RETURN */
+                   ::"i"(RTOS_KERNEL_INTERRUPT_PRIORITY)
+                   : "memory");
 }
