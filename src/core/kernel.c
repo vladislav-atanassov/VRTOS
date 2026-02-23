@@ -108,7 +108,6 @@ rtos_status_t rtos_start_scheduler(void)
 
     g_kernel.state = RTOS_KERNEL_STATE_RUNNING;
 
-    rtos_port_start_systick();
     rtos_port_start_first_task();
 
     /* Should never return */
@@ -182,7 +181,7 @@ void rtos_kernel_tick_handler(void)
     /* Process Software Timers */
     rtos_timer_tick();
 
-    if (g_scheduler_instance.initialized)
+    if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING && g_scheduler_instance.initialized)
     {
         rtos_port_enter_critical();
 

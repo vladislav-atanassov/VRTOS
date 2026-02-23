@@ -214,6 +214,8 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
                    "ISB              \n");
 #endif
 
+    rtos_port_start_systick();
+
     /* Trigger SVC to start first task */
     __asm volatile("svc 0");
 

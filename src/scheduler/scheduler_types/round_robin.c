@@ -289,11 +289,9 @@ static rtos_task_handle_t round_robin_get_next_task(rtos_scheduler_instance_t *i
 
     rtos_task_handle_t next = round_robin_get_next_ready();
 
-    /* Reset time slice for the new task */
-    if (next != NULL && next != g_round_robin_data.current_task)
+    if (next != NULL)
     {
-        g_round_robin_data.slice_remaining = RTOS_TIME_SLICE_TICKS;
-        g_round_robin_data.current_task    = next;
+        g_round_robin_data.current_task = next;
     }
 
     return next;

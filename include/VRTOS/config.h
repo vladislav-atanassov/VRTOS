@@ -78,7 +78,7 @@
 #endif
 
 #ifndef RTOS_TIME_SLICE_TICKS
-#define RTOS_TIME_SLICE_TICKS 20 /**< Time slice in ticks */
+#define RTOS_TIME_SLICE_TICKS 1 /**< Time slice in ticks */
 #endif
 
 /* ======================== Memory Configuration ========================== */
