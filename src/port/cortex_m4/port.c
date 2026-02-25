@@ -9,6 +9,7 @@
 #include "kernel_priv.h"
 #include "log.h"
 #include "port_priv.h" /* chip-specific constants (must come first) */
+#include "profiling.h"
 #define PORT_VERIFY_CONTRACT
 #include "port_common.h" /* contract checks + common types */
 #include "rtos_port.h"
@@ -237,6 +238,21 @@ void SysTick_Handler(void)
 
 void rtos_port_systick_handler(void)
 {
+#if RTOS_PROFILING_SYSTEM_ENABLED
+    static uint32_t last_tick_cycle = 0;
+    uint32_t        now             = DWT->CYCCNT;
+
+    if (last_tick_cycle != 0)
+    {
+        uint32_t expected   = SystemCoreClock / RTOS_TICK_RATE_HZ;
+        uint32_t actual     = now - last_tick_cycle;
+        int32_t  jitter     = (int32_t) (actual - expected);
+        uint32_t abs_jitter = (jitter < 0) ? (uint32_t) (-jitter) : (uint32_t) jitter;
+        rtos_profiling_record(&g_prof_tick_jitter, abs_jitter);
+    }
+    last_tick_cycle = now;
+#endif
+
     rtos_kernel_tick_handler();
 }
 
@@ -267,55 +283,79 @@ __attribute__((naked)) void SVC_Handler(void)
  */
 __attribute__((naked)) void PendSV_Handler(void)
 {
-    __asm volatile("MRS     R0, PSP                    \n" /* Get current PSP */
-                   "ISB                                \n"
+    __asm volatile(
+#if RTOS_PROFILING_SYSTEM_ENABLED
+        /* Capture DWT->CYCCNT at entry and store in global */
+        "LDR     R1, =%[cyccnt_addr]         \n"
+        "LDR     R2, [R1]                   \n" /* R2 = start cycle count */
+        "LDR     R3, =g_pendsv_start_cycles \n"
+        "STR     R2, [R3]                   \n"
+#endif
+        "MRS     R0, PSP                    \n" /* Get current PSP */
+        "ISB                                \n"
 
-                   /* Save current task context */
-                   "LDR     R3, =g_kernel              \n"
-                   "LDR     R2, [R3]                   \n" /* R2 = current_task TCB */
+        /* Save current task context */
+        "LDR     R3, =g_kernel              \n"
+        "LDR     R2, [R3]                   \n" /* R2 = current_task TCB */
 
 #if PORT_HAS_FPU
-                   /* Conditionally save S16-S31 (callee-saved VFP regs) */
-                   "TST     R14, #0x10                 \n" /* Bit 4: 0 = FPU frame */
-                   "BNE     1f                         \n"
-                   "VSTMDB  R0!, {S16-S31}             \n"
-                   "1:                                 \n"
+        /* Conditionally save S16-S31 (callee-saved VFP regs) */
+        "TST     R14, #0x10                 \n" /* Bit 4: 0 = FPU frame */
+        "BNE     1f                         \n"
+        "VSTMDB  R0!, {S16-S31}             \n"
+        "1:                                 \n"
 #endif
 
-                   /* Save core registers + EXC_RETURN */
-                   "STMDB   R0!, {R4-R11, R14}         \n"
+        /* Save core registers + EXC_RETURN */
+        "STMDB   R0!, {R4-R11, R14}         \n"
 
-                   /* Store updated SP in current TCB */
-                   "STR     R0, [R2]                   \n"
+        /* Store updated SP in current TCB */
+        "STR     R0, [R2]                   \n"
 
-                   /* Call scheduler under BASEPRI protection */
-                   "MOV     R0, %0                     \n"
-                   "MSR     BASEPRI, R0                \n"
-                   "DSB                                \n"
-                   "ISB                                \n"
-                   "BL      rtos_kernel_switch_context \n"
-                   "MOV     R0, #0                     \n"
-                   "MSR     BASEPRI, R0                \n"
+        /* Call scheduler under BASEPRI protection */
+        "MOV     R0, %[max_prio]            \n"
+        "MSR     BASEPRI, R0                \n"
+        "DSB                                \n"
+        "ISB                                \n"
+        "BL      rtos_kernel_switch_context \n"
+        "MOV     R0, #0                     \n"
+        "MSR     BASEPRI, R0                \n"
 
-                   /* Restore next task context */
-                   "LDR     R3, =g_kernel              \n"
-                   "LDR     R2, [R3]                   \n" /* R2 = (new) current_task */
-                   "LDR     R0, [R2]                   \n" /* R0 = stack_pointer */
+        /* Restore next task context */
+        "LDR     R3, =g_kernel              \n"
+        "LDR     R2, [R3]                   \n" /* R2 = (new) current_task */
+        "LDR     R0, [R2]                   \n" /* R0 = stack_pointer */
 
-                   /* Restore core registers + EXC_RETURN */
-                   "LDMIA   R0!, {R4-R11, R14}         \n"
+        /* Restore core registers + EXC_RETURN */
+        "LDMIA   R0!, {R4-R11, R14}         \n"
 
 #if PORT_HAS_FPU
-                   /* Conditionally restore S16-S31 */
-                   "TST     R14, #0x10                 \n"
-                   "BNE     2f                         \n"
-                   "VLDMIA  R0!, {S16-S31}             \n"
-                   "2:                                 \n"
+        /* Conditionally restore S16-S31 */
+        "TST     R14, #0x10                 \n"
+        "BNE     2f                         \n"
+        "VLDMIA  R0!, {S16-S31}             \n"
+        "2:                                 \n"
 #endif
 
-                   "MSR     PSP, R0                    \n"
-                   "ISB                                \n"
-                   "BX      R14                        \n" /* Per-task EXC_RETURN */
-                   ::"i"(PORT_MAX_INTERRUPT_PRIORITY)
-                   : "memory");
+#if RTOS_PROFILING_SYSTEM_ENABLED
+        /* Compute full PendSV elapsed cycles and store */
+        "LDR     R1, =%[cyccnt_addr]         \n"
+        "LDR     R2, [R1]                   \n" /* R2 = end cycle count */
+        "LDR     R1, =g_pendsv_start_cycles \n"
+        "LDR     R3, [R1]                   \n" /* R3 = start cycle count */
+        "SUB     R2, R2, R3                 \n" /* R2 = elapsed */
+        "LDR     R1, =g_pendsv_cycles       \n"
+        "STR     R2, [R1]                   \n"
+#endif
+
+        "MSR     PSP, R0                    \n"
+        "ISB                                \n"
+        "BX      R14                        \n" /* Per-task EXC_RETURN */
+        :
+        : [max_prio] "i"(PORT_MAX_INTERRUPT_PRIORITY)
+#if RTOS_PROFILING_SYSTEM_ENABLED
+              ,
+          [cyccnt_addr] "i"(0xE0001004)
+#endif
+        : "memory");
 }

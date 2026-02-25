@@ -109,8 +109,7 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
 /**
  * @brief Add task to Preemptive static priority-based Scheduler delayed list (time-sorted)
  */
-static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task,
-                                                       rtos_tick_t        delay_ticks)
+static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 {
     if (task == NULL)
     {
@@ -162,9 +161,8 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task,
         current->prev = task;
     }
 
-    log_debug(
-        "Preemptive static priority-based: Added task '%s' to delayed list, wakeup at tick %lu",
-        task->name ? task->name : "unnamed", task->delay_until);
+    log_debug("Preemptive static priority-based: Added task '%s' to delayed list, wakeup at tick %lu",
+              task->name ? task->name : "unnamed", task->delay_until);
 }
 
 /**
@@ -220,11 +218,15 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
             /* Task delay expired - move to ready list */
             preemptive_sp_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
+
+#if RTOS_PROFILING_SYSTEM_ENABLED
+            task->ready_timestamp = rtos_profiling_get_cycles();
+#endif
+
             preemptive_sp_add_to_ready_list_internal(task);
 
-            log_debug(
-                "Preemptive static priority-based: Task '%s' delay expired, moved to ready list",
-                task->name ? task->name : "unnamed");
+            log_debug("Preemptive static priority-based: Task '%s' delay expired, moved to ready list",
+                      task->name ? task->name : "unnamed");
         }
         else
         {
@@ -300,8 +302,7 @@ static rtos_task_handle_t preemptive_sp_get_next_task(rtos_scheduler_instance_t 
 /**
  * @brief Check if Preemptive static priority-based Scheduler preemption is needed
  */
-static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance,
-                                         rtos_task_handle_t         new_task)
+static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
     if (instance == NULL || new_task == NULL || g_kernel.current_task == NULL)
     {
@@ -309,15 +310,13 @@ static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance,
     }
 
     /* Preempt if new task has higher priority */
-    return (new_task != g_kernel.current_task &&
-            new_task->priority > g_kernel.current_task->priority);
+    return (new_task != g_kernel.current_task && new_task->priority > g_kernel.current_task->priority);
 }
 
 /**
  * @brief Handle task completion for Preemptive static priority-based Scheduler
  */
-static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance,
-                                         rtos_task_handle_t         completed_task)
+static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task)
 {
     if (instance == NULL || completed_task == NULL)
     {
@@ -333,8 +332,7 @@ static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance,
 /**
  * @brief Add task to ready list (Preemptive static priority-based interface)
  */
-static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance,
-                                            rtos_task_handle_t         task_handle)
+static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
     {
@@ -347,8 +345,7 @@ static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance,
 /**
  * @brief Remove task from ready list (Preemptive static priority-based interface)
  */
-static void preemptive_sp_remove_from_ready_list(rtos_scheduler_instance_t *instance,
-                                                 rtos_task_handle_t         task_handle)
+static void preemptive_sp_remove_from_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
     {
@@ -361,9 +358,8 @@ static void preemptive_sp_remove_from_ready_list(rtos_scheduler_instance_t *inst
 /**
  * @brief Add task to delayed list (Preemptive static priority-based interface)
  */
-static void preemptive_sp_add_to_delayed_list(rtos_scheduler_instance_t *instance,
-                                              rtos_task_handle_t         task_handle,
-                                              rtos_tick_t                delay_ticks)
+static void preemptive_sp_add_to_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle,
+                                              rtos_tick_t delay_ticks)
 {
     if (instance == NULL || task_handle == NULL)
     {
@@ -376,8 +372,7 @@ static void preemptive_sp_add_to_delayed_list(rtos_scheduler_instance_t *instanc
 /**
  * @brief Remove task from delayed list (Preemptive static priority-based interface)
  */
-static void preemptive_sp_remove_from_delayed_list(rtos_scheduler_instance_t *instance,
-                                                   rtos_task_handle_t         task_handle)
+static void preemptive_sp_remove_from_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
     {
@@ -403,8 +398,7 @@ static void preemptive_sp_update_delayed_tasks(rtos_scheduler_instance_t *instan
 /**
  * @brief Get Preemptive static priority-based Scheduler statistics (optional)
  */
-static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer,
-                                           size_t buffer_size)
+static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
 {
     if (instance == NULL || stats_buffer == NULL || buffer_size == 0)
     {

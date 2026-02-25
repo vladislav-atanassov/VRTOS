@@ -62,6 +62,23 @@ typedef struct
     const char *name;
 } rtos_profile_stat_t;
 
+/**
+ * @brief Snapshot of profiling statistics for programmatic access
+ *
+ * Provides an atomic copy of stats converted to both cycles and microseconds,
+ * suitable for assertions in tests without parsing log output.
+ */
+typedef struct
+{
+    uint32_t min_cycles;
+    uint32_t max_cycles;
+    uint32_t avg_cycles;
+    uint32_t count;
+    uint32_t min_us;
+    uint32_t max_us;
+    uint32_t avg_us;
+} rtos_profile_snapshot_t;
+
 /* =============================================================================
  * PROFILING API FUNCTIONS
  * ============================================================================= */
@@ -97,6 +114,13 @@ void rtos_profiling_record(rtos_profile_stat_t *stat, uint32_t cycles);
  * @param stat Pointer to stat structure
  */
 void rtos_profiling_print_stat(rtos_profile_stat_t *stat);
+
+/**
+ * @brief Take an atomic snapshot of profiling statistics
+ * @param stat Pointer to stat structure
+ * @param out Pointer to snapshot output structure
+ */
+void rtos_profiling_snapshot(const rtos_profile_stat_t *stat, rtos_profile_snapshot_t *out);
 
 /**
  * @brief Print all RTOS system statistics (Context Switch, Scheduler, Tick)
@@ -157,6 +181,15 @@ void rtos_profiling_report_system_stats(void);
 extern rtos_profile_stat_t g_prof_context_switch;
 extern rtos_profile_stat_t g_prof_scheduler;
 extern rtos_profile_stat_t g_prof_tick;
+extern rtos_profile_stat_t g_prof_pendsv_full;
+extern rtos_profile_stat_t g_prof_tick_jitter;
+extern rtos_profile_stat_t g_prof_scheduling_latency;
+
+/** Global written by PendSV ASM to pass full context switch cycle count to C */
+extern volatile uint32_t g_pendsv_cycles;
+
+/** Global used by PendSV ASM to hold the start cycle count across the switch */
+extern volatile uint32_t g_pendsv_start_cycles;
 #endif
 
 #ifdef __cplusplus

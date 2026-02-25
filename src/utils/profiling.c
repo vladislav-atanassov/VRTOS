@@ -106,6 +106,33 @@ static uint32_t cycles_to_us(uint32_t cycles)
     return (cycles / (SystemCoreClock / 1000000U));
 }
 
+void rtos_profiling_snapshot(const rtos_profile_stat_t *stat, rtos_profile_snapshot_t *out)
+{
+    if (stat == NULL || out == NULL || stat->count == 0)
+    {
+        return;
+    }
+
+    rtos_port_enter_critical();
+
+    uint32_t min_cycles   = stat->min_cycles;
+    uint32_t max_cycles   = stat->max_cycles;
+    uint32_t total_cycles = stat->total_cycles;
+    uint32_t count        = stat->count;
+
+    rtos_port_exit_critical();
+
+    uint32_t avg_cycles = total_cycles / count;
+
+    out->min_cycles = min_cycles;
+    out->max_cycles = max_cycles;
+    out->avg_cycles = avg_cycles;
+    out->count      = count;
+    out->min_us     = cycles_to_us(min_cycles);
+    out->max_us     = cycles_to_us(max_cycles);
+    out->avg_us     = cycles_to_us(avg_cycles);
+}
+
 void rtos_profiling_print_stat(rtos_profile_stat_t *stat)
 {
     if (stat == NULL || stat->count == 0)
@@ -147,14 +174,23 @@ void rtos_profiling_report_system_stats(void)
 {
     log_info("=== RTOS System Profiling Report ===");
     rtos_profiling_print_stat(&g_prof_context_switch);
+    rtos_profiling_print_stat(&g_prof_pendsv_full);
     rtos_profiling_print_stat(&g_prof_scheduler);
     rtos_profiling_print_stat(&g_prof_tick);
+    rtos_profiling_print_stat(&g_prof_tick_jitter);
+    rtos_profiling_print_stat(&g_prof_scheduling_latency);
 }
 
 /* System profiling statistics - only compiled when enabled */
-rtos_profile_stat_t g_prof_context_switch = {UINT32_MAX, 0, 0, 0, "ContextSwitch"};
-rtos_profile_stat_t g_prof_scheduler      = {UINT32_MAX, 0, 0, 0, "Scheduler"};
-rtos_profile_stat_t g_prof_tick           = {UINT32_MAX, 0, 0, 0, "TickHandler"};
+rtos_profile_stat_t g_prof_context_switch     = {UINT32_MAX, 0, 0, 0, "ContextSwitch"};
+rtos_profile_stat_t g_prof_scheduler          = {UINT32_MAX, 0, 0, 0, "Scheduler"};
+rtos_profile_stat_t g_prof_tick               = {UINT32_MAX, 0, 0, 0, "TickHandler"};
+rtos_profile_stat_t g_prof_pendsv_full        = {UINT32_MAX, 0, 0, 0, "PendSV_Full"};
+rtos_profile_stat_t g_prof_tick_jitter        = {UINT32_MAX, 0, 0, 0, "TickJitter"};
+rtos_profile_stat_t g_prof_scheduling_latency = {UINT32_MAX, 0, 0, 0, "SchedLatency"};
+
+volatile uint32_t g_pendsv_cycles       = 0;
+volatile uint32_t g_pendsv_start_cycles = 0;
 
 #else /* RTOS_PROFILING_SYSTEM_ENABLED == 0 */
 

@@ -9,6 +9,7 @@
 #define TASK_PRIV_H
 
 #include "config.h"
+#include "profiling.h"
 #include "rtos_assert.h"
 #include "rtos_types.h"
 
@@ -53,6 +54,10 @@ typedef struct rtos_task_control_block
     struct rtos_task_control_block *next_waiting;    /**< Next task in sync wait queue */
     void                           *blocked_on;      /**< Sync object task is waiting on */
     rtos_sync_type_t                blocked_on_type; /**< Type of sync object */
+
+#if RTOS_PROFILING_SYSTEM_ENABLED
+    uint32_t ready_timestamp; /**< DWT cycle count when task became READY */
+#endif
 } rtos_tcb_t;
 RTOS_STATIC_ASSERT(offsetof(rtos_tcb_t, stack_pointer) == 0, "stack_pointer must be first in TCB");
 

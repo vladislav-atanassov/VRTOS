@@ -43,6 +43,11 @@ rtos_status_t rtos_init(void)
         return RTOS_ERROR_INVALID_STATE;
     }
 
+#if RTOS_PROFILING_SYSTEM_ENABLED
+    /* Initialize profiling before anything else */
+    rtos_profiling_init();
+#endif
+
     /* Initialize kernel control block */
     g_kernel.state               = RTOS_KERNEL_STATE_INACTIVE;
     g_kernel.tick_count          = 0;
@@ -243,6 +248,23 @@ void rtos_kernel_switch_context(void)
         /* Remove from ready list using scheduler */
         rtos_scheduler_remove_from_ready_list(g_kernel.next_task);
 
+#if RTOS_PROFILING_SYSTEM_ENABLED
+        /* Measure scheduling latency: time from READY to actually running */
+        if (g_kernel.next_task->ready_timestamp != 0)
+        {
+            uint32_t latency = rtos_profiling_get_cycles() - g_kernel.next_task->ready_timestamp;
+            rtos_profiling_record(&g_prof_scheduling_latency, latency);
+            g_kernel.next_task->ready_timestamp = 0;
+        }
+
+        /* Record full PendSV duration captured in ASM */
+        if (g_pendsv_cycles != 0)
+        {
+            rtos_profiling_record(&g_prof_pendsv_full, g_pendsv_cycles);
+            g_pendsv_cycles = 0;
+        }
+#endif
+
         g_kernel.next_task->state = RTOS_TASK_STATE_RUNNING;
         g_kernel.current_task     = g_kernel.next_task;
     }
@@ -354,6 +376,11 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
 
     /* Update task state */
     task->state = RTOS_TASK_STATE_READY;
+
+#if RTOS_PROFILING_SYSTEM_ENABLED
+    /* Stamp when this task became ready for scheduling latency measurement */
+    task->ready_timestamp = rtos_profiling_get_cycles();
+#endif
 
     /* Add to ready list using scheduler */
     rtos_scheduler_add_to_ready_list(task);

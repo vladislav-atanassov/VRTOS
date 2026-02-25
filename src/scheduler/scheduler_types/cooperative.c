@@ -219,6 +219,11 @@ static void cooperative_update_delayed_tasks_internal(void)
             /* Task delay expired - move to ready list */
             cooperative_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
+
+#if RTOS_PROFILING_SYSTEM_ENABLED
+            task->ready_timestamp = rtos_profiling_get_cycles();
+#endif
+
             cooperative_add_to_ready_list_internal(task);
 
             log_debug("Cooperative: Task '%s' delay expired, moved to ready list", task->name ? task->name : "unnamed");
