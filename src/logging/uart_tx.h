@@ -7,6 +7,7 @@
 typedef enum
 {
     LOG_LEVEL_NONE = 0,
+    LOG_LEVEL_PROFILE,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
     LOG_LEVEL_DEBUG,
@@ -16,6 +17,7 @@ typedef enum
 extern log_level_t g_log_level;
 
 void log_uart_init(log_level_t level);
+void uart_tx_flush(void);
 
 /* Internal macro */
 #define log_printf(level, tag, msg, ...)                                                                               \
@@ -34,9 +36,10 @@ void log_uart_init(log_level_t level);
         printf("[PRINT] " msg "\r\n", ##__VA_ARGS__);                                                                  \
     } while (0)
 
-#define log_error(msg, ...) log_printf(LOG_LEVEL_ERROR, "ERROR", msg, ##__VA_ARGS__)
-#define log_info(msg, ...)  log_printf(LOG_LEVEL_INFO, "INFO", msg, ##__VA_ARGS__)
-#define log_debug(msg, ...) log_printf(LOG_LEVEL_DEBUG, "DEBUG", msg, ##__VA_ARGS__)
+#define log_profile(msg, ...) log_printf(LOG_LEVEL_PROFILE, "PROFILE", msg, ##__VA_ARGS__)
+#define log_error(msg, ...)   log_printf(LOG_LEVEL_ERROR, "ERROR", msg, ##__VA_ARGS__)
+#define log_info(msg, ...)    log_printf(LOG_LEVEL_INFO, "INFO", msg, ##__VA_ARGS__)
+#define log_debug(msg, ...)   log_printf(LOG_LEVEL_DEBUG, "DEBUG", msg, ##__VA_ARGS__)
 
 /* =================== Test Logging Macros =================== */
 /* Tab-delimited format for easy CSV parsing by Python tools */

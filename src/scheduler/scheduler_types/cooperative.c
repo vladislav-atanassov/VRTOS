@@ -8,7 +8,7 @@
 #include "cooperative.h"
 
 #include "VRTOS.h"
-#include "log.h"
+#include "klog.h"
 #include "scheduler.h"
 #include "task_priv.h"
 
@@ -56,8 +56,7 @@ static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 
     g_cooperative_data.ready_count++;
 
-    log_debug("Cooperative: Added task '%s' to ready list (total ready: %d)", task->name ? task->name : "unnamed",
-              g_cooperative_data.ready_count);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
 }
 
 /**
@@ -94,8 +93,7 @@ static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
         g_cooperative_data.ready_count--;
     }
 
-    log_debug("Cooperative: Removed task '%s' from ready list (remaining: %d)", task->name ? task->name : "unnamed",
-              g_cooperative_data.ready_count);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
 }
 
 /**
@@ -156,9 +154,7 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
 
     g_cooperative_data.delayed_count++;
 
-    log_debug("Cooperative: Added task '%s' to delayed list, wakeup at tick "
-              "%lu (total delayed: %d)",
-              task->name ? task->name : "unnamed", (unsigned long) task->delay_until, g_cooperative_data.delayed_count);
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
 }
 
 /**
@@ -197,8 +193,7 @@ static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t tas
         g_cooperative_data.delayed_count--;
     }
 
-    log_debug("Cooperative: Removed task '%s' from delayed list (remaining: %d)", task->name ? task->name : "unnamed",
-              g_cooperative_data.delayed_count);
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, g_cooperative_data.delayed_count);
 }
 
 /**
@@ -221,12 +216,15 @@ static void cooperative_update_delayed_tasks_internal(void)
             task->state = RTOS_TASK_STATE_READY;
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-            task->ready_timestamp = rtos_profiling_get_cycles();
+            if (task->priority > 0)
+            {
+                task->ready_timestamp = rtos_profiling_get_cycles();
+            }
 #endif
 
             cooperative_add_to_ready_list_internal(task);
 
-            log_debug("Cooperative: Task '%s' delay expired, moved to ready list", task->name ? task->name : "unnamed");
+            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
         }
         else
         {
@@ -268,7 +266,7 @@ static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
     /* Set up private data */
     instance->private_data = &g_cooperative_data;
 
-    log_debug("Cooperative scheduler initialized");
+    KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
     return RTOS_SUCCESS;
 }
 
@@ -315,8 +313,7 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
         cooperative_remove_from_ready_list_internal(completed_task);
         cooperative_add_to_ready_list_internal(completed_task);
 
-        log_debug("Cooperative: Task '%s' yielded, moved to end of ready list",
-                  completed_task->name ? completed_task->name : "unnamed");
+        KLOGT(KEVT_SCHED_ROTATE, completed_task->task_id, 0);
     }
 }
 

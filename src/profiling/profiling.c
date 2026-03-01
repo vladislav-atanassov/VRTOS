@@ -7,8 +7,8 @@
 
 #include "profiling.h"
 
-#include "log.h"
 #include "rtos_port.h"
+#include "ulog.h"
 
 #include <stddef.h>
 
@@ -158,27 +158,35 @@ void rtos_profiling_print_stat(rtos_profile_stat_t *stat)
     uint32_t max_us = cycles_to_us(max_cycles);
     uint32_t avg_us = cycles_to_us(avg_cycles);
 
-    log_info("PROFILE [%s]: Min=%lu cycles (%lu us), Max=%lu cycles (%lu us), "
-             "Avg=%lu cycles (%lu us), Cnt=%lu",
-             name, (unsigned long) min_cycles, (unsigned long) min_us, (unsigned long) max_cycles,
-             (unsigned long) max_us, (unsigned long) avg_cycles, (unsigned long) avg_us, (unsigned long) count);
+    ulog_info("[%s]: Min=%lu cyc (%lu us), Max=%lu cyc (%lu us), "
+              "Avg=%lu cyc (%lu us), Cnt=%lu",
+              name, (unsigned long) min_cycles, (unsigned long) min_us, (unsigned long) max_cycles,
+              (unsigned long) max_us, (unsigned long) avg_cycles, (unsigned long) avg_us, (unsigned long) count);
 }
 
-/* =============================================================================
- * SYSTEM PROFILING (Conditional Compilation)
- * ============================================================================= */
+/* =============== SYSTEM PROFILING (Conditional Compilation) =============== */
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
 
 void rtos_profiling_report_system_stats(void)
 {
-    log_info("=== RTOS System Profiling Report ===");
+    ulog_info("=== RTOS System Profiling Report ===");
     rtos_profiling_print_stat(&g_prof_context_switch);
     rtos_profiling_print_stat(&g_prof_pendsv_full);
     rtos_profiling_print_stat(&g_prof_scheduler);
     rtos_profiling_print_stat(&g_prof_tick);
     rtos_profiling_print_stat(&g_prof_tick_jitter);
     rtos_profiling_print_stat(&g_prof_scheduling_latency);
+}
+
+void rtos_profiling_reset_system_stats(void)
+{
+    rtos_profiling_reset_stat(&g_prof_context_switch, "ContextSwitch");
+    rtos_profiling_reset_stat(&g_prof_pendsv_full, "PendSV_Full");
+    rtos_profiling_reset_stat(&g_prof_scheduler, "Scheduler");
+    rtos_profiling_reset_stat(&g_prof_tick, "TickHandler");
+    rtos_profiling_reset_stat(&g_prof_tick_jitter, "TickJitter");
+    rtos_profiling_reset_stat(&g_prof_scheduling_latency, "SchedLatency");
 }
 
 /* System profiling statistics - only compiled when enabled */
@@ -196,7 +204,12 @@ volatile uint32_t g_pendsv_start_cycles = 0;
 
 void rtos_profiling_report_system_stats(void)
 {
-    log_info("System profiling disabled (RTOS_PROFILING_SYSTEM_ENABLED=0)");
+    ulog_info("System profiling disabled (RTOS_PROFILING_SYSTEM_ENABLED=0)");
+}
+
+void rtos_profiling_reset_system_stats(void)
+{
+    /* No-op when profiling is disabled */
 }
 
 #endif /* RTOS_PROFILING_SYSTEM_ENABLED */

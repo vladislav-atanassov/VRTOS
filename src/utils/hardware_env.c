@@ -7,7 +7,7 @@
 
 #include "hardware_env.h"
 
-#include "log.h"
+#include "klog.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 
 /* LED Configuration for STM32F446RE Nucleo */
@@ -160,21 +160,22 @@ __attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame)
     uint32_t pc  = stack_frame[6];
     uint32_t psr = stack_frame[7];
 
-    log_error("HardFault: PC=0x%08lX PSR=0x%08lX", (unsigned long) pc, (unsigned long) psr);
-    log_error("R0=0x%08lX R1=0x%08lX R2=0x%08lX R3=0x%08lX", (unsigned long) r0, (unsigned long) r1, (unsigned long) r2,
-              (unsigned long) r3);
-    log_error("R12=0x%08lX LR=0x%08lX", (unsigned long) r12, (unsigned long) lr);
+    KLOGF(KEVT_HARD_FAULT, pc, psr);
+    KLOGF(KEVT_HARD_FAULT_REGS, r0, r1);
 
-    uint32_t cfsr  = SCB->CFSR;
-    uint32_t hfsr  = SCB->HFSR;
-    uint32_t mmfar = SCB->MMFAR;
-    uint32_t bfar  = SCB->BFAR;
-    uint32_t psp   = __get_PSP();
-    uint32_t msp   = __get_MSP();
+    uint32_t cfsr = SCB->CFSR;
+    uint32_t hfsr = SCB->HFSR;
+    uint32_t psp  = __get_PSP();
+    uint32_t msp  = __get_MSP();
 
-    log_error("CFSR=0x%08lX HFSR=0x%08lX", (unsigned long) cfsr, (unsigned long) hfsr);
-    log_error("MMFAR=0x%08lX BFAR=0x%08lX", (unsigned long) mmfar, (unsigned long) bfar);
-    log_error("PSP=0x%08lX MSP=0x%08lX", (unsigned long) psp, (unsigned long) msp);
+    KLOGF(KEVT_HARD_FAULT_SCB, cfsr, hfsr);
+    KLOGF(KEVT_HARD_FAULT_SP, psp, msp);
+
+    /* Suppress unused variable warnings for registers we logged via arg0/arg1 */
+    (void) r2;
+    (void) r3;
+    (void) r12;
+    (void) lr;
 
     indicate_system_failure();
 }

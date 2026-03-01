@@ -4,7 +4,7 @@ A modular, educational Real-Time Operating System (RTOS) implementation for the 
 
 ## Project Overview
 
-VRTOS is a lightweight, feature-rich RTOS designed for learning and experimentation on ARM Cortex-M4 microcontrollers. It features a clean, modular architecture with interchangeable scheduling policies, priority inheritance, and comprehensive debugging capabilities.
+VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrollers. It features a modular architecture with interchangeable scheduling policies, priority inheritance, and comprehensive profiling capabilities.
 
 ### Key Features
 
@@ -30,31 +30,31 @@ VRTOS is a lightweight, feature-rich RTOS designed for learning and experimentat
 ### Layered Design
 
 ```md
-┌─────────────────────────────────────┐
-│           Application Layer         │
-│        (User Tasks & Examples)      │
-├─────────────────────────────────────┤
-│             RTOS API Layer          │
-│           (Public Interface)        │
-├─────────────────────────────────────┤
-│       Synchronization Primitives    │
-│       (Mutex, Semaphore, Queue)     │
-├─────────────────────────────────────┤
-│          Scheduler Manager          │
-│          (Vtable Interface)         │
-├─────────────┬───────────────────────┤
-│ Preemptive  │ Cooperative │ RoundRb │
-│ Scheduler   │ Scheduler   │ Schedul │
-├─────────────┴───────────────────────┤
-│             Kernel Core             │
-│  (Context Switch, Tick, State Mgmt) │
-├─────────────────────────────────────┤
-│            Porting Layer            │
-│             (Cortex-M4)             │
-├─────────────────────────────────────┤
-│         Hardware Abstraction        │
-│          (STM32F446RE HAL)          │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│           Application Layer            │
+│        (User Tasks & Examples)         │
+├────────────────────────────────────────┤
+│             RTOS API Layer             │
+│           (Public Interface)           │
+├────────────────────────────────────────┤
+│       Synchronization Primitives       │
+│       (Mutex, Semaphore, Queue)        │
+├────────────────────────────────────────┤
+│          Scheduler Manager             │
+│          (Vtable Interface)            │
+├─────────────┬──────────────────────────┤
+│ Preemptive  │ Cooperative │ RoundRobin │
+│ Scheduler   │ Scheduler   │ Scheduler  │
+├─────────────┴──────────────────────────┤
+│             Kernel Core                │
+│  (Context Switch, Tick, State Mgmt)    │
+├────────────────────────────────────────┤
+│            Porting Layer               │
+│             (Cortex-M4)                │
+├────────────────────────────────────────┤
+│         Hardware Abstraction           │
+│          (STM32F446RE HAL)             │
+└────────────────────────────────────────┘
 ```
 
 ### Scheduler Architecture
@@ -88,6 +88,19 @@ struct rtos_scheduler {
                            void *stats_buffer, size_t buffer_size);
 };
 ```
+
+## Performance (STM32F446RE @ 16 MHz)
+
+Captured from `profiling_demo` over ~300k context switches:
+
+| Metric | Min | Max | Avg | Description |
+|--------|-----|-----|-----|-------------|
+| **ContextSwitch** | 377 cyc (23 µs) | 1192 cyc (74 µs) | 530 cyc (33 µs) | Register save/restore only |
+| **PendSV_Full** | 553 cyc (34 µs) | 1433 cyc (89 µs) | 706 cyc (44 µs) | Full PendSV handler |
+| **Scheduler** | 30 cyc (1 µs) | 765 cyc (47 µs) | 65 cyc (4 µs) | `get_next_task()` decision |
+| **TickHandler** | 350 cyc (21 µs) | 519 cyc (32 µs) | 367 cyc (22 µs) | SysTick ISR processing |
+| **TickJitter** | 0 cyc (0 µs) | 4 cyc (0 µs) | 1 cyc (0 µs) | SysTick timing deviation |
+| **SchedLatency** | 862 cyc (53 µs) | 880 cyc (55 µs) | 862 cyc (53 µs) | Ready → Running delay |
 
 ## Scheduling Policies
 
@@ -297,37 +310,48 @@ VRTOS/
 │   │   └── cortex_m4/     # ARM Cortex-M4F port
 │   │       ├── port_priv.h  # Arch constants + interrupt priorities
 │   │       └── port.c       # Context switch, critical sections
-│   ├── utils/             # Utilities
-│   │   ├── log.c          # UART logging
-│   │   ├── profiling.c    # DWT profiling
-│   │   ├── rtos_assert.c  # Assertions
-│   │   └── hardware_env.c # Hardware initialization
+│   ├── logging/           # Logging subsystem
+│   │   ├── uart_tx.c/h    # UART TX driver (SPSC ring buffer + ISR)
+│   │   ├── klog.c/h       # Binary kernel logger
+│   │   ├── klog_events.h  # KLog event ID definitions
+│   │   ├── ulog.c/h       # User-facing deferred logger
+│   │   └── log_flush_task.c/h  # Flush task (drains KLog + ULog)
+│   ├── profiling/         # Profiling subsystem
+│   │   ├── profiling.c    # DWT cycle counter profiling
+│   │   └── prof_trace.c/h # Profiling trace ring buffer
+│   ├── utils/             # Shared utilities
+│   │   ├── ring_buffer.c/h # General-purpose ring buffer
+│   │   ├── rtos_assert.c/h # Assertions
+│   │   └── hardware_env.c/h # Hardware initialization
 │   └── examples/          # Example applications
 │       ├── basic_blinky/
 │       ├── producer_consumer/
 │       ├── profiling_demo/
 │       └── fpu_context_test/
 ├── tests/                 # Test suite
-│   ├── scheduler/         # Scheduler tests
-│   │   ├── test_scheduler_preemptive.c
-│   │   ├── test_scheduler_cooperative.c
-│   │   └── test_scheduler_rr.c
-│   └── integration/       # TO BE ADDED: Integration tests
-│       ├── test_mutex_priority_inheritance.c
-│       ├── test_semaphore_producer_consumer.c
-│       ├── test_queue_blocking.c
-│       └── test_state_transitions.c
+│   └── scheduler/         # Scheduler tests (one dir per policy)
+│       ├── round_robin/
+│       │   ├── test_scheduler_rr.c
+│       │   └── test_config.h
+│       ├── preemptive/
+│       │   ├── test_scheduler_preemptive.c
+│       │   └── test_config.h
+│       └── cooperative/
+│           ├── test_scheduler_cooperative.c
+│           └── test_config.h
 ├── config/                # Board-specific configuration
 │   ├── rtos_config_template.h  # Skeleton for new boards
-│   ├── stm32f446re/       # STM32F446RE board config
-│   │   ├── rtos_config.h  # Board overrides
-│   │   ├── memory_map.h   # Flash/SRAM layout
-│   │   └── clock_config.h # Clock aliases
-│   └── test/              # Test configuration
-│       └── test_config.h
+│   └── stm32f446re/       # STM32F446RE board config
+│       ├── rtos_config.h  # Board overrides
+│       ├── memory_map.h   # Flash/SRAM layout
+│       └── clock_config.h # Clock aliases
+├── logs/                  # Captured output
+│   ├── klogs/             # KLog decoder captures
+│   └── tests/             # Test runner logs
 ├── docs/                  # Documentation
 │   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/                 # Development tools
+│   ├── klog_decoder.py    # Host-side KLog serial capture
 │   ├── scripts/           # Build scripts
 │   │   ├── pre_build.py
 │   │   └── post_build.py

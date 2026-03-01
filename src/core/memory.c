@@ -1,7 +1,7 @@
 #include "memory.h"
 
 #include "config.h"
-#include "log.h"
+#include "uart_tx.h"
 #include "utils.h"
 
 #include <string.h>

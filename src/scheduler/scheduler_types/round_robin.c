@@ -9,7 +9,7 @@
 
 #include "VRTOS.h"
 #include "config.h"
-#include "log.h"
+#include "klog.h"
 #include "scheduler.h"
 #include "task_priv.h"
 
@@ -56,8 +56,7 @@ static void round_robin_add_to_ready_list_internal(rtos_task_handle_t task)
 
     g_round_robin_data.ready_count++;
 
-    log_debug("Round Robin: Added task '%s' to ready list (total ready: %d)", task->name ? task->name : "unnamed",
-              g_round_robin_data.ready_count);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_round_robin_data.ready_count);
 }
 
 /**
@@ -101,8 +100,7 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
         g_round_robin_data.ready_count--;
     }
 
-    log_debug("Round Robin: Removed task '%s' from ready list (remaining: %d)", task->name ? task->name : "unnamed",
-              g_round_robin_data.ready_count);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_round_robin_data.ready_count);
 }
 
 /**
@@ -163,8 +161,7 @@ static void round_robin_add_to_delayed_list_internal(rtos_task_handle_t task, rt
 
     g_round_robin_data.delayed_count++;
 
-    log_debug("Round Robin: Added task '%s' to delayed list, wakeup at tick %u (total delayed: %d)",
-              task->name ? task->name : "unnamed", (unsigned int) task->delay_until, g_round_robin_data.delayed_count);
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
 }
 
 /**
@@ -205,8 +202,7 @@ static void round_robin_remove_from_delayed_list_internal(rtos_task_handle_t tas
         g_round_robin_data.delayed_count--;
     }
 
-    log_debug("Round Robin: Removed task '%s' from delayed list (remaining: %d)", task->name ? task->name : "unnamed",
-              g_round_robin_data.delayed_count);
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, g_round_robin_data.delayed_count);
 }
 
 /**
@@ -229,12 +225,15 @@ static void round_robin_update_delayed_tasks_internal(void)
             task->state = RTOS_TASK_STATE_READY;
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-            task->ready_timestamp = rtos_profiling_get_cycles();
+            if (task->priority > 0)
+            {
+                task->ready_timestamp = rtos_profiling_get_cycles();
+            }
 #endif
 
             round_robin_add_to_ready_list_internal(task);
 
-            log_debug("Round Robin: Task '%s' delay expired, moved to ready list", task->name ? task->name : "unnamed");
+            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
         }
         else
         {
@@ -278,7 +277,7 @@ static rtos_status_t round_robin_init(rtos_scheduler_instance_t *instance)
     /* Set up private data pointer */
     instance->private_data = &g_round_robin_data;
 
-    log_debug("Round robin scheduler initialized (time slice: %d ticks)", RTOS_TIME_SLICE_TICKS);
+    KLOGT(KEVT_SCHEDULER_INIT, RTOS_TIME_SLICE_TICKS, 0);
     return RTOS_SUCCESS;
 }
 
@@ -325,7 +324,7 @@ static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos
     /* Preempt if time slice expired and there are other ready tasks */
     if (g_round_robin_data.slice_remaining == 0 && g_round_robin_data.ready_count > 1)
     {
-        log_debug("Round Robin: Time slice expired, preemption needed");
+        KLOGT(KEVT_SCHED_TIME_SLICE, 0, 0);
         return true;
     }
 
@@ -357,8 +356,7 @@ static void round_robin_task_completed(rtos_scheduler_instance_t *instance, rtos
         g_round_robin_data.slice_remaining = RTOS_TIME_SLICE_TICKS;
         g_round_robin_data.current_task    = NULL;
 
-        log_debug("Round Robin: Task '%s' rotated to end of ready queue",
-                  completed_task->name ? completed_task->name : "unnamed");
+        KLOGT(KEVT_SCHED_ROTATE, completed_task->task_id, 0);
     }
 }
 

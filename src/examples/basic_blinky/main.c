@@ -7,10 +7,13 @@
 
 #include "VRTOS.h"
 #include "hardware_env.h"
-#include "log.h"
+#include "log_flush_task.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
 #include "task_priv.h"
+#include "uart_tx.h"
+#include "ulog.h"
+
 
 /**
  * @file main.c
@@ -36,21 +39,21 @@
 static void blink_task(void *param)
 {
     (void) param; /* Suppress unused parameter warning */
-    log_debug("IN blink_task()");
+    ulog_debug("IN blink_task()");
     /* Task main loop */
     while (1)
     {
         /* Toggle LED */
         led_toggle();
 
-        log_print("START BLINK - O");
+        ulog_info("START BLINK - O");
 
         for (int i = 0; i < 1000000; i++)
         {
             __asm volatile("nop");
         }
 
-        log_print("STOP BLINK - X");
+        ulog_info("STOP BLINK - X");
 
         /* Delay for specified time */
         rtos_delay_ms(LED_BLINK_DELAY_MS);
@@ -65,18 +68,18 @@ static void blink_task(void *param)
 static void print_task(void *param)
 {
     (void) param; /* Suppress unused parameter warning */
-    log_debug("IN print_task()");
+    ulog_debug("IN print_task()");
     /* Task main loop */
     while (1)
     {
-        log_print("START PRINT - O");
+        ulog_info("START PRINT - O");
 
         for (int i = 0; i < 1000000; i++)
         {
             __asm volatile("nop");
         }
 
-        log_print("STOP PRINT - X");
+        ulog_info("STOP PRINT - X");
 
         /* Delay for specified time */
         rtos_delay_ms(PRINT_DELAY_MS);
@@ -91,7 +94,7 @@ static void print_task(void *param)
 static void memory_mang_task(void *param)
 {
     (void) param; /* Suppress unused parameter warning */
-    log_debug("IN memory_mang_task()");
+    ulog_debug("IN memory_mang_task()");
     /* Task main loop */
     while (1)
     {
@@ -128,6 +131,7 @@ __attribute__((__noreturn__)) int main(void)
     rtos_task_handle_t blink_task_handle;
     rtos_task_handle_t print_task_handle;
     rtos_task_handle_t memory_mang_task_handle;
+    rtos_task_handle_t flush_task_handle;
 
     /* Initialize hardware environment */
     hardware_env_config();
@@ -142,6 +146,8 @@ __attribute__((__noreturn__)) int main(void)
         /* Initialization failed - indicate with LED */
         indicate_system_failure();
     }
+
+    ulog_init(ULOG_LEVEL_INFO);
 
     /* Create mem task */
     status = rtos_task_create(memory_mang_task, "MEM", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &memory_mang_task_handle);
@@ -169,6 +175,14 @@ __attribute__((__noreturn__)) int main(void)
     if (status != RTOS_SUCCESS)
     {
         /* Task creation failed */
+        indicate_system_failure();
+    }
+
+    /* Create log flush task (lowest priority) */
+    status = rtos_task_create(log_flush_task, "KLOG", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, &flush_task_handle);
+
+    if (status != RTOS_SUCCESS)
+    {
         indicate_system_failure();
     }
 

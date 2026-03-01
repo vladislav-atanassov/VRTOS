@@ -8,7 +8,7 @@
 #include "VRTOS.h"
 #include "assert.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "profiling.h"
 #include "rtos_port.h"
 #include "scheduler.h"
@@ -47,6 +47,9 @@ rtos_status_t rtos_init(void)
     /* Initialize profiling before anything else */
     rtos_profiling_init();
 #endif
+
+    /* Initialize kernel logger (uses DWT for timestamps, so after profiling init) */
+    klog_init();
 
     /* Initialize kernel control block */
     g_kernel.state               = RTOS_KERNEL_STATE_INACTIVE;
@@ -139,7 +142,7 @@ void rtos_delay_ticks(rtos_tick_t ticks)
 
     if (g_kernel.current_task == NULL)
     {
-        log_error("Delay called with no current task!");
+        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
         rtos_port_exit_critical();
         return;
     }
@@ -340,8 +343,7 @@ static bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_s
 
     if (!valid)
     {
-        log_error("Invalid state transition for '%s': %d -> %d", task->name ? task->name : "unnamed", (int) old_state,
-                  (int) new_state);
+        KLOGE(KEVT_INVALID_TRANSITION, (uint32_t) old_state, (uint32_t) new_state);
     }
 
     return valid;
@@ -378,8 +380,13 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
     task->state = RTOS_TASK_STATE_READY;
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-    /* Stamp when this task became ready for scheduling latency measurement */
-    task->ready_timestamp = rtos_profiling_get_cycles();
+    /* Only track scheduling latency for tasks above idle priority.
+     * Priority-0 tasks (e.g. log flush) naturally wait for all others,
+     * producing high but expected latency that skews the aggregate. */
+    if (task->priority > 0)
+    {
+        task->ready_timestamp = rtos_profiling_get_cycles();
+    }
 #endif
 
     /* Add to ready list using scheduler */
@@ -419,7 +426,7 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
     /* Validate transition (only RUNNING/READY can block) */
     if (task->state != RTOS_TASK_STATE_RUNNING && task->state != RTOS_TASK_STATE_READY)
     {
-        log_error("Cannot block task '%s' from state %d", task->name ? task->name : "unnamed", (int) task->state);
+        KLOGE(KEVT_TASK_BLOCK, task->task_id, (uint32_t) task->state);
         rtos_port_exit_critical();
         return;
     }

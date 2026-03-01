@@ -1,36 +1,37 @@
 /*******************************************************************************
- * File: tests/scheduler/test_scheduler_rr.c
- * Description: Round Robin Scheduler Test
+ * File: tests/scheduler/test_scheduler_cooperative.c
+ * Description: Cooperative Scheduler Test
  * Author: Student
  * Date: 2025
  ******************************************************************************/
 
 #include "VRTOS.h"
-#include "config.h" // IWYU pragma: keep
+#include "config.h"
 #include "hardware_env.h"
-#include "log.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
-#include "test_config.h" // TODO: MOve that file to be in the /tests directory
+#include "test_config.h"
 #include "timer.h"
+#include "uart_tx.h"
 
 /**
- * @file test_scheduler_rr.c
- * @brief Round Robin Scheduler Test
+ * @file test_scheduler_cooperative.c
+ * @brief Cooperative Scheduler Test
  *
- * Tests round-robin scheduling with 3 tasks at EQUAL priority.
- * All tasks use delays only (no busy loops) to allow proper time-slicing.
+ * Tests cooperative scheduling with 3 tasks at different priorities.
+ * Tasks use ONLY delays (no busy loops) since cooperative scheduling
+ * requires explicit yields - a while(1) loop would block forever.
  *
  * Expected behavior:
- * - Tasks run in round-robin order when all are ready
- * - Time slicing occurs between tasks of equal priority
- * - Each task logs START, RUN, and DELAY events
+ * - Tasks run to completion or until they yield (via delay)
+ * - No preemption - each task runs until it calls rtos_delay_ms()
+ * - Higher priority matters only when multiple tasks are ready
  */
 
-/* Task priorities (all equal for round-robin) */
+/* Task priorities */
 #define TASK1_PRIORITY (2U)
-#define TASK2_PRIORITY (2U)
-#define TASK3_PRIORITY (2U)
+#define TASK2_PRIORITY (3U)
+#define TASK3_PRIORITY (4U)
 
 /* Test termination flag */
 static volatile bool g_test_complete = false;
@@ -41,6 +42,11 @@ static volatile uint32_t g_task2_count = 0;
 static volatile uint32_t g_task3_count = 0;
 
 /* =================== Test Tasks =================== */
+
+/**
+ * NOTE: Cooperative scheduler requires tasks to yield explicitly.
+ * NO busy loops allowed - they would block indefinitely!
+ */
 
 static void task1_func(void *param)
 {
@@ -53,13 +59,13 @@ static void task1_func(void *param)
         test_log_task("RUN", "Task1");
         g_task1_count++;
 
+        /* Yield by delaying - this allows other tasks to run */
         test_log_task("DELAY", "Task1");
         rtos_delay_ms(TEST_TASK1_DELAY_MS);
     }
 
     test_log_task("END", "Task1");
 
-    /* Keep task alive but idle */
     while (1)
     {
         rtos_delay_ms(1000);
@@ -120,7 +126,7 @@ static void test_timeout_callback(void *timer_handle, void *param)
     (void) param;
 
     g_test_complete = true;
-    test_log_framework("TIMEOUT", "RoundRobin");
+    test_log_framework("TIMEOUT", "Cooperative");
 }
 
 /* =================== Main =================== */
@@ -133,17 +139,13 @@ __attribute__((__noreturn__)) int main(void)
 
     /* Initialize test environment */
     hardware_env_config();
-    log_uart_init(LOG_LEVEL_INFO);
+    log_uart_init(LOG_LEVEL_ALL);
 
-    for (volatile uint32_t i = 0; i < 2000000; i++)
-    {
-        __asm__ volatile("nop");
-    }
-
-    test_log_framework("BEGIN", "RoundRobin");
-    log_info("Round Robin Scheduler Test");
-    log_info("Tasks: 3 at equal priority (%u)", TASK1_PRIORITY);
+    test_log_framework("BEGIN", "Cooperative");
+    log_info("Cooperative Scheduler Test");
+    log_info("Priorities: Task1=%u, Task2=%u, Task3=%u", TASK1_PRIORITY, TASK2_PRIORITY, TASK3_PRIORITY);
     log_info("Delays: %u, %u, %u ms", TEST_TASK1_DELAY_MS, TEST_TASK2_DELAY_MS, TEST_TASK3_DELAY_MS);
+    log_info("NOTE: Cooperative - tasks yield via delay only");
 
     /* Initialize RTOS */
     status = rtos_init();

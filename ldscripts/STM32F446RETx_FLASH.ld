@@ -32,4 +32,15 @@ SECTIONS
     . = ALIGN(8);
     _estack = .;
   } >RAM
+
+  /* Uninitialized data surviving soft reset (log buffers, profiling) */
+  .noinit (NOLOAD):
+  {
+    . = ALIGN(4);
+    _snoinit = .;
+    *(.noinit)
+    *(.noinit.*)
+    . = ALIGN(4);
+    _enoinit = .;
+  } >RAM
 }

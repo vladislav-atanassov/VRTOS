@@ -1,6 +1,6 @@
 /*******************************************************************************
- * File: tests/scheduler/test_scheduler_cooperative.c
- * Description: Cooperative Scheduler Test
+ * File: tests/scheduler/test_scheduler_preemptive.c
+ * Description: Preemptive Static Priority Scheduler Test
  * Author: Student
  * Date: 2025
  ******************************************************************************/
@@ -8,30 +8,30 @@
 #include "VRTOS.h"
 #include "config.h"
 #include "hardware_env.h"
-#include "log.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
 #include "test_config.h"
 #include "timer.h"
+#include "uart_tx.h"
 
 /**
- * @file test_scheduler_cooperative.c
- * @brief Cooperative Scheduler Test
+ * @file test_scheduler_preemptive.c
+ * @brief Preemptive Static Priority Scheduler Test
  *
- * Tests cooperative scheduling with 3 tasks at different priorities.
- * Tasks use ONLY delays (no busy loops) since cooperative scheduling
- * requires explicit yields - a while(1) loop would block forever.
+ * Tests preemptive scheduling with 3 tasks at DIFFERENT priorities.
+ * Higher priority tasks include work loops that will be interrupted
+ * when lower priority tasks become ready.
  *
  * Expected behavior:
- * - Tasks run to completion or until they yield (via delay)
- * - No preemption - each task runs until it calls rtos_delay_ms()
- * - Higher priority matters only when multiple tasks are ready
+ * - Higher priority tasks preempt lower priority tasks
+ * - Task3 (highest) runs first when ready
+ * - Task1 (lowest) runs only when higher priority tasks are blocked
  */
 
-/* Task priorities */
-#define TASK1_PRIORITY (2U)
-#define TASK2_PRIORITY (3U)
-#define TASK3_PRIORITY (4U)
+/* Task priorities (different for preemptive test) */
+#define TASK1_PRIORITY (2U) /* Low priority */
+#define TASK2_PRIORITY (3U) /* Medium priority */
+#define TASK3_PRIORITY (4U) /* High priority */
 
 /* Test termination flag */
 static volatile bool g_test_complete = false;
@@ -42,11 +42,6 @@ static volatile uint32_t g_task2_count = 0;
 static volatile uint32_t g_task3_count = 0;
 
 /* =================== Test Tasks =================== */
-
-/**
- * NOTE: Cooperative scheduler requires tasks to yield explicitly.
- * NO busy loops allowed - they would block indefinitely!
- */
 
 static void task1_func(void *param)
 {
@@ -59,7 +54,12 @@ static void task1_func(void *param)
         test_log_task("RUN", "Task1");
         g_task1_count++;
 
-        /* Yield by delaying - this allows other tasks to run */
+        /* Small work loop - will be preempted */
+        for (volatile int i = 0; i < 10000; i++)
+        {
+            __asm volatile("nop");
+        }
+
         test_log_task("DELAY", "Task1");
         rtos_delay_ms(TEST_TASK1_DELAY_MS);
     }
@@ -82,6 +82,12 @@ static void task2_func(void *param)
     {
         test_log_task("RUN", "Task2");
         g_task2_count++;
+
+        /* Work loop - can preempt Task1, preempted by Task3 */
+        for (volatile int i = 0; i < 10000; i++)
+        {
+            __asm volatile("nop");
+        }
 
         test_log_task("DELAY", "Task2");
         rtos_delay_ms(TEST_TASK2_DELAY_MS);
@@ -106,6 +112,12 @@ static void task3_func(void *param)
         test_log_task("RUN", "Task3");
         g_task3_count++;
 
+        /* Highest priority - can preempt all others */
+        for (volatile int i = 0; i < 10000; i++)
+        {
+            __asm volatile("nop");
+        }
+
         test_log_task("DELAY", "Task3");
         rtos_delay_ms(TEST_TASK3_DELAY_MS);
     }
@@ -126,7 +138,7 @@ static void test_timeout_callback(void *timer_handle, void *param)
     (void) param;
 
     g_test_complete = true;
-    test_log_framework("TIMEOUT", "Cooperative");
+    test_log_framework("TIMEOUT", "Preemptive");
 }
 
 /* =================== Main =================== */
@@ -141,11 +153,10 @@ __attribute__((__noreturn__)) int main(void)
     hardware_env_config();
     log_uart_init(LOG_LEVEL_ALL);
 
-    test_log_framework("BEGIN", "Cooperative");
-    log_info("Cooperative Scheduler Test");
+    test_log_framework("BEGIN", "Preemptive");
+    log_info("Preemptive Static Priority Scheduler Test");
     log_info("Priorities: Task1=%u, Task2=%u, Task3=%u", TASK1_PRIORITY, TASK2_PRIORITY, TASK3_PRIORITY);
     log_info("Delays: %u, %u, %u ms", TEST_TASK1_DELAY_MS, TEST_TASK2_DELAY_MS, TEST_TASK3_DELAY_MS);
-    log_info("NOTE: Cooperative - tasks yield via delay only");
 
     /* Initialize RTOS */
     status = rtos_init();
@@ -164,7 +175,7 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
     }
 
-    /* Create test tasks */
+    /* Create test tasks (order matters for initial scheduling) */
     status = rtos_task_create(task1_func, "T1", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK1_PRIORITY, &task_handle);
     if (status != RTOS_SUCCESS)
         indicate_system_failure();

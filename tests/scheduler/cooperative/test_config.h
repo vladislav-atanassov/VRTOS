@@ -1,5 +1,5 @@
 /*******************************************************************************
- * File: config/test/test_config.h
+ * File: tests/scheduler/test_config.h
  * Description: Test Configuration Parameters
  * Author: Student
  * Date: 2025

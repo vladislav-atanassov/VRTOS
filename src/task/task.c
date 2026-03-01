@@ -9,7 +9,7 @@
 
 #include "VRTOS.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "memory.h"
 #include "port_common.h"
 #include "rtos_port.h"
@@ -44,13 +44,8 @@ rtos_status_t rtos_task_init_system(void)
     memset(g_task_pool, 0, sizeof(g_task_pool));
     g_task_count = 0;
 
-    /* Stack usage stats relative to global pool are no longer valid with dynamic allocation */
-    log_printf(LOG_LEVEL_DEBUG, "DEBUG", "Stack memory: (Dynamic Heap Managed)");
-
     /* Stack alignment is now handled by rtos_malloc in memory.c */
-
-    log_debug("Task management system initialized");
-    log_debug("Task pool: %d tasks, Stack memory: %d bytes", RTOS_MAX_TASKS, RTOS_TOTAL_HEAP_SIZE);
+    KLOGD(KEVT_TASK_CREATE, RTOS_MAX_TASKS, RTOS_TOTAL_HEAP_SIZE);
 
     return RTOS_SUCCESS;
 }
@@ -64,19 +59,19 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     /* Validate parameters */
     if (task_function == NULL || task_handle == NULL)
     {
-        log_error("Invalid parameters: task_function=%p, task_handle=%p", task_function, task_handle);
+        KLOGE(KEVT_INVALID_PARAM, (uint32_t) task_function, (uint32_t) task_handle);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
     if (priority >= RTOS_MAX_TASK_PRIORITIES)
     {
-        log_error("Invalid priority: %d (max: %d)", priority, RTOS_MAX_TASK_PRIORITIES - 1);
+        KLOGE(KEVT_INVALID_PARAM, priority, RTOS_MAX_TASK_PRIORITIES - 1);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
     if (g_task_count >= RTOS_MAX_TASKS)
     {
-        log_error("Maximum number of tasks reached: %d", RTOS_MAX_TASKS);
+        KLOGE(KEVT_ALLOC_FAIL, RTOS_MAX_TASKS, g_task_count);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -102,7 +97,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     if (new_task == NULL)
     {
         rtos_port_exit_critical();
-        log_error("Failed to allocate TCB");
+        KLOGE(KEVT_ALLOC_FAIL, 0, 0);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -113,7 +108,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
         /* Free the TCB */
         new_task->task_function = NULL;
         rtos_port_exit_critical();
-        log_error("Failed to allocate stack of size %d", stack_size);
+        KLOGE(KEVT_STACK_ALLOC_FAIL, stack_size, 0);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -156,8 +151,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
 
     rtos_port_exit_critical();
 
-    log_info("Created task '%s' (ID=%d, prio=%d, stack=%d bytes)", name ? name : "unnamed", new_task->task_id, priority,
-             stack_size);
+    KLOGI(KEVT_TASK_CREATE, new_task->task_id, priority);
 
     return RTOS_SUCCESS;
 }
@@ -184,6 +178,29 @@ rtos_tcb_t *rtos_task_get_idle_task(void)
 rtos_task_handle_t rtos_task_get_current(void)
 {
     return g_kernel.current_task;
+}
+
+/**
+ * @brief Get the current running task's ID
+ * @return Task ID or 0xFF if no task is running
+ * @note Used by KLog to populate the cpu_context field
+ */
+uint8_t rtos_get_current_task_id(void)
+{
+    if (g_kernel.current_task != NULL)
+    {
+        return g_kernel.current_task->task_id;
+    }
+    return 0xFF; /* No task running (pre-scheduler) */
+}
+
+const char *rtos_task_get_name(rtos_task_id_t task_id)
+{
+    if (task_id < g_task_count && g_task_pool[task_id].name != NULL)
+    {
+        return g_task_pool[task_id].name;
+    }
+    return "?";
 }
 
 /**
@@ -267,44 +284,16 @@ uint8_t rtos_task_get_count(void)
  */
 void rtos_task_debug_print_all(void)
 {
-    log_debug("=== Task Debug Information ===");
-    log_debug("Total tasks: %d/%d", g_task_count, RTOS_MAX_TASKS);
-    log_debug("Stack memory: (Dynamic Heap Managed)");
+    KLOGD(KEVT_TASK_CREATE, g_task_count, RTOS_MAX_TASKS);
 
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
         rtos_tcb_t *task = &g_task_pool[i];
         if (task->task_function != NULL)
         {
-            const char *state_str;
-            switch (task->state)
-            {
-                case RTOS_TASK_STATE_READY:
-                    state_str = "READY";
-                    break;
-                case RTOS_TASK_STATE_RUNNING:
-                    state_str = "RUNNING";
-                    break;
-                case RTOS_TASK_STATE_BLOCKED:
-                    state_str = "BLOCKED";
-                    break;
-                case RTOS_TASK_STATE_SUSPENDED:
-                    state_str = "SUSPENDED";
-                    break;
-                case RTOS_TASK_STATE_DELETED:
-                    state_str = "DELETED";
-                    break;
-                default:
-                    state_str = "UNKNOWN";
-                    break;
-            }
-
-            log_debug("Task[%d]: '%s' prio=%d state=%s stack=%d SP=0x%08lX", task->task_id,
-                      task->name ? task->name : "unnamed", task->priority, state_str, task->stack_size,
-                      (unsigned long) task->stack_pointer);
+            KLOGD(KEVT_TASK_CREATE, task->task_id, (uint32_t) task->state);
         }
     }
-    log_debug("==============================");
 }
 
 /**
@@ -314,7 +303,7 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
 {
     (void) param; /* Unused parameter */
 
-    log_debug("Idle task started");
+    KLOGD(KEVT_TASK_IDLE_START, 0, 0);
 
     while (1)
     {
@@ -343,8 +332,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         {
             if (*task_handle->stack_base != PORT_STACK_CANARY_VALUE)
             {
-                log_error("STACK OVERFLOW detected in task '%s' (ID=%d)",
-                          task_handle->name ? task_handle->name : "unnamed", task_handle->task_id);
+                KLOGE(KEVT_STACK_OVERFLOW, task_handle->task_id, 0);
                 return true;
             }
         }
@@ -360,8 +348,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         {
             if (*task->stack_base != PORT_STACK_CANARY_VALUE)
             {
-                log_error("STACK OVERFLOW detected in task '%s' (ID=%d)", task->name ? task->name : "unnamed",
-                          task->task_id);
+                KLOGE(KEVT_STACK_OVERFLOW, task->task_id, 0);
                 overflow_found = true;
             }
         }
@@ -412,7 +399,7 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
 
     task->state = RTOS_TASK_STATE_SUSPENDED;
 
-    log_debug("Task '%s' suspended", task->name ? task->name : "unnamed");
+    KLOGD(KEVT_TASK_SUSPEND, task->task_id, 0);
 
     /* If suspending current task, yield */
     if (task == g_kernel.current_task)
@@ -447,7 +434,7 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    log_debug("Task '%s' resumed", task_handle->name ? task_handle->name : "unnamed");
+    KLOGD(KEVT_TASK_RESUME, task_handle->task_id, 0);
 
     rtos_port_exit_critical();
 
@@ -484,7 +471,7 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size)
 
     if (stack_block == NULL)
     {
-        log_error("Stack allocation failed: need %u bytes", (unsigned int) size);
+        KLOGE(KEVT_STACK_ALLOC_FAIL, size, 0);
         return NULL;
     }
 

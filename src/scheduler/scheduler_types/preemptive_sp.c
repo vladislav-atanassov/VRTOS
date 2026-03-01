@@ -9,7 +9,7 @@
 
 #include "VRTOS.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "scheduler.h"
 #include "task_priv.h"
 
@@ -60,8 +60,7 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
         task->prev    = current;
     }
 
-    log_debug("Preemptive static priority-based: Added task '%s' (prio=%d) to ready list",
-              task->name ? task->name : "unnamed", priority);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
 }
 
 /**
@@ -102,8 +101,7 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
     task->next = NULL;
     task->prev = NULL;
 
-    log_debug("Preemptive static priority-based: Removed task '%s' (prio=%d) from ready list",
-              task->name ? task->name : "unnamed", priority);
+    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
 }
 
 /**
@@ -161,8 +159,7 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
         current->prev = task;
     }
 
-    log_debug("Preemptive static priority-based: Added task '%s' to delayed list, wakeup at tick %lu",
-              task->name ? task->name : "unnamed", task->delay_until);
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
 }
 
 /**
@@ -196,8 +193,7 @@ static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t t
     task->next = NULL;
     task->prev = NULL;
 
-    log_debug("Preemptive static priority-based: Removed task '%s' from delayed list",
-              task->name ? task->name : "unnamed");
+    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, 0);
 }
 
 /**
@@ -220,13 +216,15 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
             task->state = RTOS_TASK_STATE_READY;
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-            task->ready_timestamp = rtos_profiling_get_cycles();
+            if (task->priority > 0)
+            {
+                task->ready_timestamp = rtos_profiling_get_cycles();
+            }
 #endif
 
             preemptive_sp_add_to_ready_list_internal(task);
 
-            log_debug("Preemptive static priority-based: Task '%s' delay expired, moved to ready list",
-                      task->name ? task->name : "unnamed");
+            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
         }
         else
         {
@@ -281,7 +279,7 @@ static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
     /* Set up private data */
     instance->private_data = &g_preemptive_sp_data;
 
-    log_debug("Preemptive static priority-based scheduler initialized");
+    KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
     return RTOS_SUCCESS;
 }
 

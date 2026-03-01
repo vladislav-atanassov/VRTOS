@@ -1,37 +1,36 @@
 /*******************************************************************************
- * File: tests/scheduler/test_scheduler_preemptive.c
- * Description: Preemptive Static Priority Scheduler Test
+ * File: tests/scheduler/test_scheduler_rr.c
+ * Description: Round Robin Scheduler Test
  * Author: Student
  * Date: 2025
  ******************************************************************************/
 
 #include "VRTOS.h"
-#include "config.h"
+#include "config.h" // IWYU pragma: keep
 #include "hardware_env.h"
-#include "log.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
 #include "test_config.h"
 #include "timer.h"
+#include "uart_tx.h"
 
 /**
- * @file test_scheduler_preemptive.c
- * @brief Preemptive Static Priority Scheduler Test
+ * @file test_scheduler_rr.c
+ * @brief Round Robin Scheduler Test
  *
- * Tests preemptive scheduling with 3 tasks at DIFFERENT priorities.
- * Higher priority tasks include work loops that will be interrupted
- * when lower priority tasks become ready.
+ * Tests round-robin scheduling with 3 tasks at EQUAL priority.
+ * All tasks use delays only (no busy loops) to allow proper time-slicing.
  *
  * Expected behavior:
- * - Higher priority tasks preempt lower priority tasks
- * - Task3 (highest) runs first when ready
- * - Task1 (lowest) runs only when higher priority tasks are blocked
+ * - Tasks run in round-robin order when all are ready
+ * - Time slicing occurs between tasks of equal priority
+ * - Each task logs START, RUN, and DELAY events
  */
 
-/* Task priorities (different for preemptive test) */
-#define TASK1_PRIORITY (2U) /* Low priority */
-#define TASK2_PRIORITY (3U) /* Medium priority */
-#define TASK3_PRIORITY (4U) /* High priority */
+/* Task priorities (all equal for round-robin) */
+#define TASK1_PRIORITY (2U)
+#define TASK2_PRIORITY (2U)
+#define TASK3_PRIORITY (2U)
 
 /* Test termination flag */
 static volatile bool g_test_complete = false;
@@ -54,18 +53,13 @@ static void task1_func(void *param)
         test_log_task("RUN", "Task1");
         g_task1_count++;
 
-        /* Small work loop - will be preempted */
-        for (volatile int i = 0; i < 10000; i++)
-        {
-            __asm volatile("nop");
-        }
-
         test_log_task("DELAY", "Task1");
         rtos_delay_ms(TEST_TASK1_DELAY_MS);
     }
 
     test_log_task("END", "Task1");
 
+    /* Keep task alive but idle */
     while (1)
     {
         rtos_delay_ms(1000);
@@ -82,12 +76,6 @@ static void task2_func(void *param)
     {
         test_log_task("RUN", "Task2");
         g_task2_count++;
-
-        /* Work loop - can preempt Task1, preempted by Task3 */
-        for (volatile int i = 0; i < 10000; i++)
-        {
-            __asm volatile("nop");
-        }
 
         test_log_task("DELAY", "Task2");
         rtos_delay_ms(TEST_TASK2_DELAY_MS);
@@ -112,12 +100,6 @@ static void task3_func(void *param)
         test_log_task("RUN", "Task3");
         g_task3_count++;
 
-        /* Highest priority - can preempt all others */
-        for (volatile int i = 0; i < 10000; i++)
-        {
-            __asm volatile("nop");
-        }
-
         test_log_task("DELAY", "Task3");
         rtos_delay_ms(TEST_TASK3_DELAY_MS);
     }
@@ -138,7 +120,7 @@ static void test_timeout_callback(void *timer_handle, void *param)
     (void) param;
 
     g_test_complete = true;
-    test_log_framework("TIMEOUT", "Preemptive");
+    test_log_framework("TIMEOUT", "RoundRobin");
 }
 
 /* =================== Main =================== */
@@ -151,11 +133,16 @@ __attribute__((__noreturn__)) int main(void)
 
     /* Initialize test environment */
     hardware_env_config();
-    log_uart_init(LOG_LEVEL_ALL);
+    log_uart_init(LOG_LEVEL_INFO);
 
-    test_log_framework("BEGIN", "Preemptive");
-    log_info("Preemptive Static Priority Scheduler Test");
-    log_info("Priorities: Task1=%u, Task2=%u, Task3=%u", TASK1_PRIORITY, TASK2_PRIORITY, TASK3_PRIORITY);
+    for (volatile uint32_t i = 0; i < 2000000; i++)
+    {
+        __asm__ volatile("nop");
+    }
+
+    test_log_framework("BEGIN", "RoundRobin");
+    log_info("Round Robin Scheduler Test");
+    log_info("Tasks: 3 at equal priority (%u)", TASK1_PRIORITY);
     log_info("Delays: %u, %u, %u ms", TEST_TASK1_DELAY_MS, TEST_TASK2_DELAY_MS, TEST_TASK3_DELAY_MS);
 
     /* Initialize RTOS */
@@ -175,7 +162,7 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
     }
 
-    /* Create test tasks (order matters for initial scheduling) */
+    /* Create test tasks */
     status = rtos_task_create(task1_func, "T1", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK1_PRIORITY, &task_handle);
     if (status != RTOS_SUCCESS)
         indicate_system_failure();

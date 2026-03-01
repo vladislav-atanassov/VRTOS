@@ -8,7 +8,7 @@
 #include "scheduler.h"
 
 #include "cooperative.h"
-#include "log.h"
+#include "klog.h"
 #include "preemptive_sp.h"
 #include "profiling.h"
 #include "round_robin.h"
@@ -52,7 +52,7 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
     /* Check if already initialized */
     if (g_scheduler_instance.initialized)
     {
-        log_info("Scheduler already initialized");
+        KLOGI(KEVT_SCHEDULER_INIT, (uint32_t) scheduler_type, 0);
         return RTOS_ERROR_INVALID_STATE;
     }
 
@@ -60,7 +60,7 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
     const rtos_scheduler_t *interface = rtos_scheduler_find_interface(scheduler_type);
     if (interface == NULL)
     {
-        log_error("Unknown scheduler type: %d", scheduler_type);
+        KLOGE(KEVT_INVALID_PARAM, (uint32_t) scheduler_type, 0);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
@@ -76,18 +76,14 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
     if (status == RTOS_SUCCESS)
     {
         g_scheduler_instance.initialized = true;
-        log_info("Scheduler initialized: %s", scheduler_type == RTOS_SCHEDULER_PREEMPTIVE_SP
-                                                  ? "Preemptive static priority-based"
-                                              : scheduler_type == RTOS_SCHEDULER_COOPERATIVE ? "COOPERATIVE"
-                                              : scheduler_type == RTOS_SCHEDULER_ROUND_ROBIN ? "ROUND_ROBIN"
-                                                                                             : "Unknown");
+        KLOGI(KEVT_SCHEDULER_INIT, (uint32_t) scheduler_type, 0);
     }
     else
     {
         /* Clean up on failure */
         g_scheduler_instance.vtable       = NULL;
         g_scheduler_instance.private_data = NULL;
-        log_error("Scheduler initialization failed: %d", status);
+        KLOGE(KEVT_SCHEDULER_INIT, (uint32_t) status, 0);
     }
 
     return status;
@@ -110,7 +106,7 @@ rtos_task_handle_t rtos_scheduler_get_next_task(void)
 {
     if (!g_scheduler_instance.initialized || g_scheduler_instance.vtable == NULL)
     {
-        log_error("Scheduler not initialized");
+        KLOGE(KEVT_SCHEDULER_NOT_INIT, 0, 0);
         return NULL;
     }
 
@@ -242,15 +238,11 @@ void rtos_scheduler_debug_print(void)
 {
     if (!g_scheduler_instance.initialized)
     {
-        log_info("Scheduler not initialized");
+        KLOGI(KEVT_SCHEDULER_NOT_INIT, 0, 0);
         return;
     }
 
-    log_info("=== Scheduler Debug Information ===");
-    log_info("Type: %s", g_scheduler_instance.type == RTOS_SCHEDULER_PREEMPTIVE_SP ? "Preemptive static priority-based"
-                         : g_scheduler_instance.type == RTOS_SCHEDULER_COOPERATIVE ? "COOPERATIVE"
-                         : g_scheduler_instance.type == RTOS_SCHEDULER_ROUND_ROBIN ? "ROUND_ROBIN"
-                                                                                   : "Unknown");
+    KLOGD(KEVT_SCHEDULER_INIT, (uint32_t) g_scheduler_instance.type, 0);
 
     /* Try to get and print scheduler-specific statistics */
     uint8_t stats_buffer[128];
@@ -258,7 +250,7 @@ void rtos_scheduler_debug_print(void)
 
     if (stats_size > 0)
     {
-        log_info("Scheduler statistics (%zu bytes):", stats_size);
+        KLOGD(KEVT_SCHEDULER_INIT, stats_size, 0);
         /* Print as hex dump for debugging */
         for (size_t i = 0; i < stats_size; i += 16)
         {
@@ -269,11 +261,11 @@ void rtos_scheduler_debug_print(void)
             {
                 ptr += sprintf(ptr, "%02X ", stats_buffer[i + j]);
             }
-            log_info("  %04zX: %s", i, hex_line);
+            KLOGD(KEVT_SCHEDULER_INIT, i, 0);
         }
     }
 
-    log_info("===================================");
+    KLOGD(KEVT_SCHEDULER_INIT, 0, 0);
 }
 
 /* ==================== Internal Helper Functions ==================== */

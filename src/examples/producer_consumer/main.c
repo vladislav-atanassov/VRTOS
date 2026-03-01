@@ -1,6 +1,6 @@
 /*******************************************************************************
- * File: examples/queue_demo/main.c
- * Description: Simple Producer-Consumer Queue Demonstration
+ * File: examples/producer_consumer/main.c
+ * Description: Producer-Consumer Queue Demonstration
  * Author: Student
  * Date: 2025
  ******************************************************************************/
@@ -8,10 +8,15 @@
 #include "VRTOS.h"
 #include "config.h"
 #include "hardware_env.h"
-#include "log.h"
+#include "log_flush_task.h"
 #include "queue.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
+#include "uart_tx.h"
+#include "ulog.h"
+
+#include <stdio.h>
+
 
 /**
  * @file main.c
@@ -22,7 +27,7 @@
  * - Multiple producers and consumers
  * - Blocking behavior when queue is full/empty
  * - Priority-based task scheduling with queues
- * 
+ *
  * Scenario: Simulated sensor data processing system
  * - Temperature sensors (producers) generate readings
  * - Data processors (consumers) analyze readings
@@ -59,7 +64,7 @@ typedef struct
     uint8_t  sensor_id; /* Which sensor generated this */
     uint16_t value;     /* Sensor reading */
     uint32_t timestamp; /* When reading was taken */
-    char     unit[8];   /* e.g., "°C", "kPa" */
+    char     unit[8];   /* e.g., "C", "kPa" */
 } sensor_data_t;
 
 /**
@@ -87,7 +92,7 @@ static volatile bool       g_system_running = true;
  */
 static uint16_t simulate_temperature_reading(uint8_t sensor_id)
 {
-    static uint16_t base_temp[2] = {2000, 2500}; /* 20.0°C, 25.0°C */
+    static uint16_t base_temp[2] = {2000, 2500}; /* 20.0C, 25.0C */
     static int16_t  drift[2]     = {1, -1};
 
     /* Simple simulation: temperature drifts slowly */
@@ -95,9 +100,9 @@ static uint16_t simulate_temperature_reading(uint8_t sensor_id)
 
     /* Reverse drift at boundaries */
     if (base_temp[sensor_id] > 3000)
-        drift[sensor_id] = -1; /* 30°C max */
+        drift[sensor_id] = -1; /* 30C max */
     if (base_temp[sensor_id] < 1500)
-        drift[sensor_id] = 1; /* 15°C min */
+        drift[sensor_id] = 1; /* 15C min */
 
     return base_temp[sensor_id];
 }
@@ -110,7 +115,7 @@ static void temp_sensor_1_task(void *param)
     (void) param;
     const uint8_t sensor_id = 1;
 
-    log_info("[TEMP_1] Temperature sensor 1 started (rate: %lums)", (unsigned long) TEMP_SENSOR_1_RATE_MS);
+    ulog_info("[TEMP_1] Temperature sensor 1 started (rate: %lums)", (unsigned long) TEMP_SENSOR_1_RATE_MS);
 
     while (g_system_running)
     {
@@ -127,17 +132,17 @@ static void temp_sensor_1_task(void *param)
         if (status == RTOS_SUCCESS)
         {
             g_stats.readings_generated++;
-            log_debug("[TEMP_1] Reading sent: %u.%u°C", reading.value / 100, reading.value % 100);
+            ulog_debug("[TEMP_1] Reading sent: %u.%uC", reading.value / 100, reading.value % 100);
         }
         else if (status == RTOS_ERROR_TIMEOUT)
         {
             g_stats.readings_dropped++;
             g_stats.queue_full_count++;
-            log_info("[TEMP_1] Queue full - reading dropped");
+            ulog_info("[TEMP_1] Queue full - reading dropped");
         }
         else
         {
-            log_error("[TEMP_1] Send error: %d", status);
+            ulog_error("[TEMP_1] Send error: %d", status);
         }
 
         /* Sensor sampling rate */
@@ -153,7 +158,7 @@ static void temp_sensor_2_task(void *param)
     (void) param;
     const uint8_t sensor_id = 2;
 
-    log_info("[TEMP_2] Temperature sensor 2 started (rate: %lums)", (unsigned long) TEMP_SENSOR_2_RATE_MS);
+    ulog_info("[TEMP_2] Temperature sensor 2 started (rate: %lums)", (unsigned long) TEMP_SENSOR_2_RATE_MS);
 
     while (g_system_running)
     {
@@ -170,17 +175,17 @@ static void temp_sensor_2_task(void *param)
         if (status == RTOS_SUCCESS)
         {
             g_stats.readings_generated++;
-            log_debug("[TEMP_2] Reading sent: %u.%u°C", reading.value / 100, reading.value % 100);
+            ulog_debug("[TEMP_2] Reading sent: %u.%uC", reading.value / 100, reading.value % 100);
         }
         else if (status == RTOS_ERROR_TIMEOUT)
         {
             g_stats.readings_dropped++;
             g_stats.queue_full_count++;
-            log_info("[TEMP_2] Queue full - reading dropped");
+            ulog_info("[TEMP_2] Queue full - reading dropped");
         }
         else
         {
-            log_error("[TEMP_2] Send error: %d", status);
+            ulog_error("[TEMP_2] Send error: %d", status);
         }
 
         rtos_delay_ms(TEMP_SENSOR_2_RATE_MS);
@@ -212,7 +217,7 @@ static void pressure_sensor_task(void *param)
     (void) param;
     const uint8_t sensor_id = 3;
 
-    log_info("[PRESSURE] Pressure sensor started (rate: %lums)", (unsigned long) PRESSURE_SENSOR_RATE_MS);
+    ulog_info("[PRESSURE] Pressure sensor started (rate: %lums)", (unsigned long) PRESSURE_SENSOR_RATE_MS);
 
     while (g_system_running)
     {
@@ -229,17 +234,17 @@ static void pressure_sensor_task(void *param)
         if (status == RTOS_SUCCESS)
         {
             g_stats.readings_generated++;
-            log_debug("[PRESSURE] Reading sent: %u.%u %s", reading.value / 100, reading.value % 100, reading.unit);
+            ulog_debug("[PRESSURE] Reading sent: %u.%u %s", reading.value / 100, reading.value % 100, reading.unit);
         }
         else if (status == RTOS_ERROR_TIMEOUT)
         {
             g_stats.readings_dropped++;
             g_stats.queue_full_count++;
-            log_info("[PRESSURE] Queue full - critical reading dropped!");
+            ulog_info("[PRESSURE] Queue full - critical reading dropped!");
         }
         else
         {
-            log_error("[PRESSURE] Send error: %d", status);
+            ulog_error("[PRESSURE] Send error: %d", status);
         }
 
         rtos_delay_ms(PRESSURE_SENSOR_RATE_MS);
@@ -253,6 +258,8 @@ static void pressure_sensor_task(void *param)
  */
 static void process_sensor_data(const sensor_data_t *data)
 {
+    (void) data;
+
     /* Flash LED to show activity */
     led_set(true);
 
@@ -275,7 +282,7 @@ static void data_processor_task(void *param)
     (void) param;
     sensor_data_t reading;
 
-    log_info("[PROCESSOR] Data processor started");
+    ulog_info("[PROCESSOR] Data processor started");
 
     while (g_system_running)
     {
@@ -287,8 +294,8 @@ static void data_processor_task(void *param)
             g_stats.readings_processed++;
 
             /* Log received data */
-            log_info("[PROCESSOR] Sensor %u: %u.%u%s [age: %lu ticks]", reading.sensor_id, reading.value / 100,
-                     reading.value % 100, reading.unit, (unsigned long) (rtos_get_tick_count() - reading.timestamp));
+            ulog_info("[PROCESSOR] Sensor %u: %u.%u%s [age: %lu ticks]", reading.sensor_id, reading.value / 100,
+                      reading.value % 100, reading.unit, (unsigned long) (rtos_get_tick_count() - reading.timestamp));
 
             /* Process the data */
             process_sensor_data(&reading);
@@ -296,22 +303,22 @@ static void data_processor_task(void *param)
             /* Check for anomalies */
             if (reading.sensor_id <= 2 && reading.value > 2800)
             {
-                log_info("[PROCESSOR] ⚠ WARNING: High temperature detected!");
+                ulog_warn("[PROCESSOR] WARNING: High temperature detected!");
             }
             if (reading.sensor_id == 3 && reading.value > 10180)
             {
-                log_info("[PROCESSOR] ⚠ WARNING: High pressure detected!");
+                ulog_warn("[PROCESSOR] WARNING: High pressure detected!");
             }
         }
         else if (status == RTOS_ERROR_TIMEOUT)
         {
             /* Shouldn't happen with RTOS_MAX_DELAY */
             g_stats.processor_blocked_count++;
-            log_info("[PROCESSOR] Unexpected timeout");
+            ulog_info("[PROCESSOR] Unexpected timeout");
         }
         else
         {
-            log_error("[PROCESSOR] Receive error: %d", status);
+            ulog_error("[PROCESSOR] Receive error: %d", status);
         }
     }
 }
@@ -324,7 +331,7 @@ static void display_task(void *param)
     (void) param;
     sensor_data_t reading;
 
-    log_info("[DISPLAY] Display task started");
+    ulog_info("[DISPLAY] Display task started");
 
     while (g_system_running)
     {
@@ -334,13 +341,13 @@ static void display_task(void *param)
         if (status == RTOS_SUCCESS)
         {
             /* Display update */
-            log_debug("[DISPLAY] Update: Sensor %u = %u.%u%s", reading.sensor_id, reading.value / 100,
-                      reading.value % 100, reading.unit);
+            ulog_debug("[DISPLAY] Update: Sensor %u = %u.%u%s", reading.sensor_id, reading.value / 100,
+                       reading.value % 100, reading.unit);
         }
         else if (status == RTOS_ERROR_TIMEOUT)
         {
             /* No data available - that's fine */
-            log_debug("[DISPLAY] No data to display");
+            ulog_debug("[DISPLAY] No data to display");
         }
 
         /* Update rate independent of data availability */
@@ -357,7 +364,7 @@ static void monitor_task(void *param)
 {
     (void) param;
 
-    log_info("[MONITOR] System monitor started");
+    ulog_info("[MONITOR] System monitor started");
 
     /* Wait for system to stabilize */
     rtos_delay_ms(2000);
@@ -368,21 +375,21 @@ static void monitor_task(void *param)
         uint32_t queue_count  = rtos_queue_messages_waiting(g_sensor_queue);
         uint32_t queue_spaces = rtos_queue_spaces_available(g_sensor_queue);
 
-        log_info("=== System Status ===");
-        log_info("Queue: %lu/%lu items", (unsigned long) queue_count, (unsigned long) (queue_count + queue_spaces));
-        log_info("Generated: %lu readings", (unsigned long) g_stats.readings_generated);
-        log_info("Processed: %lu readings", (unsigned long) g_stats.readings_processed);
-        log_info("Dropped: %lu readings", (unsigned long) g_stats.readings_dropped);
-        log_info("Queue full events: %lu", (unsigned long) g_stats.queue_full_count);
+        ulog_info("=== System Status ===");
+        ulog_info("Queue: %lu/%lu items", (unsigned long) queue_count, (unsigned long) (queue_count + queue_spaces));
+        ulog_info("Generated: %lu readings", (unsigned long) g_stats.readings_generated);
+        ulog_info("Processed: %lu readings", (unsigned long) g_stats.readings_processed);
+        ulog_info("Dropped: %lu readings", (unsigned long) g_stats.readings_dropped);
+        ulog_info("Queue full events: %lu", (unsigned long) g_stats.queue_full_count);
 
         /* Calculate processing efficiency */
         if (g_stats.readings_generated > 0)
         {
             uint32_t efficiency = (g_stats.readings_processed * 100) / g_stats.readings_generated;
-            log_info("Efficiency: %lu%%", (unsigned long) efficiency);
+            ulog_info("Efficiency: %lu%%", (unsigned long) efficiency);
         }
 
-        log_info("====================\n");
+        ulog_info("====================");
 
         rtos_delay_ms(MONITOR_INTERVAL_MS);
     }
@@ -395,7 +402,7 @@ static void heartbeat_task(void *param)
 {
     (void) param;
 
-    log_info("[HEARTBEAT] Heartbeat task started");
+    ulog_info("[HEARTBEAT] Heartbeat task started");
 
     while (g_system_running)
     {
@@ -422,41 +429,38 @@ __attribute__((__noreturn__)) int main(void)
 
     log_uart_init(LOG_LEVEL_INFO);
 
-    log_info("\n\n");
-    log_info("====================================");
-    log_info("  Producer-Consumer Queue Demo");
-    log_info("====================================");
-    log_info("Simulating sensor data processing");
-    log_info("- 3 sensor producers");
-    log_info("- 2 data consumers");
-    log_info("- Queue-based communication");
-    log_info("====================================\n");
-
     /* Initialize RTOS */
     status = rtos_init();
     if (status != RTOS_SUCCESS)
     {
-        log_error("RTOS init failed: %d", status);
         indicate_system_failure();
     }
 
-    log_info("RTOS initialized successfully");
+    ulog_init(ULOG_LEVEL_INFO);
+
+    ulog_info("====================================");
+    ulog_info("  Producer-Consumer Queue Demo");
+    ulog_info("====================================");
+    ulog_info("Simulating sensor data processing");
+    ulog_info("- 3 sensor producers");
+    ulog_info("- 2 data consumers");
+    ulog_info("- Queue-based communication");
+    ulog_info("====================================");
 
     /* Create sensor data queue (capacity: 5 readings) */
     status = rtos_queue_create(&g_sensor_queue, 5, sizeof(sensor_data_t));
     if (status != RTOS_SUCCESS)
     {
-        log_error("Queue creation failed: %d", status);
         indicate_system_failure();
     }
 
-    log_info("Sensor queue created (capacity: 5)");
+    ulog_info("Sensor queue created (capacity: 5)");
 
     /* Create task handles */
     rtos_task_handle_t task_handle;
 
     /* Create producer tasks (sensors) */
-    log_info("Creating sensor tasks...");
+    ulog_info("Creating sensor tasks...");
 
     status = rtos_task_create(temp_sensor_1_task, "TEMP1", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TEMP_SENSOR_1_PRIORITY,
                               &task_handle);
@@ -474,7 +478,7 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
 
     /* Create consumer tasks (data processing) */
-    log_info("Creating processor tasks...");
+    ulog_info("Creating processor tasks...");
 
     status = rtos_task_create(data_processor_task, "PROC", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, DATA_PROCESSOR_PRIORITY,
                               &task_handle);
@@ -487,7 +491,7 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
 
     /* Create monitoring tasks */
-    log_info("Creating monitoring tasks...");
+    ulog_info("Creating monitoring tasks...");
 
     status =
         rtos_task_create(monitor_task, "MON", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, MONITOR_TASK_PRIORITY, &task_handle);
@@ -499,14 +503,18 @@ __attribute__((__noreturn__)) int main(void)
     if (status != RTOS_SUCCESS)
         indicate_system_failure();
 
-    log_info("\nAll tasks created successfully!");
-    log_info("Starting RTOS scheduler...\n");
+    /* Create log flush task (lowest priority) */
+    status = rtos_task_create(log_flush_task, "KLOG", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, &task_handle);
+    if (status != RTOS_SUCCESS)
+        indicate_system_failure();
+
+    ulog_info("All tasks created successfully!");
+    ulog_info("Starting RTOS scheduler...");
 
     /* Start the RTOS scheduler */
     status = rtos_start_scheduler();
 
     /* Should never reach here */
-    log_error("Scheduler returned unexpectedly!");
     indicate_system_failure();
 
     while (1)

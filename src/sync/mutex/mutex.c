@@ -9,7 +9,7 @@
 
 #include "VRTOS.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
@@ -145,9 +145,7 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         /* If target has lower priority than current boost priority, boost it */
         if (target_task->priority < boost_prio)
         {
-            log_debug("PIP: Boosting '%s' (%d->%d) due to waiter '%s'",
-                      target_task->name ? target_task->name : "unnamed", target_task->priority,
-                      boost_prio, current_task->name ? current_task->name : "unnamed");
+            KLOGD(KEVT_MUTEX_PIP_BOOST, target_task->task_id, boost_prio);
 
             target_task->priority = boost_prio;
         }
@@ -174,8 +172,8 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         }
 
         /* Check if target is blocked on another MUTEX */
-        if (target_task->state == RTOS_TASK_STATE_BLOCKED &&
-            target_task->blocked_on_type == RTOS_SYNC_TYPE_MUTEX && target_task->blocked_on != NULL)
+        if (target_task->state == RTOS_TASK_STATE_BLOCKED && target_task->blocked_on_type == RTOS_SYNC_TYPE_MUTEX &&
+            target_task->blocked_on != NULL)
         {
             rtos_mutex_t *next_mutex = (rtos_mutex_t *) target_task->blocked_on;
             current_task             = target_task;
@@ -192,7 +190,7 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
 
     if (safety_ctr >= max_depth)
     {
-        log_error("PIP: Max depth reached, potential deadlock detected!");
+        KLOGE(KEVT_MUTEX_DEADLOCK, safety_ctr, max_depth);
     }
 }
 
@@ -208,8 +206,7 @@ static void mutex_restore_priority(rtos_tcb_t *task)
 
     if (task->priority != task->base_priority)
     {
-        log_debug("Priority restoration: restoring '%s' from %d to %d",
-                  task->name ? task->name : "unnamed", task->priority, task->base_priority);
+        KLOGD(KEVT_MUTEX_PIP_RESTORE, task->task_id, task->base_priority);
         task->priority = task->base_priority;
     }
 }
@@ -234,7 +231,7 @@ rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
 
     rtos_port_exit_critical();
 
-    log_debug("Mutex initialized");
+    KLOGD(KEVT_MUTEX_INIT, 0, 0);
     return RTOS_MUTEX_OK;
 }
 
@@ -254,7 +251,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        log_error("Mutex lock called with no current task!");
+        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
         return RTOS_MUTEX_ERR_INVALID;
     }
 
@@ -264,7 +261,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         m->owner      = current_task;
         m->lock_count = 1;
         rtos_port_exit_critical();
-        log_debug("Mutex acquired by '%s'", current_task->name ? current_task->name : "unnamed");
+        KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 0);
         return RTOS_MUTEX_OK;
     }
 
@@ -275,14 +272,13 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         {
             m->lock_count++;
             rtos_port_exit_critical();
-            log_debug("Mutex recursive lock by '%s' (count=%d)",
-                      current_task->name ? current_task->name : "unnamed", m->lock_count);
+            KLOGD(KEVT_MUTEX_RECURSIVE, current_task->task_id, m->lock_count);
             return RTOS_MUTEX_OK;
         }
         else
         {
             rtos_port_exit_critical();
-            log_error("Mutex max recursion reached!");
+            KLOGE(KEVT_MUTEX_MAX_RECURSION, current_task->task_id, 0);
             return RTOS_MUTEX_ERR_GENERAL;
         }
     }
@@ -300,8 +296,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     /* Add to waiting list (priority-ordered) */
     mutex_add_to_waiting_list(m, current_task);
 
-    log_debug("Task '%s' blocking on mutex (timeout=%lu)",
-              current_task->name ? current_task->name : "unnamed", (unsigned long) timeout_ticks);
+    KLOGD(KEVT_MUTEX_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
     /* Block the task with timeout */
     if (timeout_ticks == RTOS_MAX_WAIT)
@@ -328,15 +323,13 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         /* Still on waiting list = timeout occurred */
         mutex_remove_from_waiting_list(m, current_task);
         rtos_port_exit_critical();
-        log_debug("Task '%s' mutex lock timed out",
-                  current_task->name ? current_task->name : "unnamed");
+        KLOGD(KEVT_MUTEX_TIMEOUT, current_task->task_id, 0);
         return RTOS_MUTEX_ERR_TIMEOUT;
     }
 
     /* Successfully acquired mutex */
     rtos_port_exit_critical();
-    log_debug("Task '%s' mutex acquired after wait",
-              current_task->name ? current_task->name : "unnamed");
+    KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 1);
     return RTOS_MUTEX_OK;
 }
 
@@ -358,9 +351,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     if (m->owner != current_task)
     {
         rtos_port_exit_critical();
-        log_error("Mutex unlock by non-owner! owner='%s', caller='%s'",
-                  m->owner ? (m->owner->name ? m->owner->name : "unnamed") : "NULL",
-                  current_task ? (current_task->name ? current_task->name : "unnamed") : "NULL");
+        KLOGE(KEVT_MUTEX_UNLOCK, m->owner ? m->owner->task_id : 0xFF, current_task ? current_task->task_id : 0xFF);
         return RTOS_MUTEX_ERR_INVALID;
     }
 
@@ -369,8 +360,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     {
         m->lock_count--;
         rtos_port_exit_critical();
-        log_debug("Mutex recursive unlock by '%s' (count=%d)",
-                  current_task->name ? current_task->name : "unnamed", m->lock_count);
+        KLOGD(KEVT_MUTEX_RECURSIVE, current_task->task_id, m->lock_count);
         return RTOS_MUTEX_OK;
     }
 
@@ -385,7 +375,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
         m->owner      = waiter;
         m->lock_count = 1;
 
-        log_debug("Mutex transferred to '%s'", waiter->name ? waiter->name : "unnamed");
+        KLOGD(KEVT_MUTEX_UNLOCK, waiter->task_id, 0);
 
         rtos_port_exit_critical();
 
@@ -400,6 +390,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 
     rtos_port_exit_critical();
 
-    log_debug("Mutex released by '%s'", current_task->name ? current_task->name : "unnamed");
+    KLOGD(KEVT_MUTEX_UNLOCK, current_task->task_id, 0);
     return RTOS_MUTEX_OK;
 }

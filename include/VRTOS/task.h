@@ -34,9 +34,8 @@ extern "C"
  *
  * @return RTOS_SUCCESS if task created successfully, error code otherwise
  */
-rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name,
-                               rtos_stack_size_t stack_size, void *parameter,
-                               rtos_priority_t priority, rtos_task_handle_t *task_handle);
+rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name, rtos_stack_size_t stack_size,
+                               void *parameter, rtos_priority_t priority, rtos_task_handle_t *task_handle);
 
 /**
  * @brief Get the idle task's TCB (Task Control Block)
@@ -91,6 +90,14 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle);
  * @return true if overflow detected, false if stack OK
  */
 bool rtos_task_check_stack(rtos_task_handle_t task_handle);
+
+/**
+ * @brief Get task name by task ID
+ *
+ * @param task_id Task identifier
+ * @return Task name string, or "?" if invalid
+ */
+const char *rtos_task_get_name(rtos_task_id_t task_id);
 
 #ifdef __cplusplus
 }

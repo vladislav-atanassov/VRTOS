@@ -9,7 +9,7 @@
 
 #include "VRTOS.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "memory.h"
 #include "queue_priv.h"
 #include "rtos_port.h"
@@ -18,7 +18,6 @@
 #include "task_priv.h"
 
 #include <string.h>
-
 
 /**
  * @file queue.c
@@ -149,7 +148,7 @@ static rtos_status_t rtos_queue_init(rtos_queue_t *queue, uint32_t item_count, u
     queue->buffer = rtos_malloc(item_count * item_size);
     if (queue->buffer == NULL)
     {
-        log_error("Queue buffer allocation failed");
+        KLOGE(KEVT_ALLOC_FAIL, 0, 0);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -162,8 +161,7 @@ static rtos_status_t rtos_queue_init(rtos_queue_t *queue, uint32_t item_count, u
     queue->sender_wait_list   = NULL;
     queue->receiver_wait_list = NULL;
 
-    log_debug("Queue initialized: items=%lu, size=%lu bytes", (unsigned long) item_count,
-              (unsigned long) item_size);
+    KLOGD(KEVT_QUEUE_INIT, item_count, item_size);
 
     return RTOS_SUCCESS;
 }
@@ -171,8 +169,7 @@ static rtos_status_t rtos_queue_init(rtos_queue_t *queue, uint32_t item_count, u
 /**
  * @brief Create a new queue
  */
-rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item_count,
-                                uint32_t item_size)
+rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item_count, uint32_t item_size)
 {
     if (queue_handle == NULL)
     {
@@ -183,7 +180,7 @@ rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item
     rtos_queue_t *queue = (rtos_queue_t *) rtos_malloc(sizeof(rtos_queue_t));
     if (queue == NULL)
     {
-        log_error("Queue structure allocation failed");
+        KLOGE(KEVT_ALLOC_FAIL, 0, 0);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -196,8 +193,7 @@ rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item
     }
 
     *queue_handle = queue;
-    log_info("Queue created: handle=0x%p, capacity=%lu, item_size=%lu", queue,
-             (unsigned long) item_count, (unsigned long) item_size);
+    KLOGI(KEVT_QUEUE_CREATE, item_count, item_size);
 
     return RTOS_SUCCESS;
 }
@@ -207,8 +203,7 @@ rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item
 /**
  * @brief Send an item to the queue (with proper timeout handling)
  */
-rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item_ptr,
-                              rtos_tick_t timeout_ticks)
+rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item_ptr, rtos_tick_t timeout_ticks)
 {
     if (queue_handle == NULL || item_ptr == NULL)
     {
@@ -230,7 +225,7 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
     {
         /* Non-blocking mode - return immediately */
         rtos_port_exit_critical();
-        log_debug("Queue send failed: queue full (non-blocking)");
+        KLOGD(KEVT_QUEUE_SEND_FULL, 0, 0);
         return RTOS_ERROR_FULL;
     }
 
@@ -239,15 +234,14 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        log_error("Queue send called with no current task!");
+        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
         return RTOS_ERROR_INVALID_STATE;
     }
 
     /* Add to sender wait list (priority-ordered) */
     queue_add_to_waiting_list(&queue->sender_wait_list, current_task, queue);
 
-    log_debug("Task '%s' blocking on queue send (timeout=%lu)",
-              current_task->name ? current_task->name : "unnamed", (unsigned long) timeout_ticks);
+    KLOGD(KEVT_QUEUE_SEND_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
     /* Block the task using kernel helper */
     if (timeout_ticks == RTOS_MAX_DELAY)
@@ -279,8 +273,7 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
         queue_remove_from_waiting_list(&queue->sender_wait_list, current_task);
         rtos_port_exit_critical();
 
-        log_debug("Task '%s' queue send timed out",
-                  current_task->name ? current_task->name : "unnamed");
+        KLOGD(KEVT_QUEUE_SEND_TIMEOUT, current_task->task_id, 0);
         return RTOS_ERROR_TIMEOUT;
     }
 
@@ -289,7 +282,7 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
     {
         /* This shouldn't happen - defensive programming */
         rtos_port_exit_critical();
-        log_error("Queue send: woken but queue still full!");
+        KLOGE(KEVT_QUEUE_SEND_FULL, queue->count, queue->length);
         return RTOS_ERROR_FULL;
     }
 
@@ -299,22 +292,20 @@ copy_data:
 
     /* Advance write pointer (circular buffer) */
     queue->write_ptr = (uint8_t *) queue->write_ptr + queue->item_size;
-    if ((uint8_t *) queue->write_ptr >=
-        (uint8_t *) queue->buffer + (queue->length * queue->item_size))
+    if ((uint8_t *) queue->write_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
     {
         queue->write_ptr = queue->buffer; /* Wrap around */
     }
 
     queue->count++;
 
-    log_debug("Queue item sent (count now %lu)", (unsigned long) queue->count);
+    KLOGD(KEVT_QUEUE_SEND, queue->count, 0);
 
     /* Wake up a waiting receiver if any */
     rtos_tcb_t *waiting_receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
     if (waiting_receiver != NULL)
     {
-        log_debug("Waking waiting receiver '%s'",
-                  waiting_receiver->name ? waiting_receiver->name : "unnamed");
+        KLOGD(KEVT_QUEUE_WAKE_RECV, waiting_receiver->task_id, 0);
 
         rtos_port_exit_critical();
 
@@ -333,8 +324,7 @@ copy_data:
 /**
  * @brief Receive an item from the queue (with proper timeout handling)
  */
-rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
-                                 rtos_tick_t timeout_ticks)
+rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer, rtos_tick_t timeout_ticks)
 {
     if (queue_handle == NULL || buffer == NULL)
     {
@@ -356,7 +346,7 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
     {
         /* Non-blocking mode - return immediately */
         rtos_port_exit_critical();
-        log_debug("Queue receive failed: queue empty (non-blocking)");
+        KLOGD(KEVT_QUEUE_RECV_EMPTY, 0, 0);
         return RTOS_ERROR_EMPTY;
     }
 
@@ -365,15 +355,14 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        log_error("Queue receive called with no current task!");
+        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
         return RTOS_ERROR_INVALID_STATE;
     }
 
     /* Add to receiver wait list (priority-ordered) */
     queue_add_to_waiting_list(&queue->receiver_wait_list, current_task, queue);
 
-    log_debug("Task '%s' blocking on queue receive (timeout=%lu)",
-              current_task->name ? current_task->name : "unnamed", (unsigned long) timeout_ticks);
+    KLOGD(KEVT_QUEUE_RECV_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
     /* Block the task using kernel helper */
     if (timeout_ticks == RTOS_MAX_DELAY)
@@ -405,8 +394,7 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
         queue_remove_from_waiting_list(&queue->receiver_wait_list, current_task);
         rtos_port_exit_critical();
 
-        log_debug("Task '%s' queue receive timed out",
-                  current_task->name ? current_task->name : "unnamed");
+        KLOGD(KEVT_QUEUE_RECV_TIMEOUT, current_task->task_id, 0);
         return RTOS_ERROR_TIMEOUT;
     }
 
@@ -415,7 +403,7 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
     {
         /* This shouldn't happen - defensive programming */
         rtos_port_exit_critical();
-        log_error("Queue receive: woken but queue still empty!");
+        KLOGE(KEVT_QUEUE_RECV_EMPTY, queue->count, queue->length);
         return RTOS_ERROR_EMPTY;
     }
 
@@ -425,22 +413,20 @@ copy_data:
 
     /* Advance read pointer (circular buffer) */
     queue->read_ptr = (uint8_t *) queue->read_ptr + queue->item_size;
-    if ((uint8_t *) queue->read_ptr >=
-        (uint8_t *) queue->buffer + (queue->length * queue->item_size))
+    if ((uint8_t *) queue->read_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
     {
         queue->read_ptr = queue->buffer; /* Wrap around */
     }
 
     queue->count--;
 
-    log_debug("Queue item received (count now %lu)", (unsigned long) queue->count);
+    KLOGD(KEVT_QUEUE_RECV, queue->count, 0);
 
     /* Wake up a waiting sender if any */
     rtos_tcb_t *waiting_sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
     if (waiting_sender != NULL)
     {
-        log_debug("Waking waiting sender '%s'",
-                  waiting_sender->name ? waiting_sender->name : "unnamed");
+        KLOGD(KEVT_QUEUE_WAKE_SEND, waiting_sender->task_id, 0);
 
         rtos_port_exit_critical();
 
@@ -559,13 +545,13 @@ rtos_status_t rtos_queue_reset(rtos_queue_handle_t queue_handle)
         rtos_tcb_t *sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
         if (sender != NULL)
         {
-            log_debug("Queue reset: waking sender '%s'", sender->name ? sender->name : "unnamed");
+            KLOGD(KEVT_QUEUE_WAKE_SEND, sender->task_id, 0);
             rtos_kernel_task_unblock(sender);
         }
     }
 
     rtos_port_exit_critical();
 
-    log_info("Queue reset");
+    KLOGI(KEVT_QUEUE_RESET, 0, 0);
     return RTOS_SUCCESS;
 }

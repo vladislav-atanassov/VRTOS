@@ -7,7 +7,7 @@
 
 #include "config.h"
 #include "kernel_priv.h"
-#include "log.h"
+#include "klog.h"
 #include "port_priv.h" /* chip-specific constants (must come first) */
 #include "profiling.h"
 #define PORT_VERIFY_CONTRACT
@@ -54,11 +54,7 @@ rtos_status_t rtos_port_init(void)
     g_critical_nesting = 0;
     g_critical_basepri = 0;
 
-    log_info("Interrupt priorities configured:");
-    log_info("  Critical:  0x%02X (never masked)", PORT_IRQ_PRIORITY_CRITICAL);
-    log_info("  High:      0x%02X (preempts RTOS)", PORT_IRQ_PRIORITY_HIGH);
-    log_info("  Kernel:    0x%02X (SysTick)", PORT_IRQ_PRIORITY_KERNEL);
-    log_info("  PendSV:    0x%02X (context switch)", PORT_IRQ_PRIORITY_PENDSV);
+    KLOGI(KEVT_PORT_INIT, PORT_IRQ_PRIORITY_CRITICAL, PORT_IRQ_PRIORITY_PENDSV);
 
     return RTOS_SUCCESS;
 }
@@ -74,7 +70,7 @@ void rtos_port_start_systick(void)
     /* Use CMSIS SysTick functions for reliability */
     if (SysTick_Config(reload_value) != 0)
     {
-        log_error("SysTick configuration failed!");
+        KLOGE(KEVT_SYSTICK_FAIL, reload_value, 0);
         return;
     }
 
@@ -217,10 +213,14 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 
     rtos_port_start_systick();
 
+#ifdef RTOS_PROFILING_SYSTEM_ENABLED
+    rtos_profiling_init();
+#endif
+
     /* Trigger SVC to start first task */
     __asm volatile("svc 0");
 
-    log_error("Should never reach here");
+    KLOGE(KEVT_ERROR_GENERIC, 0, 0);
 
     /* Should never reach here */
     while (1)

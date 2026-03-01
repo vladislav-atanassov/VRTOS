@@ -15,9 +15,7 @@ extern "C"
 {
 #endif
 
-/* =============================================================================
- * PROFILING CONFIGURATION
- * ============================================================================= */
+/* ========================= PROFILING CONFIGURATION ======================== */
 
 /**
  * @brief Enable/disable RTOS system profiling
@@ -46,9 +44,7 @@ extern "C"
 #define RTOS_PROFILING_USER_ENABLED 1
 #endif
 
-/* =============================================================================
- * PROFILING DATA STRUCTURES
- * ============================================================================= */
+/* ======================== PROFILING DATA STRUCTURES ======================= */
 
 /**
  * @brief Profiling statistics structure
@@ -79,9 +75,7 @@ typedef struct
     uint32_t avg_us;
 } rtos_profile_snapshot_t;
 
-/* =============================================================================
- * PROFILING API FUNCTIONS
- * ============================================================================= */
+/* ========================= PROFILING API FUNCTIONS ======================== */
 
 /**
  * @brief Initialize profiling (Enable DWT Cycle Counter)
@@ -127,10 +121,9 @@ void rtos_profiling_snapshot(const rtos_profile_stat_t *stat, rtos_profile_snaps
  * @note Only prints stats if RTOS_PROFILING_SYSTEM_ENABLED is 1
  */
 void rtos_profiling_report_system_stats(void);
+void rtos_profiling_reset_system_stats(void);
 
-/* =============================================================================
- * CORE PROFILING MACROS
- * ============================================================================= */
+/* ========================= CORE PROFILING MACROS ========================== */
 
 #define RTOS_PROFILE_START(var_name) uint32_t var_name##_start = rtos_profiling_get_cycles()
 
@@ -145,11 +138,7 @@ void rtos_profiling_report_system_stats(void);
 #define RTOS_PROFILE_NOOP_START(var_name)         ((void) 0)
 #define RTOS_PROFILE_NOOP_END(var_name, stat_ptr) ((void) 0)
 
-/* =============================================================================
- * SYSTEM PROFILING MACROS (RTOS Internal Use)
- *
- * Controlled by RTOS_PROFILING_SYSTEM_ENABLED
- * ============================================================================= */
+/* ========================= SYSTEM PROFILING MACROS ======================== */
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
 #define RTOS_SYS_PROFILE_START(var_name)         RTOS_PROFILE_START(var_name)
@@ -159,11 +148,7 @@ void rtos_profiling_report_system_stats(void);
 #define RTOS_SYS_PROFILE_END(var_name, stat_ptr) RTOS_PROFILE_NOOP_END(var_name, stat_ptr)
 #endif
 
-/* =============================================================================
- * USER/APPLICATION PROFILING MACROS
- *
- * Controlled by RTOS_PROFILING_USER_ENABLED
- * ============================================================================= */
+/* ==================== USER/APPLICATION PROFILING MACROS =================== */
 
 #if RTOS_PROFILING_USER_ENABLED
 #define RTOS_USER_PROFILE_START(var_name)         RTOS_PROFILE_START(var_name)
@@ -173,9 +158,7 @@ void rtos_profiling_report_system_stats(void);
 #define RTOS_USER_PROFILE_END(var_name, stat_ptr) RTOS_PROFILE_NOOP_END(var_name, stat_ptr)
 #endif
 
-/* =============================================================================
- * SYSTEM PROFILING STATISTICS (RTOS Internal)
- * ============================================================================= */
+/* ======================= SYSTEM PROFILING STATISTICS ====================== */
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
 extern rtos_profile_stat_t g_prof_context_switch;

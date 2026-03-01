@@ -8,9 +8,12 @@
 #include "VRTOS.h"
 #include "config.h"
 #include "hardware_env.h"
-#include "log.h"
+#include "log_flush_task.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
+#include "uart_tx.h"
+#include "ulog.h"
+
 
 /**
  * @file main.c
@@ -54,7 +57,7 @@ static void fpu_task_a(void *param)
     uint32_t       iteration = 0;
     uint32_t       errors    = 0;
 
-    log_info("[FPU-A] Started (init=1.0, op: x*1.01+0.5)");
+    ulog_info("[FPU-A] Started (init=1.0, op: x*1.01+0.5)");
 
     while (1)
     {
@@ -67,8 +70,8 @@ static void fpu_task_a(void *param)
         if (float_abs((float) fpu_a - expected) > FPU_EPSILON)
         {
             errors++;
-            log_error("[FPU-A] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)", (unsigned long) iteration,
-                      (double) fpu_a, (double) expected, (unsigned long) errors);
+            ulog_error("[FPU-A] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)",
+                       (unsigned long) iteration, (double) fpu_a, (double) expected, (unsigned long) errors);
             /* Resync so we keep checking */
             expected = (float) fpu_a;
         }
@@ -76,8 +79,8 @@ static void fpu_task_a(void *param)
         /* Periodic status */
         if ((iteration % 100) == 0)
         {
-            log_info("[FPU-A] iter=%lu val=%.4f errors=%lu", (unsigned long) iteration, (double) fpu_a,
-                     (unsigned long) errors);
+            ulog_info("[FPU-A] iter=%lu val=%.4f errors=%lu", (unsigned long) iteration, (double) fpu_a,
+                      (unsigned long) errors);
             /* Reset to prevent overflow */
             fpu_a    = 1.0f;
             expected = 1.0f;
@@ -99,7 +102,7 @@ static void fpu_task_b(void *param)
     uint32_t       iteration = 0;
     uint32_t       errors    = 0;
 
-    log_info("[FPU-B] Started (init=100.0, op: x*0.99+1.0)");
+    ulog_info("[FPU-B] Started (init=100.0, op: x*0.99+1.0)");
 
     while (1)
     {
@@ -110,15 +113,15 @@ static void fpu_task_b(void *param)
         if (float_abs((float) fpu_b - expected) > FPU_EPSILON)
         {
             errors++;
-            log_error("[FPU-B] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)", (unsigned long) iteration,
-                      (double) fpu_b, (double) expected, (unsigned long) errors);
+            ulog_error("[FPU-B] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)",
+                       (unsigned long) iteration, (double) fpu_b, (double) expected, (unsigned long) errors);
             expected = (float) fpu_b;
         }
 
         if ((iteration % 100) == 0)
         {
-            log_info("[FPU-B] iter=%lu val=%.4f errors=%lu", (unsigned long) iteration, (double) fpu_b,
-                     (unsigned long) errors);
+            ulog_info("[FPU-B] iter=%lu val=%.4f errors=%lu", (unsigned long) iteration, (double) fpu_b,
+                      (unsigned long) errors);
         }
 
         rtos_delay_ms(FPU_TASK_DELAY_MS);
@@ -137,7 +140,7 @@ static void fpu_task_c(void *param)
     uint32_t       iteration = 0;
     uint32_t       errors    = 0;
 
-    log_info("[FPU-C] Started (init=0.5, op: x - x^3/6)");
+    ulog_info("[FPU-C] Started (init=0.5, op: x - x^3/6)");
 
     while (1)
     {
@@ -152,15 +155,15 @@ static void fpu_task_c(void *param)
         if (float_abs((float) fpu_c - expected) > FPU_EPSILON)
         {
             errors++;
-            log_error("[FPU-C] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)", (unsigned long) iteration,
-                      (double) fpu_c, (double) expected, (unsigned long) errors);
+            ulog_error("[FPU-C] CORRUPTION at iter %lu: got %.4f, expected %.4f (errors=%lu)",
+                       (unsigned long) iteration, (double) fpu_c, (double) expected, (unsigned long) errors);
             expected = (float) fpu_c;
         }
 
         if ((iteration % 100) == 0)
         {
-            log_info("[FPU-C] iter=%lu val=%.6f errors=%lu", (unsigned long) iteration, (double) fpu_c,
-                     (unsigned long) errors);
+            ulog_info("[FPU-C] iter=%lu val=%.6f errors=%lu", (unsigned long) iteration, (double) fpu_c,
+                      (unsigned long) errors);
         }
 
         rtos_delay_ms(FPU_TASK_DELAY_MS);
@@ -192,21 +195,21 @@ __attribute__((__noreturn__)) int main(void)
     hardware_env_config();
     log_uart_init(LOG_LEVEL_INFO);
 
-    log_info("\n\n");
-    log_info("====================================");
-    log_info("  FPU Context Switch Verification");
-    log_info("====================================");
-    log_info("3 tasks with different FPU operations");
-    log_info("Each verifies its FPU state survives");
-    log_info("context switches. Errors = corruption.");
-    log_info("====================================\n");
-
     status = rtos_init();
     if (status != RTOS_SUCCESS)
     {
-        log_error("RTOS init failed: %d", status);
         indicate_system_failure();
     }
+
+    ulog_init(ULOG_LEVEL_INFO);
+
+    ulog_info("====================================");
+    ulog_info("  FPU Context Switch Verification");
+    ulog_info("====================================");
+    ulog_info("3 tasks with different FPU operations");
+    ulog_info("Each verifies its FPU state survives");
+    ulog_info("context switches. Errors = corruption.");
+    ulog_info("====================================");
 
     /* Create FPU tasks at the same priority for maximum context switching */
     status = rtos_task_create(fpu_task_a, "FPU-A", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, FPU_TASK_PRIORITY, &task_handle);
@@ -225,12 +228,16 @@ __attribute__((__noreturn__)) int main(void)
     if (status != RTOS_SUCCESS)
         indicate_system_failure();
 
-    log_info("All FPU test tasks created. Starting scheduler...\n");
+    /* Create log flush task (lowest priority) */
+    status = rtos_task_create(log_flush_task, "KLOG", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, &task_handle);
+    if (status != RTOS_SUCCESS)
+        indicate_system_failure();
+
+    ulog_info("All FPU test tasks created. Starting scheduler...");
 
     status = rtos_start_scheduler();
 
     /* Should never reach here */
-    log_error("Scheduler returned unexpectedly!");
     indicate_system_failure();
 
     while (1)

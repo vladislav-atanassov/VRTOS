@@ -8,7 +8,7 @@
 #include "semaphore.h"
 
 #include "VRTOS.h"
-#include "log.h"
+#include "klog.h"
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
@@ -126,8 +126,7 @@ static rtos_tcb_t *sem_pop_highest_priority_waiter(rtos_semaphore_t *sem)
 /**
  * @brief Initialize a semaphore
  */
-rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_count,
-                                      uint32_t max_count)
+rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_count, uint32_t max_count)
 {
     if (sem == NULL)
     {
@@ -148,8 +147,7 @@ rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_co
 
     rtos_port_exit_critical();
 
-    log_debug("Semaphore initialized: count=%lu, max=%lu", (unsigned long) initial_count,
-              (unsigned long) max_count);
+    KLOGD(KEVT_SEM_INIT, initial_count, max_count);
 
     return RTOS_SEM_OK;
 }
@@ -171,7 +169,7 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     {
         sem->count--;
         rtos_port_exit_critical();
-        log_debug("Semaphore acquired (count now %lu)", (unsigned long) sem->count);
+        KLOGD(KEVT_SEM_ACQUIRE, sem->count, 0);
         return RTOS_SEM_OK;
     }
 
@@ -187,15 +185,14 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        log_error("Semaphore wait called with no current task!");
+        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
         return RTOS_SEM_ERR_INVALID;
     }
 
     /* Add to waiting list (priority-ordered) */
     sem_add_to_waiting_list(sem, current_task);
 
-    log_debug("Task '%s' blocking on semaphore (timeout=%lu)",
-              current_task->name ? current_task->name : "unnamed", (unsigned long) timeout_ticks);
+    KLOGD(KEVT_SEM_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
     /* Block the task with timeout */
     if (timeout_ticks == RTOS_SEM_MAX_WAIT)
@@ -222,14 +219,12 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
         /* Still on waiting list = timeout occurred */
         sem_remove_from_waiting_list(sem, current_task);
         rtos_port_exit_critical();
-        log_debug("Task '%s' semaphore wait timed out",
-                  current_task->name ? current_task->name : "unnamed");
+        KLOGD(KEVT_SEM_TIMEOUT, current_task->task_id, 0);
         return RTOS_SEM_ERR_TIMEOUT;
     }
 
     rtos_port_exit_critical();
-    log_debug("Task '%s' semaphore acquired after wait",
-              current_task->name ? current_task->name : "unnamed");
+    KLOGD(KEVT_SEM_ACQUIRE, current_task->task_id, 1);
     return RTOS_SEM_OK;
 }
 
@@ -250,7 +245,7 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     if (waiter != NULL)
     {
         /* Wake the highest priority waiter instead of incrementing count */
-        log_debug("Semaphore signal waking task '%s'", waiter->name ? waiter->name : "unnamed");
+        KLOGD(KEVT_SEM_WAKE, waiter->task_id, 0);
         rtos_port_exit_critical();
 
         /* Unblock the waiting task */
@@ -262,15 +257,14 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     if (sem->max_count != 0 && sem->count >= sem->max_count)
     {
         rtos_port_exit_critical();
-        log_error("Semaphore overflow! count=%lu, max=%lu", (unsigned long) sem->count,
-                  (unsigned long) sem->max_count);
+        KLOGE(KEVT_SEM_OVERFLOW, sem->count, sem->max_count);
         return RTOS_SEM_ERR_OVERFLOW;
     }
 
     sem->count++;
     rtos_port_exit_critical();
 
-    log_debug("Semaphore signaled (count now %lu)", (unsigned long) sem->count);
+    KLOGD(KEVT_SEM_SIGNAL, sem->count, 0);
     return RTOS_SEM_OK;
 }
 
