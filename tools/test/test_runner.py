@@ -282,10 +282,16 @@ def main():
     log_file = os.path.join(output_dir, f"log_{args.test_name}_{timestamp}.txt")
     csv_file = os.path.join(output_dir, f"log_{args.test_name}_{timestamp}.csv")
     
+    scheduler_type_map = {
+        'test_scheduler_cooperative': 'cooperative',
+        'test_scheduler_preemptive': 'preemptive',
+        'test_scheduler_rr': 'round_robin',
+    }
+    scheduler_type = scheduler_type_map.get(args.test_name, args.test_name.replace('test_scheduler_', ''))
+    
     # Expected timeline path
     expected_file = os.path.join(
-        project_dir, "tools", "test", 
-        f"expected_timeline_{args.test_name.replace('test_scheduler_', '')}.csv"
+        project_dir, "tests", "scheduler", scheduler_type, "expected_timeline.csv"
     )
     
     print("=" * 50)
