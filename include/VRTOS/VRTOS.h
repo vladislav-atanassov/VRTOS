@@ -64,6 +64,16 @@ void rtos_delay_ticks(rtos_tick_t ticks);
 void rtos_delay_ms(uint32_t ms);
 
 /**
+ * @brief Delay a task until a specified time
+ *
+ * @param[in,out] prev_wake_time Pointer to a variable that holds the time at which the task was last unblocked.
+ *                               The variable must be initialized with the current time prior to its first use.
+ *                               Following this the variable is automatically updated within rtos_delay_until().
+ * @param time_increment The cycle time period. The task will be unblocked at time *prev_wake_time + time_increment.
+ */
+void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increment);
+
+/**
  * @brief Force a task yield (context switch)
  *
  * This function forces the scheduler to run and potentially switch tasks.

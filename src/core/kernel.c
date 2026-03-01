@@ -171,6 +171,50 @@ void rtos_delay_ms(uint32_t ms)
 }
 
 /**
+ * @brief Delay a task until a specified time
+ */
+void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increment)
+{
+    if (prev_wake_time == NULL || time_increment == 0)
+        return;
+
+    rtos_port_enter_critical();
+
+    rtos_tick_t current_time = g_kernel.tick_count;
+    rtos_tick_t elapsed      = current_time - *prev_wake_time;
+    bool        should_delay = false;
+
+    if (elapsed < time_increment)
+    {
+        rtos_tick_t ticks_to_delay = time_increment - elapsed;
+
+        if (g_kernel.current_task == NULL)
+        {
+            KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        }
+        else
+        {
+            /* Block current task */
+            g_kernel.current_task->state = RTOS_TASK_STATE_BLOCKED;
+
+            /* Use scheduler-specific delayed list management */
+            rtos_scheduler_add_to_delayed_list(g_kernel.current_task, ticks_to_delay);
+            should_delay = true;
+        }
+    }
+
+    /* Update the previous wake time to be the exact target time */
+    *prev_wake_time = *prev_wake_time + time_increment;
+
+    rtos_port_exit_critical();
+
+    if (should_delay)
+    {
+        rtos_yield();
+    }
+}
+
+/**
  * @brief Force task yield
  */
 void rtos_yield(void)
