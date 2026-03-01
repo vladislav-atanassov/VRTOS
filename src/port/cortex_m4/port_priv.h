@@ -44,6 +44,9 @@
 /** BASEPRI threshold used to mask kernel-level and lower interrupts. */
 #define PORT_MAX_INTERRUPT_PRIORITY PORT_IRQ_PRIORITY_KERNEL
 
+/** DWT Cycle Count Register address (Cortex-M debug unit). */
+#define PORT_DWT_CYCCNT_ADDR 0xE0001004
+
 /** xPSR initial value (Thumb bit set). */
 #define PORT_INITIAL_XPSR 0x01000000
 

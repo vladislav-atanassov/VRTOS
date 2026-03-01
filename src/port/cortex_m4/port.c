@@ -286,7 +286,7 @@ __attribute__((naked)) void PendSV_Handler(void)
     __asm volatile(
 #if RTOS_PROFILING_SYSTEM_ENABLED
         /* Capture DWT->CYCCNT at entry and store in global */
-        "LDR     R1, =%[cyccnt_addr]         \n"
+        "LDR     R1, =%[cyccnt_addr]        \n"
         "LDR     R2, [R1]                   \n" /* R2 = start cycle count */
         "LDR     R3, =g_pendsv_start_cycles \n"
         "STR     R2, [R3]                   \n"
@@ -339,7 +339,7 @@ __attribute__((naked)) void PendSV_Handler(void)
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
         /* Compute full PendSV elapsed cycles and store */
-        "LDR     R1, =%[cyccnt_addr]         \n"
+        "LDR     R1, =%[cyccnt_addr]        \n"
         "LDR     R2, [R1]                   \n" /* R2 = end cycle count */
         "LDR     R1, =g_pendsv_start_cycles \n"
         "LDR     R3, [R1]                   \n" /* R3 = start cycle count */
@@ -352,10 +352,9 @@ __attribute__((naked)) void PendSV_Handler(void)
         "ISB                                \n"
         "BX      R14                        \n" /* Per-task EXC_RETURN */
         :
-        : [max_prio] "i"(PORT_MAX_INTERRUPT_PRIORITY)
+        : [max_prio] "i"(PORT_MAX_INTERRUPT_PRIORITY),
 #if RTOS_PROFILING_SYSTEM_ENABLED
-              ,
-          [cyccnt_addr] "i"(0xE0001004)
+          [cyccnt_addr] "i"(PORT_DWT_CYCCNT_ADDR)
 #endif
         : "memory");
 }
