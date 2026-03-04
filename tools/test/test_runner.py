@@ -12,12 +12,13 @@ Usage:
 
 import argparse
 import csv
+
 import os
 import re
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
+
 from datetime import datetime
 from pathlib import Path
 
@@ -25,9 +26,8 @@ from pathlib import Path
 DEFAULT_PIO_PATH = os.path.expanduser(r"~\.platformio\penv\Scripts\platformio.exe")
 
 # Test configuration
-DEFAULT_TEST_DURATION_SEC = 10
+DEFAULT_TEST_DURATION_SEC = 20
 DEFAULT_OUTPUT_DIR = os.path.join("logs", "tests")
-DEFAULT_TOLERANCE_MS = 50
 
 
 # =================== Log Parsing ===================
@@ -78,85 +78,63 @@ def write_csv(entries: list[dict], output_path: str):
         writer.writerows(entries)
 
 
-# =================== Timeline Analysis ===================
+# =================== Verdict Analysis (invariant-based tests) ===================
 
-@dataclass
-class TimelineEvent:
-    timestamp_ms: int
-    task_name: str
-    event: str
-
-
-def load_expected_timeline(csv_path: str) -> list[TimelineEvent]:
-    """Load expected timeline from CSV."""
-    if not os.path.exists(csv_path):
-        return []
-    events = []
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            events.append(TimelineEvent(
-                timestamp_ms=int(row['timestamp_ms']),
-                task_name=row['task_name'],
-                event=row['event']
-            ))
-    return sorted(events, key=lambda e: e.timestamp_ms)
+VERDICT_TESTS = {
+    'test_scheduler_preemptive_state',
+    'test_scheduler_rr_state',
+    'test_scheduler_cooperative_state',
+    'test_mutex_state',
+    'test_semaphore_state',
+    'test_queue_state',
+    'test_task_state_transitions',
+}
 
 
-def analyze_timeline(entries: list[dict], expected_path: str, tolerance_ms: int) -> tuple[bool, str]:
-    """Analyze parsed log entries against expected timeline."""
-    # Extract task events
-    task_events = [e for e in entries if e['level'] == 'TASK']
-    
-    if not task_events:
-        return False, "No task events found in log"
-    
-    # Load expected timeline if exists
-    expected = load_expected_timeline(expected_path)
-    
-    # Generate summary
+def analyze_verdict(entries: list[dict]) -> tuple[bool, str]:
+    """Analyze parsed log entries for RESULT verdict (PASS / FAIL:N)."""
     lines = []
     lines.append("=" * 50)
-    lines.append("TEST RESULTS")
+    lines.append("VERDICT RESULTS")
     lines.append("=" * 50)
-    
-    # Count events by task
-    task_counts = {}
-    for e in task_events:
-        name = e['context']
-        task_counts[name] = task_counts.get(name, 0) + 1
-    
-    lines.append(f"\nTask Events Summary:")
-    for name, count in sorted(task_counts.items()):
-        lines.append(f"  {name}: {count} events")
-    
-    # Time range
-    if task_events:
-        first_ts = task_events[0]['timestamp_ms']
-        last_ts = task_events[-1]['timestamp_ms']
-        lines.append(f"\nTime Range: {first_ts}ms - {last_ts}ms (duration: {last_ts - first_ts}ms)")
-    
-    # Compare with expected if available
-    if expected:
-        matched = 0
-        for exp in expected:
-            for act in task_events:
-                if (act['context'] == exp.task_name and 
-                    act['event'] == exp.event and
-                    abs(act['timestamp_ms'] - exp.timestamp_ms) <= tolerance_ms):
-                    matched += 1
-                    break
-        
-        lines.append(f"\nExpected Events: {len(expected)}")
-        lines.append(f"Matched (±{tolerance_ms}ms): {matched}")
-        lines.append(f"Result: {'PASS' if matched == len(expected) else 'FAIL'}")
-        passed = matched == len(expected)
+
+    # Count assertion results
+    pass_count = 0
+    fail_count = 0
+    for e in entries:
+        if e['event'] == 'ASSERT_PASS':
+            pass_count += 1
+        elif e['event'] == 'ASSERT_FAIL':
+            fail_count += 1
+
+    lines.append(f"\nAssertions: {pass_count} passed, {fail_count} failed")
+
+    # Find the RESULT line
+    result_entry = None
+    for e in entries:
+        if e['event'] == 'RESULT':
+            result_entry = e
+            break
+
+    if result_entry is None:
+        lines.append("\n[!] No RESULT line found — test may have timed out without verdict")
+        lines.append("Result: FAIL (no verdict)")
+        lines.append("=" * 50)
+        return False, "\n".join(lines)
+
+    verdict = result_entry['context'].strip()
+    if verdict == 'PASS':
+        lines.append(f"\nVerdict: PASS")
+        passed = True
+    elif verdict.startswith('FAIL'):
+        lines.append(f"\nVerdict: {verdict}")
+        passed = False
     else:
-        lines.append(f"\nNo expected timeline found - showing captured events only")
-        passed = True  # No comparison = pass
-    
+        lines.append(f"\nUnexpected verdict value: {verdict}")
+        passed = False
+
+    lines.append(f"Result: {'PASS' if passed else 'FAIL'}")
     lines.append("=" * 50)
-    
     return passed, "\n".join(lines)
 
 
@@ -220,12 +198,29 @@ def capture_serial(pio_path: str, project_dir: str, environment: str,
                     output_lines.append(line)
                     print(line, end='')
                     
-                    # Check if test completed (TIMEOUT event detected)
-                    if '\tTIMEOUT\t' in line or ',TIMEOUT,' in line:
-                        print("\n[*] Test TIMEOUT detected, stopping capture...")
+                    # Stop on RESULT (verdict tests emit this before TIMEOUT)
+                    if '\tRESULT\t' in line or ',RESULT,' in line:
+                        print("\n[*] RESULT detected, stopping capture...")
                         test_complete = True
-                        # Give a moment for any final output
-                        time.sleep(0.5)
+                        break
+                    
+                    # Stop on TIMEOUT, then wait for RESULT
+                    if '\tTIMEOUT\t' in line or ',TIMEOUT,' in line:
+                        print("\n[*] Test TIMEOUT detected, waiting for verdict...")
+                        test_complete = True
+                        deadline = time.time() + 5.0
+                        while time.time() < deadline:
+                            if process.poll() is not None:
+                                break
+                            try:
+                                extra = process.stdout.readline()
+                                if extra:
+                                    output_lines.append(extra)
+                                    print(extra, end='')
+                                    if '\tRESULT\t' in extra or ',RESULT,' in extra:
+                                        break
+                            except Exception:
+                                pass
                         break
             except Exception:
                 pass
@@ -258,8 +253,7 @@ def main():
     parser.add_argument("test_name", help="Test environment name (e.g., test_scheduler_rr)")
     parser.add_argument("--duration", type=int, default=DEFAULT_TEST_DURATION_SEC,
                         help=f"Capture duration in seconds (default: {DEFAULT_TEST_DURATION_SEC})")
-    parser.add_argument("--tolerance", type=int, default=DEFAULT_TOLERANCE_MS,
-                        help=f"Timeline tolerance in ms (default: {DEFAULT_TOLERANCE_MS})")
+
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Output directory")
     parser.add_argument("--skip-upload", action="store_true", help="Skip firmware upload")
     parser.add_argument("--skip-analysis", action="store_true", help="Skip timeline analysis")
@@ -282,17 +276,7 @@ def main():
     log_file = os.path.join(output_dir, f"log_{args.test_name}_{timestamp}.txt")
     csv_file = os.path.join(output_dir, f"log_{args.test_name}_{timestamp}.csv")
     
-    scheduler_type_map = {
-        'test_scheduler_cooperative': 'cooperative',
-        'test_scheduler_preemptive': 'preemptive',
-        'test_scheduler_rr': 'round_robin',
-    }
-    scheduler_type = scheduler_type_map.get(args.test_name, args.test_name.replace('test_scheduler_', ''))
-    
-    # Expected timeline path
-    expected_file = os.path.join(
-        project_dir, "tests", "scheduler", scheduler_type, "expected_timeline.csv"
-    )
+
     
     print("=" * 50)
     print(f"VRTOS TEST: {args.test_name}")
@@ -320,8 +304,8 @@ def main():
     
     # Step 4: Analyze
     if not args.skip_analysis:
-        print(f"\n[*] Analyzing timeline...")
-        passed, report = analyze_timeline(entries, expected_file, args.tolerance)
+        print(f"\n[*] Analyzing verdict...")
+        passed, report = analyze_verdict(entries)
         print(report)
         
         if not passed:
