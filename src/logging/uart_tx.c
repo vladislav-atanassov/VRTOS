@@ -43,7 +43,7 @@ void log_uart_init(log_level_t level)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     g_huart2.Instance          = USART2;
-    g_huart2.Init.BaudRate     = 115200;
+    g_huart2.Init.BaudRate     = 921600;
     g_huart2.Init.WordLength   = UART_WORDLENGTH_8B;
     g_huart2.Init.StopBits     = UART_STOPBITS_1;
     g_huart2.Init.Parity       = UART_PARITY_NONE;
