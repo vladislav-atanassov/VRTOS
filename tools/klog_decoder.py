@@ -41,7 +41,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="KLog serial decoder")
     parser.add_argument("--port", default="COM3", help="Serial port (default: COM3)")
     parser.add_argument("--baud", type=int, default=115200, help="Baud rate (default: 115200)")
-    parser.add_argument("--output", default=os.path.join("logs", "klogs"), help="Output directory (default: logs/klogs/)")
+    default_out = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "logs", "klogs"))
+    parser.add_argument("--output", default=default_out, help="Output directory (default: logs/klogs/)")
     parser.add_argument("--filter-level", default=None, choices=["F", "E", "W", "I", "D", "T"],
                         help="Minimum level to display (default: show all)")
     return parser.parse_args()
