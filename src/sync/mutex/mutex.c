@@ -147,7 +147,23 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         {
             KLOGD(KEVT_MUTEX_PIP_BOOST, target_task->task_id, boost_prio);
 
-            target_task->priority = boost_prio;
+            /*
+             * If the boosted task is currently in the READY list it is stored
+             * in the bucket indexed by its old priority.  Changing the priority
+             * field alone would leave the task in the wrong bucket, causing the
+             * scheduler to either miss it or to corrupt the list on the next
+             * remove.  Re-insert it at the new priority level.
+             */
+            if (target_task->state == RTOS_TASK_STATE_READY)
+            {
+                rtos_scheduler_remove_from_ready_list(target_task);
+                target_task->priority = boost_prio;
+                rtos_scheduler_add_to_ready_list(target_task);
+            }
+            else
+            {
+                target_task->priority = boost_prio;
+            }
         }
         else
         {

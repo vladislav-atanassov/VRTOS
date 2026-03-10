@@ -91,16 +91,28 @@ struct rtos_scheduler {
 
 ## Performance (STM32F446RE @ 16 MHz)
 
-Captured from `profiling_demo` over ~300k context switches:
+Captured from system profiling and the automated benchmark suite:
+
+### Kernel Core Latencies
 
 | Metric | Min | Max | Avg | Description |
 |--------|-----|-----|-----|-------------|
-| **ContextSwitch** | 377 cyc (23 µs) | 1192 cyc (74 µs) | 530 cyc (33 µs) | Register save/restore only |
+| **ContextSwitch** | 451 cyc (28 µs) | 1214 cyc (75 µs) | 511 cyc (31 µs) | Task yield to restore |
 | **PendSV_Full** | 553 cyc (34 µs) | 1433 cyc (89 µs) | 706 cyc (44 µs) | Full PendSV handler |
 | **Scheduler** | 30 cyc (1 µs) | 765 cyc (47 µs) | 65 cyc (4 µs) | `get_next_task()` decision |
 | **TickHandler** | 350 cyc (21 µs) | 519 cyc (32 µs) | 367 cyc (22 µs) | SysTick ISR processing |
 | **TickJitter** | 0 cyc (0 µs) | 4 cyc (0 µs) | 1 cyc (0 µs) | SysTick timing deviation |
 | **SchedLatency** | 862 cyc (53 µs) | 880 cyc (55 µs) | 862 cyc (53 µs) | Ready → Running delay |
+
+### Synchronization & IPC Primitives
+
+| Primitive | Operation | Min | Max | Avg | Description |
+|-----------|-----------|-----|-----|-----|-------------|
+| **Mutex** | Uncontended | 216 cyc (13 µs) | 898 cyc (56 µs) | 229 cyc (14 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended Wake | 1282 cyc (80 µs) | 2690 cyc (168 µs) | 1341 cyc (83 µs) | Waking a blocked task |
+| **Semaphore** | Uncontended | 181 cyc (11 µs) | 181 cyc (11 µs) | 181 cyc (11 µs) | Fast-path take/give |
+| **Semaphore** | Wake Latency | 1247 cyc (77 µs) | 1247 cyc (77 µs) | 1247 cyc (77 µs) | Waking a blocked task |
+| **Queue** | Delivery | 1424 cyc (89 µs) | 2800 cyc (175 µs) | 1531 cyc (95 µs) | Send to blocked receiver |
 
 ## Scheduling Policies
 
