@@ -10,6 +10,8 @@
 
 #include "rtos_types.h"
 
+#include <stdbool.h>
+
 /**
  * @file task.h
  * @brief Task Management API
@@ -68,6 +70,16 @@ rtos_task_state_t rtos_task_get_state(rtos_task_handle_t task_handle);
 rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle);
 
 /**
+ * @brief Get task name by task ID
+ *
+ * @param task_id Task identifier
+ * @return Task name string, or "?" if invalid
+ */
+const char *rtos_task_get_name(rtos_task_id_t task_id);
+
+/* =================== Task State Management =================== */
+
+/**
  * @brief Suspend a task
  *
  * @param task_handle Task to suspend (NULL = suspend current task)
@@ -91,13 +103,73 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle);
  */
 bool rtos_task_check_stack(rtos_task_handle_t task_handle);
 
+typedef enum
+{
+    RTOS_NOTIFY_ACTION_NONE = 0,  /**< Just set pending, don't modify value */
+    RTOS_NOTIFY_ACTION_SET_BITS,  /**< OR value into notification_value */
+    RTOS_NOTIFY_ACTION_INCREMENT, /**< notification_value++ */
+    RTOS_NOTIFY_ACTION_OVERWRITE  /**< Replace notification_value */
+} rtos_notify_action_t;
+
+typedef enum
+{
+    RTOS_NOTIFY_OK          = RTOS_SUCCESS,
+    RTOS_NOTIFY_ERR_INVALID = RTOS_ERROR_INVALID_PARAM,
+    RTOS_NOTIFY_ERR_TIMEOUT = RTOS_ERROR_TIMEOUT
+} rtos_notify_status_t;
+
+#define RTOS_NOTIFY_MAX_WAIT ((rtos_tick_t) 0xFFFFFFFFU)
+#define RTOS_NOTIFY_NO_WAIT  ((rtos_tick_t) 0U)
+
+/* Bitmask helpers for entry_clear_bits / exit_clear_bits parameters */
+#define RTOS_NOTIFY_CLEAR_NONE ((uint32_t) 0x00000000U) /**< Clear no bits */
+#define RTOS_NOTIFY_CLEAR_ALL  ((uint32_t) 0xFFFFFFFFU) /**< Clear all bits */
+
 /**
- * @brief Get task name by task ID
+ * @brief Send a notification to a task with a specific action.
  *
- * @param task_id Task identifier
- * @return Task name string, or "?" if invalid
+ * Can be called from ISR context. Never blocks the caller.
+ *
+ * @param task    Handle to the target task
+ * @param value   Value to apply (meaning depends on action)
+ * @param action  How to modify the target task's notification value
+ * @return RTOS_NOTIFY_OK on success, RTOS_NOTIFY_ERR_INVALID if task is NULL
  */
-const char *rtos_task_get_name(rtos_task_id_t task_id);
+rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action);
+
+/**
+ * @brief Simplified notify: increment the target's notification value.
+ *
+ * Lightweight binary/counting semaphore replacement.
+ * Equivalent to rtos_task_notify(task, 0, RTOS_NOTIFY_ACTION_INCREMENT).
+ *
+ * @param task  Handle to the target task
+ * @return RTOS_NOTIFY_OK on success
+ */
+rtos_notify_status_t rtos_task_notify_give(rtos_task_handle_t task);
+
+/**
+ * @brief Wait for a notification with bit-level control.
+ *
+ * @param entry_clear_bits  Bits to clear BEFORE checking pending state
+ * @param exit_clear_bits   Bits to clear AFTER successful receive
+ * @param value_out         Receives notification value before exit clear (can be NULL)
+ * @param timeout_ticks     How long to wait (0 = no wait, MAX = forever)
+ * @return RTOS_NOTIFY_OK on success, RTOS_NOTIFY_ERR_TIMEOUT if timed out
+ */
+rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t exit_clear_bits, uint32_t *value_out,
+                                           rtos_tick_t timeout_ticks);
+
+/**
+ * @brief Take a notification (counting semaphore pattern).
+ *
+ * Blocks if notification_value == 0.
+ *
+ * @param clear_on_exit   true = reset value to 0, false = decrement by 1
+ * @param timeout_ticks   How long to wait (0 = no wait, MAX = forever)
+ * @return RTOS_NOTIFY_OK on success, RTOS_NOTIFY_ERR_TIMEOUT if timed out
+ */
+rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeout_ticks);
 
 #ifdef __cplusplus
 }

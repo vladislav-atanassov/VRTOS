@@ -60,7 +60,8 @@ typedef enum
     RTOS_SYNC_TYPE_NONE = 0,
     RTOS_SYNC_TYPE_MUTEX,
     RTOS_SYNC_TYPE_SEMAPHORE,
-    RTOS_SYNC_TYPE_QUEUE
+    RTOS_SYNC_TYPE_QUEUE,
+    RTOS_SYNC_TYPE_NOTIFICATION
 } rtos_sync_type_t;
 
 /* Forward Declarations */

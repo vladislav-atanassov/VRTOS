@@ -101,6 +101,13 @@ typedef enum
     KEVT_SCHED_TIME_SLICE,
     KEVT_SCHED_ROTATE,
 
+    /* Task Notification */
+    KEVT_NOTIFY_SEND = 0x0100,
+    KEVT_NOTIFY_WAIT,
+    KEVT_NOTIFY_BLOCK,
+    KEVT_NOTIFY_TIMEOUT,
+    KEVT_NOTIFY_WAKE,
+
     /* Memory */
     KEVT_STACK_ALLOC_FAIL,
 

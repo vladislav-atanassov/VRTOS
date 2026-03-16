@@ -55,6 +55,10 @@ typedef struct rtos_task_control_block
     void                           *blocked_on;      /**< Sync object task is waiting on */
     rtos_sync_type_t                blocked_on_type; /**< Type of sync object */
 
+    /* Task notification support */
+    uint32_t notification_value;   /**< Notification value (bitfield/counter) */
+    uint8_t  notification_pending; /**< 0 = not pending, 1 = pending */
+
 #if RTOS_PROFILING_SYSTEM_ENABLED
     uint32_t ready_timestamp; /**< DWT cycle count when task became READY */
 #endif
