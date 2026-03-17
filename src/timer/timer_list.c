@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/timer/timer_list.c
- * Description: Timer List Management and Tick Processing
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "VRTOS.h"
 #include "rtos_port.h"
 #include "timer.h"
@@ -85,12 +78,7 @@ void timer_remove_active_list(rtos_timer_t *timer)
     }
 }
 
-/**
- * @brief Process timer tick (Called from Kernel Tick Handler)
- * Checks for expired timers and executes callbacks.
- *
- * Note: Called from ISR context (SysTick), uses ISR-safe critical sections.
- */
+/* Called from SysTick ISR — uses ISR-safe critical sections. */
 void rtos_timer_tick(void)
 {
     uint32_t saved_priority = rtos_port_enter_critical_from_isr();

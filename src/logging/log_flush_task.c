@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/log_flush_task.c
- * Description: Log Flush Task — drains KLog + ULog to UART
- ******************************************************************************/
-
 #include "log_flush_task.h"
 
 #include "VRTOS.h"
@@ -12,23 +7,10 @@
 #include "uart_tx.h"
 #include "ulog.h"
 
-/** ============================================================================
- * EVENT ID → HUMAN-READABLE FORMAT
- *
- * Instead of printing raw hex args, each event type gets a contextual format
- * so the output reads like a narrative.
- * ============================================================================= */
-
-/**
- * @brief Format a single KLog record into a human-readable line.
- *
- * Output examples:
- *   [K/I] TaskCreate    id=1 prio=2               (T00)
- *   [K/D] IdleStart                                (T00)
- *   [K/I] SchedInit                                (ISR)
- *   [K/T] SchedDelayed  id=3 wake=0x0042           (T03)
- *   [K/F] HardFault     lr=0x08001234 psr=0x010000 (ISR)
- */
+/* Output: [K/I] TaskCreate    id=1 prio=2  (T00)
+ *         [K/D] IdleStart                  (T00)
+ *         [K/T] SchedDelayed  id=3 wake=0x0042  (T03)
+ *         [K/F] HardFault     lr=0x08001234 psr=0x010000  (ISR) */
 static void klog_format_record(const klog_record_t *r)
 {
     const char *lvl;
@@ -313,8 +295,6 @@ static void klog_format_record(const klog_record_t *r)
             break;
     }
 }
-
-/* =============================== FLUSH TASK =============================== */
 
 /* Drain batch size — how many records to pull per iteration */
 #define KLOG_FLUSH_BATCH 8

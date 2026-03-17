@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/scheduler/preemptive_sp.c
- * Description: Preemptive static priority-based Scheduler with Integrated List Management
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "preemptive_sp.h"
 
 #include "VRTOS.h"
@@ -15,19 +8,6 @@
 
 #include <string.h>
 
-/**
- * @file preemptive_sp.c
- * @brief Preemptive static priority-based Scheduler Implementation with List Management
- *
- * This implementation includes scheduler-specific list management operations
- * optimized for Preemptive static priority-based Scheduler scheduling.
- */
-
-/* =================== Preemptive static priority-based Scheduler List Management Functions =================== */
-
-/**
- * @brief Add task to Preemptive static priority-based Scheduler ready list (priority-based)
- */
 static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
@@ -44,13 +24,11 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
 
     if (*list_head == NULL)
     {
-        /* First task in this priority level */
         *list_head = task;
         g_preemptive_sp_data.ready_priorities |= (1U << priority);
     }
     else
     {
-        /* Find tail and append */
         rtos_tcb_t *current = *list_head;
         while (current->next != NULL)
         {
@@ -63,9 +41,6 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
     KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
 }
 
-/**
- * @brief Remove task from Preemptive static priority-based Scheduler ready list
- */
 static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
@@ -76,14 +51,12 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
     rtos_priority_t priority  = task->priority;
     rtos_tcb_t    **list_head = &g_preemptive_sp_data.ready_lists[priority];
 
-    /* Remove from linked list */
     if (task->prev != NULL)
     {
         task->prev->next = task->next;
     }
     else
     {
-        /* Task is at head */
         *list_head = task->next;
     }
 
@@ -104,9 +77,6 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
     KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
 }
 
-/**
- * @brief Add task to Preemptive static priority-based Scheduler delayed list (time-sorted)
- */
 static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 {
     if (task == NULL)
@@ -114,10 +84,7 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
         return;
     }
 
-    /* Calculate wakeup time */
-    task->delay_until = rtos_get_tick_count() + delay_ticks;
-
-    /* Insert in time-sorted order */
+    task->delay_until      = rtos_get_tick_count() + delay_ticks;
     rtos_tcb_t **list_head = &g_preemptive_sp_data.delayed_list;
 
     task->next = NULL;
@@ -125,12 +92,10 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
 
     if (*list_head == NULL)
     {
-        /* Empty delayed list */
         *list_head = task;
         return;
     }
 
-    /* Find insertion point (sorted by delay_until) */
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
@@ -140,13 +105,11 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
         current = current->next;
     }
 
-    /* Insert task */
     task->next = current;
     task->prev = prev;
 
     if (prev == NULL)
     {
-        /* Insert at head */
         *list_head = task;
     }
     else
@@ -162,9 +125,6 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
     KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
 }
 
-/**
- * @brief Remove task from Preemptive static priority-based Scheduler delayed list
- */
 static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL)
@@ -174,14 +134,12 @@ static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t t
 
     rtos_tcb_t **list_head = &g_preemptive_sp_data.delayed_list;
 
-    /* Remove from linked list */
     if (task->prev != NULL)
     {
         task->prev->next = task->next;
     }
     else if (*list_head == task)
     {
-        /* Task is at head */
         *list_head = task->next;
     }
 
@@ -196,9 +154,6 @@ static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t t
     KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, 0);
 }
 
-/**
- * @brief Update delayed tasks for Preemptive static priority-based Scheduler
- */
 static void preemptive_sp_update_delayed_tasks_internal(void)
 {
     rtos_tick_t current_tick = rtos_get_tick_count();
@@ -211,7 +166,6 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
 
         if (current_tick >= task->delay_until)
         {
-            /* Task delay expired - move to ready list */
             preemptive_sp_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
 
@@ -236,9 +190,6 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
     }
 }
 
-/**
- * @brief Get highest priority ready task for Preemptive static priority-based Scheduler
- */
 static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
 {
     /* Use bitmask to quickly find highest priority with ready tasks */
@@ -247,7 +198,6 @@ static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
         return NULL; /* No ready tasks */
     }
 
-    /* Find highest set bit (highest priority) */
     for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--)
     {
         if (g_preemptive_sp_data.ready_priorities & (1U << priority))
@@ -259,11 +209,6 @@ static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
     return NULL; /* Shouldn't reach here if bitmask is correct */
 }
 
-/* =================== Preemptive static priority-based Scheduler Interface Implementation =================== */
-
-/**
- * @brief Initialize Preemptive static priority-based Scheduler
- */
 static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -271,22 +216,16 @@ static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    /*Initialize Preemptive static priority-based Scheduler data structures */
     memset(g_preemptive_sp_data.ready_lists, 0, sizeof(g_preemptive_sp_data.ready_lists));
     g_preemptive_sp_data.delayed_list     = NULL;
     g_preemptive_sp_data.ready_priorities = 0;
 
-    /* Set up private data */
     instance->private_data = &g_preemptive_sp_data;
 
     KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
     return RTOS_SUCCESS;
 }
 
-/**
- * @brief Get next task using Preemptive static priority-based Scheduler algorithm (highest
- * priority)
- */
 static rtos_task_handle_t preemptive_sp_get_next_task(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -297,9 +236,6 @@ static rtos_task_handle_t preemptive_sp_get_next_task(rtos_scheduler_instance_t 
     return preemptive_sp_get_highest_priority_ready();
 }
 
-/**
- * @brief Check if Preemptive static priority-based Scheduler preemption is needed
- */
 static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
     if (instance == NULL || new_task == NULL || g_kernel.current_task == NULL)
@@ -311,9 +247,6 @@ static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance, rt
     return (new_task != g_kernel.current_task && new_task->priority > g_kernel.current_task->priority);
 }
 
-/**
- * @brief Handle task completion for Preemptive static priority-based Scheduler
- */
 static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task)
 {
     if (instance == NULL || completed_task == NULL)
@@ -321,15 +254,9 @@ static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance, rt
         return;
     }
 
-    /* Preemptive static priority-based Scheduler doesn't need special handling for task completion */
-    /* Task state management is handled by the kernel and list operations */
+    /* no-op: state management is handled by the kernel */
 }
 
-/* ============= Preemptive static priority-based Scheduler List Management Interface Implementation ============== */
-
-/**
- * @brief Add task to ready list (Preemptive static priority-based interface)
- */
 static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -340,9 +267,6 @@ static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance,
     preemptive_sp_add_to_ready_list_internal(task_handle);
 }
 
-/**
- * @brief Remove task from ready list (Preemptive static priority-based interface)
- */
 static void preemptive_sp_remove_from_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -353,9 +277,6 @@ static void preemptive_sp_remove_from_ready_list(rtos_scheduler_instance_t *inst
     preemptive_sp_remove_from_ready_list_internal(task_handle);
 }
 
-/**
- * @brief Add task to delayed list (Preemptive static priority-based interface)
- */
 static void preemptive_sp_add_to_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle,
                                               rtos_tick_t delay_ticks)
 {
@@ -367,9 +288,6 @@ static void preemptive_sp_add_to_delayed_list(rtos_scheduler_instance_t *instanc
     preemptive_sp_add_to_delayed_list_internal(task_handle, delay_ticks);
 }
 
-/**
- * @brief Remove task from delayed list (Preemptive static priority-based interface)
- */
 static void preemptive_sp_remove_from_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -380,9 +298,6 @@ static void preemptive_sp_remove_from_delayed_list(rtos_scheduler_instance_t *in
     preemptive_sp_remove_from_delayed_list_internal(task_handle);
 }
 
-/**
- * @brief Update delayed tasks (Preemptive static priority-based interface)
- */
 static void preemptive_sp_update_delayed_tasks(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -393,9 +308,6 @@ static void preemptive_sp_update_delayed_tasks(rtos_scheduler_instance_t *instan
     preemptive_sp_update_delayed_tasks_internal();
 }
 
-/**
- * @brief Get Preemptive static priority-based Scheduler statistics (optional)
- */
 static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
 {
     if (instance == NULL || stats_buffer == NULL || buffer_size == 0)
@@ -403,7 +315,6 @@ static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, 
         return 0;
     }
 
-    /* Simple statistics structure for Preemptive static priority-based Scheduler */
     typedef struct
     {
         uint8_t     ready_priorities_mask;
@@ -422,7 +333,6 @@ static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, 
     stats->ready_priorities_mask = g_preemptive_sp_data.ready_priorities;
     stats->current_tick          = rtos_get_tick_count();
 
-    /* Count ready tasks */
     uint8_t ready_count = 0;
     for (uint8_t i = 0; i < RTOS_MAX_TASK_PRIORITIES; i++)
     {
@@ -435,7 +345,6 @@ static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, 
     }
     stats->num_ready_tasks = ready_count;
 
-    /* Count delayed tasks */
     uint8_t     delayed_count = 0;
     rtos_tcb_t *task          = g_preemptive_sp_data.delayed_list;
     while (task != NULL)
@@ -448,14 +357,6 @@ static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, 
     return sizeof(preemptive_sp_stats_t);
 }
 
-/* =================== Preemptive static priority-based Scheduler Vtable =================== */
-
-/**
- * @brief Preemptive static priority-based Scheduler vtable interface
- *
- * This vtable provides the complete interface implementation for the Preemptive static
- * priority-based Scheduler scheduler, including the new list management operations.
- */
 const rtos_scheduler_t preemptive_sp_scheduler = {
     /* Core scheduling functions */
     .init           = preemptive_sp_init,
@@ -473,15 +374,6 @@ const rtos_scheduler_t preemptive_sp_scheduler = {
     /* Optional statistics */
     .get_statistics = preemptive_sp_get_statistics};
 
-/* =================== Public Helper Functions =================== */
-
-/**
- * @brief Get highest priority ready task (public interface for kernel)
- *
- * This function is used by the kernel when it needs direct access
- * to the highest priority ready task without going through the scheduler
- * interface.
- */
 rtos_tcb_t *rtos_task_get_highest_priority_ready(void)
 {
     return preemptive_sp_get_highest_priority_ready();

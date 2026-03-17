@@ -1,21 +1,9 @@
-/*******************************************************************************
- * File: src/port/cortex_m4/port_priv.h
- * Description: Cortex-M4F Port-Specific Constants
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef PORT_PRIV_H
 #define PORT_PRIV_H
 
 #include "config.h" // IWYU pragma: keep
 
-/**
- * @file port_priv.h
- * @brief Cortex-M4F port constants.
- *
- * Every port must define these macros (enforced by port_common.h).
- */
+/* These macros are enforced by port_common.h's PORT_VERIFY_CONTRACT check. */
 
 /** Stack alignment requirement (AAPCS mandates 8-byte alignment). */
 #define PORT_STACK_ALIGNMENT 8

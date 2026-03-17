@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/log_flush_task.h
- * Description: KLog Flush Task — drains binary kernel log records to UART
- ******************************************************************************/
-
 #ifndef LOG_FLUSH_TASK_H
 #define LOG_FLUSH_TASK_H
 

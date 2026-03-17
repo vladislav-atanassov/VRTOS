@@ -3,10 +3,6 @@
 
 #include "rtos_assert.h"
 
-/** ============================================================
- * Generic ALIGN macros
- * ============================================================ */
-
 /* Return-value version: returns the aligned value (for assignment) */
 #define ALIGN_UP(value, alignment)                                                                 \
     ({                                                                                             \
@@ -26,9 +22,7 @@
         _v;                                                                                        \
     })
 
-/** ============================================================
- * In-place version: modifies variable directly
- * ============================================================ */
+/* In-place version: modifies variable directly */
 #define ALIGN_UP_INPLACE(var, alignment)                                                           \
     do                                                                                             \
     {                                                                                              \
@@ -45,11 +39,7 @@
         (var) = (var) & ~((alignment) - 1);                                                        \
     } while (0)
 
-/** ============================================================
- * Convenience macros for common alignments
- * ============================================================ */
-
-/* In-place versions */
+/* Convenience macros for common alignments — in-place versions */
 #define ALIGN4_UP(var)  ALIGN_UP_INPLACE(var, 4)
 #define ALIGN8_UP(var)  ALIGN_UP_INPLACE(var, 8)
 #define ALIGN16_UP(var) ALIGN_UP_INPLACE(var, 16)

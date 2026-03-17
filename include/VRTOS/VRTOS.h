@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/VRTOS/VRTOS.h
- * Description: Main RTOS API Header
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef VRTOS_H
 #define VRTOS_H
 

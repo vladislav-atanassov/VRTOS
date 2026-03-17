@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/timer/timer_priv.h
- * Description: Private Timer Structure and Internal helper declarations
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef TIMER_PRIV_H
 #define TIMER_PRIV_H
 

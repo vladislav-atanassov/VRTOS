@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/scheduler/scheduler.c
- * Description: Updated RTOS Scheduler Manager with List Management
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "scheduler.h"
 
 #include "cooperative.h"
@@ -15,16 +8,6 @@
 
 #include <string.h>
 
-/**
- * @file scheduler.c
- * @brief RTOS Scheduler Manager Implementation with List Management
- *
- * This updated implementation provides a unified interface for scheduler
- * operations including list management, allowing different schedulers
- * to optimize their data structures while providing a consistent API.
- */
-
-/* Global scheduler instance */
 rtos_scheduler_instance_t g_scheduler_instance = {
     .vtable = NULL, .type = RTOS_SCHEDULER_TYPE, .private_data = NULL, .initialized = false};
 
@@ -39,24 +22,19 @@ static const struct
 
 #define SCHEDULER_REGISTRY_SIZE (sizeof(g_scheduler_registry) / sizeof(g_scheduler_registry[0]))
 
-/* Static function prototypes */
 static const rtos_scheduler_t *rtos_scheduler_find_interface(rtos_scheduler_type_t scheduler_type);
-
-/* ==================== Public API Implementation ==================== */
 
 /**
  * @brief Initialize the scheduler subsystem
  */
 rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
 {
-    /* Check if already initialized */
     if (g_scheduler_instance.initialized)
     {
         KLOGI(KEVT_SCHEDULER_INIT, (uint32_t) scheduler_type, 0);
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    /* Find scheduler interface */
     const rtos_scheduler_t *interface = rtos_scheduler_find_interface(scheduler_type);
     if (interface == NULL)
     {
@@ -64,13 +42,11 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    /* Initialize scheduler instance */
     g_scheduler_instance.vtable       = interface;
     g_scheduler_instance.type         = scheduler_type;
     g_scheduler_instance.private_data = NULL;
     g_scheduler_instance.initialized  = false; /* Will be set by interface init */
 
-    /* Initialize the specific scheduler */
     rtos_status_t status = interface->init(&g_scheduler_instance);
 
     if (status == RTOS_SUCCESS)
@@ -80,7 +56,6 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
     }
     else
     {
-        /* Clean up on failure */
         g_scheduler_instance.vtable       = NULL;
         g_scheduler_instance.private_data = NULL;
         KLOGE(KEVT_SCHEDULER_INIT, (uint32_t) status, 0);
@@ -96,8 +71,6 @@ rtos_scheduler_type_t rtos_scheduler_get_type(void)
 {
     return g_scheduler_instance.type;
 }
-
-/* ==================== Core Scheduling Operations ==================== */
 
 /**
  * @brief Get the highest priority/earliest deadline ready task
@@ -142,8 +115,6 @@ void rtos_scheduler_task_completed(rtos_task_handle_t completed_task)
 
     g_scheduler_instance.vtable->task_completed(&g_scheduler_instance, completed_task);
 }
-
-/* ==================== List Management Operations ==================== */
 
 /**
  * @brief Add task to ready list via scheduler
@@ -210,8 +181,6 @@ void rtos_scheduler_update_delayed_tasks(void)
     g_scheduler_instance.vtable->update_delayed_tasks(&g_scheduler_instance);
 }
 
-/* ==================== Debug and Statistics ==================== */
-
 /**
  * @brief Get scheduler statistics
  */
@@ -244,14 +213,12 @@ void rtos_scheduler_debug_print(void)
 
     KLOGD(KEVT_SCHEDULER_INIT, (uint32_t) g_scheduler_instance.type, 0);
 
-    /* Try to get and print scheduler-specific statistics */
     uint8_t stats_buffer[128];
     size_t  stats_size = rtos_scheduler_get_statistics(stats_buffer, sizeof(stats_buffer));
 
     if (stats_size > 0)
     {
         KLOGD(KEVT_SCHEDULER_INIT, stats_size, 0);
-        /* Print as hex dump for debugging */
         for (size_t i = 0; i < stats_size; i += 16)
         {
             char  hex_line[64] = {0};
@@ -267,8 +234,6 @@ void rtos_scheduler_debug_print(void)
 
     KLOGD(KEVT_SCHEDULER_INIT, 0, 0);
 }
-
-/* ==================== Internal Helper Functions ==================== */
 
 /**
  * @brief Find scheduler interface by type

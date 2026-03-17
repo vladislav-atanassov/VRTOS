@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/ring_buffer.c
- * Description: Generic Lock-Free Ring Buffer Implementation
- ******************************************************************************/
-
 #include "ring_buffer.h"
 
 void ring_buffer_init(ring_buffer_t *rb, uint8_t *buf, uint32_t size)

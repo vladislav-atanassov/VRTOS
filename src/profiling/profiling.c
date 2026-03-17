@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/utils/profiling.c
- * Description: Profiling Implementation (DWT Cycle Counter)
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "profiling.h"
 
 #include "rtos_port.h"
@@ -12,7 +5,6 @@
 
 #include <stddef.h>
 
-/* CMSIS Core for DWT, CoreDebug, and SystemCoreClock */
 #include "stm32f4xx.h" // IWYU pragma: keep
 
 void rtos_profiling_init(void)
@@ -50,21 +42,9 @@ void rtos_profiling_reset_stat(rtos_profile_stat_t *stat, const char *name)
     rtos_port_exit_critical();
 }
 
-/**
- * @brief Record a profiling measurement with thread-safe updates
- *
- * Uses critical sections to prevent data corruption when called from
- * multiple task contexts or ISRs.
- *
- * @note The cycles value is expected to come from RTOS_PROFILE_END macro,
- *       which computes (end - start) as uint32_t. This subtraction naturally
- *       handles DWT_CYCCNT wraparound correctly for measurements shorter than
- *       ~268 seconds (at 16MHz).
- *
- * @note total_cycles may overflow after many measurements. This is a known
- *       limitation. The average calculation will be inaccurate once overflow
- *       occurs, but min/max values remain valid.
- */
+/* uint32_t subtraction naturally handles DWT_CYCCNT wraparound for
+ * measurements under ~268s. total_cycles may overflow after many
+ * samples — avg becomes inaccurate, but min/max remain valid. */
 void rtos_profiling_record(rtos_profile_stat_t *stat, uint32_t cycles)
 {
     if (stat == NULL)
@@ -89,11 +69,6 @@ void rtos_profiling_record(rtos_profile_stat_t *stat, uint32_t cycles)
     rtos_port_exit_critical();
 }
 
-/**
- * @brief Convert cycles to microseconds using SystemCoreClock
- * @param cycles Number of CPU cycles
- * @return Time in microseconds
- */
 static uint32_t cycles_to_us(uint32_t cycles)
 {
     /* Avoid division by zero and handle potential overflow */
@@ -164,8 +139,6 @@ void rtos_profiling_print_stat(rtos_profile_stat_t *stat)
               (unsigned long) max_us, (unsigned long) avg_cycles, (unsigned long) avg_us, (unsigned long) count);
 }
 
-/* =============== SYSTEM PROFILING (Conditional Compilation) =============== */
-
 #if RTOS_PROFILING_SYSTEM_ENABLED
 
 void rtos_profiling_report_system_stats(void)
@@ -189,7 +162,6 @@ void rtos_profiling_reset_system_stats(void)
     rtos_profiling_reset_stat(&g_prof_scheduling_latency, "SchedLatency");
 }
 
-/* System profiling statistics - only compiled when enabled */
 rtos_profile_stat_t g_prof_context_switch     = {UINT32_MAX, 0, 0, 0, "ContextSwitch"};
 rtos_profile_stat_t g_prof_scheduler          = {UINT32_MAX, 0, 0, 0, "Scheduler"};
 rtos_profile_stat_t g_prof_tick               = {UINT32_MAX, 0, 0, 0, "TickHandler"};

@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: examples/basic_blinky/main.c
- * Description: Basic LED Blinky Example
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "VRTOS.h"
 #include "hardware_env.h"
 #include "log_flush_task.h"
@@ -14,14 +7,6 @@
 #include "uart_tx.h"
 #include "ulog.h"
 
-
-/**
- * @file main.c
- * @brief Basic LED Blinky RTOS Example
- *
- * This example demonstrates the basic functionality of the RTOS by creating
- * a simple task that blinks the onboard LED.
- */
 
 /* Task priorities */
 #define BLINK_TASK_PRIORITY (2U)

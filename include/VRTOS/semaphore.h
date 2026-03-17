@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/VRTOS/semaphore.h
- * Description: Counting Semaphore API
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef SEMAPHORE_H
 #define SEMAPHORE_H
 

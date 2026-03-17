@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: tests/scheduler/test_common.h
- * Description: Common test infrastructure for scheduler tests
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef TEST_COMMON_H
 #define TEST_COMMON_H
 
@@ -32,22 +25,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* =================== Assertion Infrastructure =================== */
-
-/**
- * @brief Per-translation-unit failure counter.
- *
- * Static so each test .c file gets its own copy (intentional).
- * Incremented inside a critical section by TEST_ASSERT on failure.
- */
+/* Static per-TU: each test .c file gets its own copy (intentional). */
 static volatile uint32_t g_fail_count = 0;
 
-/**
- * @brief Assert a boolean condition and log the verdict.
- *
- * Logs ASSERT_PASS or ASSERT_FAIL with a description string.
- * Does NOT halt on failure so remaining invariants are still checked.
- */
+/* Does NOT halt on failure — all invariants are checked. */
 #define TEST_ASSERT(condition, description)                                                                            \
     do                                                                                                                 \
     {                                                                                                                  \

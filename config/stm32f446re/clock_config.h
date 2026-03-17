@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: config/stm32f446re/clock_config.h
- * Description: STM32F446RE Clock Configuration
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef CLOCK_CONFIG_H
 #define CLOCK_CONFIG_H
 

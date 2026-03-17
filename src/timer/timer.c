@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/timer/timer.c
- * Description: Timer API Implementation
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "timer.h"
 
 #include "VRTOS.h"

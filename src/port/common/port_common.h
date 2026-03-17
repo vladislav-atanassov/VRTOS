@@ -1,21 +1,7 @@
-/*******************************************************************************
- * File: src/port/common/port_common.h
- * Description: Common Port Layer Types and Helpers
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef PORT_COMMON_H
 #define PORT_COMMON_H
 
 #include <stdint.h>
-
-/**
- * @file port_common.h
- * @brief Common types shared by all ports.
- *
- * See docs/porting_guide.md for full porting instructions.
- */
 
 /* ======================== Common Type Aliases ============================ */
 

@@ -1,21 +1,5 @@
-/*******************************************************************************
- * File: include/VRTOS/config.h
- * Description: RTOS Configuration Header
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_CONFIG_H
 #define RTOS_CONFIG_H
-
-/**
- * @file config.h
- * @brief RTOS Configuration Parameters
- *
- * Board-specific overrides are defined in config/<board>/rtos_config.h.
- * Every value here is a default — override by defining the macro before
- * this file is processed (via rtos_config.h).
- */
 
 /* Board-specific overrides (resolved via -I config/<board>/) */
 #include "rtos_config.h" // IWYU pragma: keep
@@ -93,26 +77,8 @@
 #define RTOS_ASSERT_ENABLED (1U) /**< Enable assertions */
 #endif
 
-/* ======================== Feature Toggles =============================== */
-
-#ifndef RTOS_USE_FAST_INTERRUPTS
-#define RTOS_USE_FAST_INTERRUPTS (0U)
-#endif
-
-#ifndef RTOS_USE_TICKLESS_IDLE
-#define RTOS_USE_TICKLESS_IDLE (0U)
-#endif
-
 #ifndef RTOS_ENABLE_STACK_OVERFLOW_CHECK
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
-#endif
-
-#ifndef RTOS_ENABLE_RUNTIME_STATS
-#define RTOS_ENABLE_RUNTIME_STATS (0U)
-#endif
-
-#ifndef RTOS_ENABLE_TRACE
-#define RTOS_ENABLE_TRACE (0U)
 #endif
 
 #endif /* RTOS_CONFIG_H */

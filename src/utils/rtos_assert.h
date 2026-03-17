@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/rtos/rtos_assert.h
- * Description: RTOS Assertion Macros
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_ASSERT_H
 #define RTOS_ASSERT_H
 
@@ -12,13 +5,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-
-/**
- * @file rtos_assert.h
- * @brief RTOS Assertion Macros
- *
- * This file provides assertion macros for debugging and error checking.
- */
 
 #if RTOS_ASSERT_ENABLED
 

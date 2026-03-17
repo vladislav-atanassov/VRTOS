@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/task/task_priv.h
- * Description: Private Task Definitions
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef TASK_PRIV_H
 #define TASK_PRIV_H
 
@@ -12,13 +5,6 @@
 #include "profiling.h"
 #include "rtos_assert.h"
 #include "rtos_types.h"
-
-/**
- * @file task_priv.h
- * @brief Private Task Management Definitions
- *
- * This file contains internal task structures and definitions.
- */
 
 /* Task Control Block */
 typedef struct rtos_task_control_block

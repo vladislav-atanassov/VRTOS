@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/utils/hardware_env.c
- * Description: Hardware Environment - Shared hardware initialization for tests
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "hardware_env.h"
 
 #include "klog.h"
@@ -14,8 +7,6 @@
 #define LED_PORT     GPIOA
 #define LED_PIN      5 /* PA5 - User LED (LD2) */
 #define LED_PIN_MASK (1U << LED_PIN)
-
-/* =================== LED Control =================== */
 
 void led_toggle(void)
 {
@@ -41,8 +32,6 @@ void led_set(bool on)
     }
 }
 
-/* =================== System Failure =================== */
-
 __attribute__((__noreturn__)) void indicate_system_failure(void)
 {
     const uint32_t    delay_cycles = SystemCoreClock / 50;
@@ -60,15 +49,11 @@ __attribute__((__noreturn__)) void indicate_system_failure(void)
     }
 }
 
-/* =================== HAL Error Handler =================== */
-
 __attribute__((__noreturn__)) void Error_Handler(void)
 {
     __disable_irq();
     indicate_system_failure();
 }
-
-/* =================== Clock Configuration =================== */
 
 static void SystemClock_Config(void)
 {
@@ -102,8 +87,6 @@ static void SystemClock_Config(void)
     }
 }
 
-/* =================== GPIO Configuration =================== */
-
 static void MX_GPIO_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -120,24 +103,13 @@ static void MX_GPIO_Init(void)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
-/* =================== Test Environment Init =================== */
-
 void hardware_env_config(void)
 {
-    /* Set vector table location */
     SCB->VTOR = FLASH_BASE;
-
-    /* Configure system clock */
     SystemClock_Config();
-
-    /* Initialize GPIO */
     MX_GPIO_Init();
-
-    /* Enable global interrupts */
     __enable_irq();
 }
-
-/* =================== Fault Handlers =================== */
 
 __attribute__((naked)) void HardFault_Handler(void)
 {

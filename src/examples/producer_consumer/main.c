@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: examples/producer_consumer/main.c
- * Description: Producer-Consumer Queue Demonstration
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "VRTOS.h"
 #include "config.h"
 #include "hardware_env.h"
@@ -17,22 +10,6 @@
 
 #include <stdio.h>
 
-
-/**
- * @file main.c
- * @brief Producer-Consumer Queue Demonstration
- *
- * This example demonstrates:
- * - Basic queue operations (send/receive)
- * - Multiple producers and consumers
- * - Blocking behavior when queue is full/empty
- * - Priority-based task scheduling with queues
- *
- * Scenario: Simulated sensor data processing system
- * - Temperature sensors (producers) generate readings
- * - Data processors (consumers) analyze readings
- * - LED blinks when processing occurs
- */
 
 /* =================== Task Priorities =================== */
 

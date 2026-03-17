@@ -41,7 +41,6 @@ void uart_tx_flush(void);
 #define log_info(msg, ...)    log_printf(LOG_LEVEL_INFO, "INFO", msg, ##__VA_ARGS__)
 #define log_debug(msg, ...)   log_printf(LOG_LEVEL_DEBUG, "DEBUG", msg, ##__VA_ARGS__)
 
-/* =================== Test Logging Macros =================== */
 /* Tab-delimited format for easy CSV parsing by Python tools */
 /* Format: timestamp_ms \t level \t file \t line \t func \t event \t context */
 

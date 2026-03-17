@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/VRTOS/task.h
- * Description: Task Management API
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_TASK_H
 #define RTOS_TASK_H
 
@@ -77,7 +70,6 @@ rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle);
  */
 const char *rtos_task_get_name(rtos_task_id_t task_id);
 
-/* =================== Task State Management =================== */
 
 /**
  * @brief Suspend a task

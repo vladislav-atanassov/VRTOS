@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/klog.c
- * Description: Kernel Logger Implementation — ISR-Safe Binary Logging
- ******************************************************************************/
-
 #include "klog.h"
 
 #include "ring_buffer.h"

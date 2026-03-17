@@ -1,4 +1,0 @@
-#ifndef SEMAPHORE_PRIV_H
-#define SEMAPHORE_PRIV_H
-
-#endif // ~SEMAPHORE_PRIV_H

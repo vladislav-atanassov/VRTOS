@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/scheduler/cooperative.c
- * Description: Cooperative Scheduler with Integrated List Management
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "cooperative.h"
 
 #include "VRTOS.h"
@@ -14,18 +7,6 @@
 
 #include <string.h>
 
-/**
- * @file cooperative.c
- * @brief Cooperative Scheduler Implementation with List Management
- * This implementation provides a non-preemptive cooperative scheduler
- * where tasks run until they voluntarily yield control.
- */
-
-/* ============ Cooperative List Management Functions ============ */
-
-/**
- * @brief Add task to cooperative ready list (FIFO order)
- */
 static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL)
@@ -33,18 +14,15 @@ static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
         return;
     }
 
-    /* Add to end of FIFO ready list */
     task->next = NULL;
     task->prev = NULL;
 
     if (g_cooperative_data.ready_list == NULL)
     {
-        /* First task in ready list */
         g_cooperative_data.ready_list = task;
     }
     else
     {
-        /* Find tail and append */
         rtos_tcb_t *current = g_cooperative_data.ready_list;
         while (current->next != NULL)
         {
@@ -59,9 +37,6 @@ static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
     KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
 }
 
-/**
- * @brief Remove task from cooperative ready list
- */
 static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL || g_cooperative_data.ready_list == NULL)
@@ -69,14 +44,12 @@ static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
         return;
     }
 
-    /* Remove from linked list */
     if (task->prev != NULL)
     {
         task->prev->next = task->next;
     }
     else
     {
-        /* Task is at head */
         g_cooperative_data.ready_list = task->next;
     }
 
@@ -96,9 +69,6 @@ static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
     KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
 }
 
-/**
- * @brief Add task to cooperative delayed list (time-sorted)
- */
 static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 {
     if (task == NULL)
@@ -106,10 +76,8 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
         return;
     }
 
-    /* Calculate wakeup time */
     task->delay_until = rtos_get_tick_count() + delay_ticks;
 
-    /* Insert in time-sorted order */
     rtos_tcb_t **list_head = &g_cooperative_data.delayed_list;
 
     task->next = NULL;
@@ -117,7 +85,6 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
 
     if (*list_head == NULL)
     {
-        /* Empty delayed list */
         *list_head                       = task;
         g_cooperative_data.delayed_count = 1;
         return;
@@ -133,13 +100,11 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
         current = current->next;
     }
 
-    /* Insert task */
     task->next = current;
     task->prev = prev;
 
     if (prev == NULL)
     {
-        /* Insert at head */
         *list_head = task;
     }
     else
@@ -157,9 +122,6 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
     KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
 }
 
-/**
- * @brief Remove task from cooperative delayed list
- */
 static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL || g_cooperative_data.delayed_list == NULL)
@@ -169,14 +131,12 @@ static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t tas
 
     rtos_tcb_t **list_head = &g_cooperative_data.delayed_list;
 
-    /* Remove from linked list */
     if (task->prev != NULL)
     {
         task->prev->next = task->next;
     }
     else
     {
-        /* Task is at head */
         *list_head = task->next;
     }
 
@@ -196,9 +156,6 @@ static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t tas
     KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, g_cooperative_data.delayed_count);
 }
 
-/**
- * @brief Update delayed tasks for cooperative scheduler
- */
 static void cooperative_update_delayed_tasks_internal(void)
 {
     rtos_tick_t current_tick = rtos_get_tick_count();
@@ -211,7 +168,6 @@ static void cooperative_update_delayed_tasks_internal(void)
 
         if (current_tick >= task->delay_until)
         {
-            /* Task delay expired - move to ready list */
             cooperative_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
 
@@ -236,20 +192,11 @@ static void cooperative_update_delayed_tasks_internal(void)
     }
 }
 
-/**
- * @brief Get next ready task for cooperative scheduler (FIFO)
- */
 static rtos_task_handle_t cooperative_get_next_ready(void)
 {
-    /* Return the first task in the FIFO ready list */
     return g_cooperative_data.ready_list;
 }
 
-/* ============ Cooperative Scheduler Interface Implementation ============ */
-
-/**
- * @brief Initialize cooperative scheduler
- */
 static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -257,22 +204,17 @@ static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    /* Initialize cooperative data structures */
     g_cooperative_data.ready_list    = NULL;
     g_cooperative_data.delayed_list  = NULL;
     g_cooperative_data.ready_count   = 0;
     g_cooperative_data.delayed_count = 0;
 
-    /* Set up private data */
     instance->private_data = &g_cooperative_data;
 
     KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
     return RTOS_SUCCESS;
 }
 
-/**
- * @brief Get next task using cooperative algorithm (FIFO)
- */
 static rtos_task_handle_t cooperative_get_next_task(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -283,20 +225,12 @@ static rtos_task_handle_t cooperative_get_next_task(rtos_scheduler_instance_t *i
     return cooperative_get_next_ready();
 }
 
-/**
- * @brief Check if cooperative preemption is needed (always false for
- * cooperative)
- */
+/* Cooperative scheduler is non-preemptive: tasks run until they voluntarily yield or block */
 static bool cooperative_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
-    /* Cooperative scheduler is non-preemptive */
-    /* Tasks run until they voluntarily yield or block */
     return false;
 }
 
-/**
- * @brief Handle task completion for cooperative scheduler
- */
 static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task)
 {
     if (instance == NULL || completed_task == NULL)
@@ -304,9 +238,7 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
         return;
     }
 
-    /* For cooperative scheduling, when a task completes (yields), */
-    /* we can optionally move it to the end of the ready list for round-robin */
-    /* behavior */
+    /* no-op: cooperative tasks yield voluntarily */
     if (completed_task->state == RTOS_TASK_STATE_READY)
     {
         /* Remove from current position and add to end for round-robin */
@@ -319,9 +251,6 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
 
 /* ========= Cooperative List Management Interface Implementation ========= */
 
-/**
- * @brief Add task to ready list (cooperative interface)
- */
 static void cooperative_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -332,9 +261,6 @@ static void cooperative_add_to_ready_list(rtos_scheduler_instance_t *instance, r
     cooperative_add_to_ready_list_internal(task_handle);
 }
 
-/**
- * @brief Remove task from ready list (cooperative interface)
- */
 static void cooperative_remove_from_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -345,9 +271,6 @@ static void cooperative_remove_from_ready_list(rtos_scheduler_instance_t *instan
     cooperative_remove_from_ready_list_internal(task_handle);
 }
 
-/**
- * @brief Add task to delayed list (cooperative interface)
- */
 static void cooperative_add_to_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle,
                                             rtos_tick_t delay_ticks)
 {
@@ -359,9 +282,6 @@ static void cooperative_add_to_delayed_list(rtos_scheduler_instance_t *instance,
     cooperative_add_to_delayed_list_internal(task_handle, delay_ticks);
 }
 
-/**
- * @brief Remove task from delayed list (cooperative interface)
- */
 static void cooperative_remove_from_delayed_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
     if (instance == NULL || task_handle == NULL)
@@ -372,9 +292,6 @@ static void cooperative_remove_from_delayed_list(rtos_scheduler_instance_t *inst
     cooperative_remove_from_delayed_list_internal(task_handle);
 }
 
-/**
- * @brief Update delayed tasks (cooperative interface)
- */
 static void cooperative_update_delayed_tasks(rtos_scheduler_instance_t *instance)
 {
     if (instance == NULL)
@@ -385,9 +302,6 @@ static void cooperative_update_delayed_tasks(rtos_scheduler_instance_t *instance
     cooperative_update_delayed_tasks_internal();
 }
 
-/**
- * @brief Get cooperative statistics
- */
 static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
 {
     if (instance == NULL || stats_buffer == NULL || buffer_size == 0)
@@ -419,29 +333,18 @@ static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, vo
     return sizeof(cooperative_stats_t);
 }
 
-/* =================== Cooperative Scheduler Vtable =================== */
-
-/**
- * @brief Cooperative scheduler vtable interface
- *
- * This vtable provides the complete interface implementation for the
- * cooperative scheduler.
- */
 const rtos_scheduler_t cooperative_scheduler = {
-    /* Core scheduling functions */
     .init           = cooperative_init,
     .get_next_task  = cooperative_get_next_task,
     .should_preempt = cooperative_should_preempt,
     .task_completed = cooperative_task_completed,
 
-    /* List management operations */
     .add_to_ready_list        = cooperative_add_to_ready_list,
     .remove_from_ready_list   = cooperative_remove_from_ready_list,
     .add_to_delayed_list      = cooperative_add_to_delayed_list,
     .remove_from_delayed_list = cooperative_remove_from_delayed_list,
     .update_delayed_tasks     = cooperative_update_delayed_tasks,
 
-    /* Optional statistics */
     .get_statistics = cooperative_get_statistics};
 
 /* =================== Public Helper Functions =================== */

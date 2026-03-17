@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/port/cortex_m4/port.c
- * Description: Cortex-M4F Porting Layer Implementation
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "config.h"
 #include "kernel_priv.h"
 #include "klog.h"
@@ -16,21 +9,11 @@
 #include "task_priv.h"
 #include "utils.h"
 
-/* Include CMSIS for Cortex-M4 */
 #include "stm32f4xx.h" // IWYU pragma: keep
 
-/**
- * @file port.c
- * @brief Cortex-M4 Specific RTOS Porting Layer
- */
-
-/* Critical section nesting counter */
 static volatile uint32_t g_critical_nesting = 0;
 static volatile uint32_t g_critical_basepri = 0;
 
-/**
- * @brief Initialize the porting layer
- */
 rtos_status_t rtos_port_init(void)
 {
 #if PORT_HAS_FPU
@@ -44,11 +27,9 @@ rtos_status_t rtos_port_init(void)
     FPU->FPCCR |= FPU_FPCCR_ASPEN_Msk | FPU_FPCCR_LSPEN_Msk;
 #endif
 
-    /* Configure interrupt priorities */
     NVIC_SetPriority(PendSV_IRQn, PORT_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
     NVIC_SetPriority(SysTick_IRQn, PORT_IRQ_PRIORITY_KERNEL >> 4); /* Kernel level */
 
-    /* Initialize BASEPRI to 0 (no masking) */
     __set_BASEPRI(0);
 
     g_critical_nesting = 0;
@@ -59,31 +40,22 @@ rtos_status_t rtos_port_init(void)
     return RTOS_SUCCESS;
 }
 
-/**
- * @brief Start system tick timer
- */
 void rtos_port_start_systick(void)
 {
     /* Calculate reload value for desired tick rate */
     uint32_t reload_value = (SystemCoreClock / RTOS_TICK_RATE_HZ) - 1;
 
-    /* Use CMSIS SysTick functions for reliability */
     if (SysTick_Config(reload_value) != 0)
     {
         KLOGE(KEVT_SYSTICK_FAIL, reload_value, 0);
         return;
     }
 
-    /* Ensure proper priority */
     NVIC_SetPriority(SysTick_IRQn, 0xE0);
 }
 
-/**
- * @brief Initialize task stack
- */
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter)
 {
-    /* Convert to byte address for alignment */
     uint32_t *stack_ptr = (uint32_t *) ALIGN_DOWN((uint32_t) stack_top, PORT_STACK_ALIGNMENT);
 
     /* Initial exception frame */
@@ -118,7 +90,6 @@ uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t ta
 
 void rtos_port_enter_critical(void)
 {
-    /* Read current BASEPRI, set to kernel priority threshold */
     uint32_t basepri;
 
     __asm volatile("MRS %0, BASEPRI                    \n" /* Read current BASEPRI */
@@ -134,7 +105,6 @@ void rtos_port_enter_critical(void)
 
     if (g_critical_nesting == 1)
     {
-        /* First entry - save original BASEPRI */
         g_critical_basepri = basepri;
     }
 }
@@ -147,7 +117,6 @@ void rtos_port_exit_critical(void)
 
         if (g_critical_nesting == 0)
         {
-            /* Last exit - restore original BASEPRI */
             __asm volatile("MSR BASEPRI, %0            \n"
                            "DSB                        \n"
                            "ISB                        \n"
@@ -174,12 +143,8 @@ void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
     __ISB();
 }
 
-/**
- * @brief Force context switch
- */
 void rtos_port_yield(void)
 {
-    /* Trigger PendSV interrupt for context switch */
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 
     /* Memory barrier to ensure write completes */
@@ -187,12 +152,8 @@ void rtos_port_yield(void)
     __ISB();
 }
 
-/**
- * @brief Start first task
- */
 __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 {
-    /* Ensure 8-byte stack alignment */
     uint32_t psp_val = ALIGN_DOWN((uint32_t) g_kernel.next_task->stack_pointer, PORT_STACK_ALIGNMENT);
 
     /* Set PSP to point to saved registers (R4-R11, R14) */
@@ -217,7 +178,6 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
     rtos_profiling_init();
 #endif
 
-    /* Trigger SVC to start first task */
     __asm volatile("svc 0");
 
     KLOGE(KEVT_ERROR_GENERIC, 0, 0);
@@ -228,9 +188,6 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
     }
 }
 
-/**
- * @brief System tick interrupt handler
- */
 void SysTick_Handler(void)
 {
     rtos_port_systick_handler();
@@ -256,11 +213,6 @@ void rtos_port_systick_handler(void)
     rtos_kernel_tick_handler();
 }
 
-/**
- * @brief SVC interrupt handler
- *
- * This function should start the first task
- */
 __attribute__((naked)) void SVC_Handler(void)
 {
     __asm volatile("LDR  R3, =g_kernel       \n" /* Get current TCB address */
@@ -276,11 +228,6 @@ __attribute__((naked)) void SVC_Handler(void)
                        : "memory");
 }
 
-/**
- * @brief PendSV interrupt handler
- *
- * This function handles context switching.
- */
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile(

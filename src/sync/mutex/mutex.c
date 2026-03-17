@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/sync/mutex/mutex.c
- * Description: Mutex Implementation with Priority Inheritance
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "mutex.h"
 
 #include "VRTOS.h"
@@ -16,22 +9,6 @@
 
 #include <string.h>
 
-/**
- * @file mutex.c
- * @brief Mutex Implementation with Priority Inheritance
- *
- * Implements mutexes with:
- * - Priority Inheritance Protocol (PIP) to prevent priority inversion
- * - Recursive locking (same task can lock multiple times)
- * - Timeout support
- * - Priority-ordered wait queue
- */
-
-/* =================== Internal Helper Functions =================== */
-
-/**
- * @brief Add task to mutex wait queue (priority-ordered, highest first)
- */
 static void mutex_add_to_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
 {
     task->next_waiting    = NULL;
@@ -40,7 +17,6 @@ static void mutex_add_to_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
 
     if (m->waiting_list == NULL)
     {
-        /* First waiter */
         m->waiting_list = task;
         return;
     }
@@ -57,21 +33,16 @@ static void mutex_add_to_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
 
     if (prev == NULL)
     {
-        /* Insert at head */
         task->next_waiting = m->waiting_list;
         m->waiting_list    = task;
     }
     else
     {
-        /* Insert after prev */
         task->next_waiting = current;
         prev->next_waiting = task;
     }
 }
 
-/**
- * @brief Remove task from mutex wait queue
- */
 static void mutex_remove_from_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
 {
     if (m->waiting_list == NULL || task == NULL)
@@ -81,12 +52,10 @@ static void mutex_remove_from_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
 
     if (m->waiting_list == task)
     {
-        /* Task is at head */
         m->waiting_list = task->next_waiting;
     }
     else
     {
-        /* Find and remove task */
         rtos_tcb_t *current = m->waiting_list;
         while (current->next_waiting != NULL && current->next_waiting != task)
         {
@@ -103,9 +72,6 @@ static void mutex_remove_from_waiting_list(rtos_mutex_t *m, rtos_tcb_t *task)
     task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 }
 
-/**
- * @brief Get and remove highest priority waiter
- */
 static rtos_tcb_t *mutex_pop_highest_priority_waiter(rtos_mutex_t *m)
 {
     if (m->waiting_list == NULL)
@@ -123,9 +89,6 @@ static rtos_tcb_t *mutex_pop_highest_priority_waiter(rtos_mutex_t *m)
     return task;
 }
 
-/**
- * @brief Apply priority inheritance - boost owner's priority if needed
- */
 static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter)
 {
     /**
@@ -167,22 +130,10 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         }
         else
         {
-            /* Target already has equal/higher priority, verify chain propagation might still be
-               needed if we are just matching it, but usually we can stop if we didn't boost.
-               However, if target is blocked on another mutex, we must check if THAT mutex's owner
-               needs boosting to match our boost_prio. */
+            /* Target already at/above boost_prio. Carry its effective priority
+             * forward so we do not under-boost further owners in the chain. */
             if (target_task->priority > boost_prio)
             {
-                /* Target is already higher than us, so we don't boost it.
-                   But we shouldn't necessarily reduce our boost req.
-                   Actually, if target is higher, it will run eventually (or is blocked).
-                   If blocked, we should check if IT is blocked on something.
-                   But if it's blocked, and its priority is HIGH, then the next owner needs to be at
-                   least that HIGH. So we should continue with target's priority? Standard PIP:
-                   Inherit the HIGHEST of waiting tasks. Our 'boost_prio' is the priority of the
-                   task that just started waiting. If target is already higher, we don't change it.
-                   But we should continue traversing if target is blocked, using target's priority?
-                   Yes, effective priority. */
                 boost_prio = target_task->priority;
             }
         }
@@ -210,9 +161,6 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
     }
 }
 
-/**
- * @brief Restore owner's original priority
- */
 static void mutex_restore_priority(rtos_tcb_t *task)
 {
     if (task == NULL)
@@ -226,8 +174,6 @@ static void mutex_restore_priority(rtos_tcb_t *task)
         task->priority = task->base_priority;
     }
 }
-
-/* =================== Public API Implementation =================== */
 
 /**
  * @brief Initialize a mutex
@@ -281,7 +227,6 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         return RTOS_MUTEX_OK;
     }
 
-    /* Check for recursive lock (same task) */
     if (m->owner == current_task)
     {
         if (m->lock_count < 255)
@@ -299,22 +244,17 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         }
     }
 
-    /* Mutex is held by another task - check if we should wait */
     if (timeout_ticks == RTOS_NO_WAIT)
     {
         rtos_port_exit_critical();
         return RTOS_MUTEX_ERR_TIMEOUT;
     }
 
-    /* Apply priority inheritance */
     mutex_apply_priority_inheritance(m, current_task);
-
-    /* Add to waiting list (priority-ordered) */
     mutex_add_to_waiting_list(m, current_task);
 
     KLOGD(KEVT_MUTEX_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
-    /* Block the task with timeout */
     if (timeout_ticks == RTOS_MAX_WAIT)
     {
         /* Infinite wait - block without delay timeout */
@@ -343,7 +283,6 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         return RTOS_MUTEX_ERR_TIMEOUT;
     }
 
-    /* Successfully acquired mutex */
     rtos_port_exit_critical();
     KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 1);
     return RTOS_MUTEX_OK;
@@ -371,7 +310,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
         return RTOS_MUTEX_ERR_INVALID;
     }
 
-    /* Handle recursive unlock */
     if (m->lock_count > 1)
     {
         m->lock_count--;
@@ -387,7 +325,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     rtos_tcb_t *waiter = mutex_pop_highest_priority_waiter(m);
     if (waiter != NULL)
     {
-        /* Transfer mutex to waiter */
         m->owner      = waiter;
         m->lock_count = 1;
 
@@ -395,12 +332,10 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 
         rtos_port_exit_critical();
 
-        /* Unblock the waiting task */
         rtos_kernel_task_unblock(waiter);
         return RTOS_MUTEX_OK;
     }
 
-    /* No waiters - mark mutex as free */
     m->owner      = NULL;
     m->lock_count = 0;
 

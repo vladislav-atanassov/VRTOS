@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/scheduler/scheduler.h
- * Description: Enhanced Scheduler Interface with List Management
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_SCHEDULER_H
 #define RTOS_SCHEDULER_H
 

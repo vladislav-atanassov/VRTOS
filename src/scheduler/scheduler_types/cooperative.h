@@ -1,41 +1,15 @@
-/*******************************************************************************
- * File: src/scheduler/cooperative.h
- * Description: Cooperative Scheduler Interface
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_COOPERATIVE_H
 #define RTOS_COOPERATIVE_H
 
 #include "scheduler.h"
-
-/**
- * @file cooperative.h
- * @brief Cooperative Scheduler Interface
- * This file contains the interface for the Cooperative Scheduler
- * implementation. Cooperative scheduling is non-preemptive - tasks run until
- * they voluntarily yield.
- */
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/**
- * @brief Cooperative scheduler vtable interface
- * Exposed interface for the Cooperative Scheduler.
- * This allows the scheduler manager to access cooperative scheduling
- * functionality.
- */
 extern const rtos_scheduler_t cooperative_scheduler;
 
-/**
- * @brief Cooperative-specific private data
- * Cooperative scheduler uses a simple FIFO ready list and time-sorted
- * delayed list
- */
 typedef struct
 {
     rtos_tcb_t *ready_list;    /**< FIFO ready list */

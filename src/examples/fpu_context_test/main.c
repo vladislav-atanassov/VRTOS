@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: examples/fpu_context_test/main.c
- * Description: FPU Context Switch Verification Example
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "VRTOS.h"
 #include "config.h"
 #include "hardware_env.h"
@@ -15,22 +8,13 @@
 #include "ulog.h"
 
 
-/**
- * @file main.c
- * @brief FPU Context Switch Verification
- *
- * Verifies that the FPU state (S16-S31) is correctly saved and restored across
- * context switches. Each task uses a different floating-point operation and
- * checks the result against the expected value every iteration. If the FPU
- * context is corrupted by another task, the values will diverge and the error
- * will be logged.
- *
- * Task A: multiplicative accumulator  fpu_a = fpu_a * 1.01 + 0.5
- * Task B: convergent accumulator      fpu_b = fpu_b * 0.99 + 1.0
- * Task C: sine-like oscillator        fpu_c = fpu_c - fpu_c^3 / 6.0
- *
- * All three tasks run at the same priority to maximise the number of context
- * switches between FPU-using tasks.
+/*
+ * Tasks A/B/C each run a distinct FP accumulation and verify their own state
+ * every iteration; a mismatch means FPU registers were corrupted on context switch.
+ *   Task A: fpu_a = fpu_a * 1.01 + 0.5
+ *   Task B: fpu_b = fpu_b * 0.99 + 1.0
+ *   Task C: fpu_c = fpu_c - fpu_c^3 / 6.0
+ * All three share the same priority to maximise context-switch frequency.
  */
 
 /* All tasks share the same priority so context switches happen frequently */

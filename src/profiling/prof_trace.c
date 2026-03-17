@@ -1,24 +1,14 @@
-/*******************************************************************************
- * File: src/utils/prof_trace.c
- * Description: Profiling Trace Implementation — ISR-Safe Event Timeline
- ******************************************************************************/
-
 #include "prof_trace.h"
 
 #include "ring_buffer.h"
 
 #include <stddef.h>
 
-/* CMSIS for DWT, __disable_irq, __enable_irq */
 #include "stm32f4xx.h" // IWYU pragma: keep
-
-/* ================================= BUFFER ================================= */
 
 /* Buffer in .noinit — survives soft reset for post-mortem analysis */
 static volatile uint8_t prof_buf[PROF_TRACE_BUFFER_SIZE] __attribute__((section(".noinit")));
 static ring_buffer_t    prof_rb;
-
-/* ================================== API =================================== */
 
 void prof_trace_init(void)
 {
@@ -34,7 +24,6 @@ void prof_trace_emit(uint16_t event_id, uint8_t entity_id)
     record.entity_id = entity_id;
     record._pad      = 0;
 
-    /* Atomic write under interrupt disable */
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
 

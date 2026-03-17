@@ -1,23 +1,10 @@
-/*******************************************************************************
- * File: src/core/kernel_priv.h
- * Description: Private Kernel Definitions
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef KERNEL_PRIV_H
 #define KERNEL_PRIV_H
 
 #include "rtos_assert.h"
 #include "rtos_types.h"
 
-/**
- * @file kernel_priv.h
- * @brief Private Kernel Definitions
- *
- * This file contains internal kernel structures and definitions.
- * Should not be included by application code.
- */
+/* Not for application code. */
 
 /* Kernel States */
 typedef enum

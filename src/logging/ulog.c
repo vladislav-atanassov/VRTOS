@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/ulog.c
- * Description: User Logger Implementation — Deferred Formatted Logging
- ******************************************************************************/
-
 #include "ulog.h"
 
 #include "ring_buffer.h"
@@ -13,13 +8,9 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ================================= BUFFER ================================= */
-
 static uint8_t       ulog_buf[ULOG_BUFFER_SIZE];
 static ring_buffer_t ulog_rb;
 static ulog_level_t  ulog_min_level;
-
-/* ================================== API =================================== */
 
 void ulog_init(ulog_level_t level)
 {
@@ -47,7 +38,6 @@ void ulog(ulog_level_t level, const char *fmt, ...)
         return;
     }
 
-    /* Clamp to buffer size and append \r\n */
     if ((uint32_t) len > sizeof(scratch) - 3)
     {
         len = sizeof(scratch) - 3;
@@ -56,7 +46,6 @@ void ulog(ulog_level_t level, const char *fmt, ...)
     scratch[len + 1] = '\n';
     len += 2;
 
-    /* Write to ring buffer under critical section */
     rtos_port_enter_critical();
     ring_buffer_write(&ulog_rb, scratch, (uint32_t) len);
     rtos_port_exit_critical();

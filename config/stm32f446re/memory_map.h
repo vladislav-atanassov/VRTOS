@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: config/stm32f446re/memory_map.h
- * Description: STM32F446RE Memory Layout Definitions
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef MEMORY_MAP_H
 #define MEMORY_MAP_H
 

@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/VRTOS/rtos_types.h
- * Description: RTOS Type Definitions
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_TYPES_H
 #define RTOS_TYPES_H
 

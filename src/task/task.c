@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/task/task.c
- * Description: Simplified Task Management (No List Operations)
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "task.h"
 
 #include "VRTOS.h"
@@ -19,17 +12,8 @@
 
 #include <string.h>
 
-/**
- * @file task.c
- * @brief Simplified Task Management Implementation
- *
- * This file contains only the core task creation and management functions.
- * All list management operations are now handled by the scheduler implementations.
- */
-
-/* Task management global variables */
-rtos_tcb_t g_task_pool[RTOS_MAX_TASKS] = {0}; /**< Pool of task control blocks */
-uint8_t    g_task_count                = 0;   /**< Current number of tasks */
+rtos_tcb_t g_task_pool[RTOS_MAX_TASKS] = {0};
+uint8_t    g_task_count                = 0;
 
 /* Static function prototypes */
 static rtos_tcb_t *rtos_task_allocate_tcb(void);
@@ -40,11 +24,8 @@ static uint32_t   *rtos_task_allocate_stack(rtos_stack_size_t size);
  */
 rtos_status_t rtos_task_init_system(void)
 {
-    /* Initialize task pool */
     memset(g_task_pool, 0, sizeof(g_task_pool));
     g_task_count = 0;
-
-    /* Stack alignment is now handled by rtos_malloc in memory.c */
     KLOGD(KEVT_TASK_CREATE, RTOS_MAX_TASKS, RTOS_TOTAL_HEAP_SIZE);
 
     return RTOS_SUCCESS;
@@ -56,7 +37,6 @@ rtos_status_t rtos_task_init_system(void)
 rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name, rtos_stack_size_t stack_size,
                                void *parameter, rtos_priority_t priority, rtos_task_handle_t *task_handle)
 {
-    /* Validate parameters */
     if (task_function == NULL || task_handle == NULL)
     {
         KLOGE(KEVT_INVALID_PARAM, (uint32_t) task_function, (uint32_t) task_handle);
@@ -75,24 +55,20 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
         return RTOS_ERROR_NO_MEMORY;
     }
 
-    /* Use default stack size if not specified */
     if (stack_size == 0)
     {
         stack_size = RTOS_DEFAULT_TASK_STACK_SIZE;
     }
 
-    /* Ensure minimum stack size */
     if (stack_size < RTOS_MINIMUM_TASK_STACK_SIZE)
     {
         stack_size = RTOS_MINIMUM_TASK_STACK_SIZE;
     }
 
-    /* Align stack size */
     ALIGN8_UP(stack_size);
 
     rtos_port_enter_critical();
 
-    /* Allocate TCB */
     rtos_tcb_t *new_task = rtos_task_allocate_tcb();
     if (new_task == NULL)
     {
@@ -101,11 +77,9 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
         return RTOS_ERROR_NO_MEMORY;
     }
 
-    /* Allocate stack */
     uint32_t *stack_memory = rtos_task_allocate_stack(stack_size);
     if (stack_memory == NULL)
     {
-        /* Free the TCB */
         new_task->task_function = NULL;
         rtos_port_exit_critical();
         KLOGE(KEVT_STACK_ALLOC_FAIL, stack_size, 0);
@@ -117,7 +91,6 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     *stack_memory = PORT_STACK_CANARY_VALUE;
 #endif
 
-    /* Initialize TCB */
     new_task->task_id              = g_task_count;
     new_task->name                 = name;
     new_task->task_function        = task_function;
@@ -131,19 +104,13 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     new_task->delay_until          = 0;
     new_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
 
-    /* Initialize list pointers */
-    new_task->next = NULL;
-    new_task->prev = NULL;
-
-    /* Initialize synchronization support */
+    new_task->next            = NULL;
+    new_task->prev            = NULL;
     new_task->next_waiting    = NULL;
     new_task->blocked_on      = NULL;
     new_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
-    /* Initialize task stack */
     new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
-
-    /* Add to ready list via scheduler */
     rtos_scheduler_add_to_ready_list(new_task);
 
     g_task_count++;
@@ -161,7 +128,6 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
  */
 rtos_tcb_t *rtos_task_get_idle_task(void)
 {
-    /* Find the idle task (priority 0) */
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
         if (g_task_pool[i].task_function != NULL && g_task_pool[i].priority == RTOS_IDLE_TASK_PRIORITY)
@@ -315,8 +281,6 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
     }
 }
 
-/* ==================== Stack & State Management ==================== */
-
 /**
  * @brief Check if a task's stack has overflowed
  * @param task_handle Task to check (NULL = check all tasks)
@@ -327,7 +291,6 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
 #if RTOS_ENABLE_STACK_OVERFLOW_CHECK
     if (task_handle != NULL)
     {
-        /* Check single task */
         if (task_handle->stack_base != NULL)
         {
             if (*task_handle->stack_base != PORT_STACK_CANARY_VALUE)
@@ -339,7 +302,6 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         return false;
     }
 
-    /* Check all tasks */
     bool overflow_found = false;
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
@@ -369,7 +331,6 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
 {
     rtos_port_enter_critical();
 
-    /* If NULL, suspend current task */
     rtos_tcb_t *task = (task_handle != NULL) ? task_handle : g_kernel.current_task;
 
     if (task == NULL)
@@ -385,13 +346,11 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    /* Remove from ready list if currently ready */
     if (task->state == RTOS_TASK_STATE_READY)
     {
         rtos_scheduler_remove_from_ready_list(task);
     }
 
-    /* Remove from delayed list if blocked with timeout */
     if (task->state == RTOS_TASK_STATE_BLOCKED)
     {
         rtos_scheduler_remove_from_delayed_list(task);
@@ -401,7 +360,6 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
 
     KLOGD(KEVT_TASK_SUSPEND, task->task_id, 0);
 
-    /* If suspending current task, yield */
     if (task == g_kernel.current_task)
     {
         rtos_port_exit_critical();
@@ -427,7 +385,6 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
 
     rtos_port_enter_critical();
 
-    /* Can only resume suspended tasks */
     if (task_handle->state != RTOS_TASK_STATE_SUSPENDED)
     {
         rtos_port_exit_critical();
@@ -438,13 +395,10 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
 
     rtos_port_exit_critical();
 
-    /* Move to ready state (this handles preemption check) */
     rtos_kernel_task_ready(task_handle);
 
     return RTOS_SUCCESS;
 }
-
-/* ==================== Static Helper Functions ==================== */
 
 /**
  * @brief Allocate a TCB from the pool
@@ -466,7 +420,6 @@ static rtos_tcb_t *rtos_task_allocate_tcb(void)
  */
 static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size)
 {
-    /* Use central memory manager */
     void *stack_block = rtos_malloc(size);
 
     if (stack_block == NULL)

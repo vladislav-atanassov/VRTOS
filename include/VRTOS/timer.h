@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/VRTOS/timer.h
- * Description: Software Timer API
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_TIMER_H
 #define RTOS_TIMER_H
 

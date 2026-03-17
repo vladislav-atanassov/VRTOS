@@ -1,35 +1,9 @@
-/*******************************************************************************
- * File: src/task/task_notify.c
- * Description: Task Notification Implementation (Direct-to-Task Signaling)
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "VRTOS.h"
 #include "klog.h"
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
 
-/**
- * @file task_notify.c
- * @brief Task Notification Implementation
- *
- * Implements direct-to-task signaling embedded in the TCB.
- * No separate kernel object — uses the task's own pointer as the
- * blocked_on sentinel: task->blocked_on = task.
- *
- * Blocking pattern mirrors semaphore.c (lines 197-224):
- * - Infinite wait:   set state = BLOCKED, yield
- * - Timed wait:      rtos_kernel_task_block(task, timeout)
- * - Timeout detect:  if blocked_on still == sentinel after resume
- */
-
-/* =================== Send-side API (ISR-safe) =================== */
-
-/**
- * @brief Send a notification to a task with a specific action.
- */
 rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action)
 {
     if (task == NULL)
@@ -39,7 +13,6 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 
     rtos_port_enter_critical();
 
-    /* Apply action to notification_value */
     switch (action)
     {
         case RTOS_NOTIFY_ACTION_NONE:
@@ -85,19 +58,11 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
     return RTOS_NOTIFY_OK;
 }
 
-/**
- * @brief Simplified notify: increment the target's notification value.
- */
 rtos_notify_status_t rtos_task_notify_give(rtos_task_handle_t task)
 {
     return rtos_task_notify(task, 0, RTOS_NOTIFY_ACTION_INCREMENT);
 }
 
-/* =================== Receive-side API =================== */
-
-/**
- * @brief Wait for a notification with bit-level control.
- */
 rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t exit_clear_bits, uint32_t *value_out,
                                            rtos_tick_t timeout_ticks)
 {
@@ -146,7 +111,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
 
     KLOGD(KEVT_NOTIFY_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
-    /* Block the task with timeout (same pattern as semaphore.c) */
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
         /* Infinite wait - block without delay timeout */
@@ -188,9 +152,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
     return RTOS_NOTIFY_OK;
 }
 
-/**
- * @brief Take a notification (counting semaphore pattern).
- */
 rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeout_ticks)
 {
     rtos_port_enter_critical();
@@ -232,7 +193,6 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
 
     KLOGD(KEVT_NOTIFY_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
 
-    /* Block the task (same pattern as semaphore.c) */
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
         current_task->state = RTOS_TASK_STATE_BLOCKED;
@@ -249,7 +209,6 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
 
     rtos_port_enter_critical();
 
-    /* Timeout check */
     if (current_task->blocked_on == current_task)
     {
         current_task->blocked_on      = NULL;

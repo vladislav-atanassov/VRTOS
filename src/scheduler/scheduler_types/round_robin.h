@@ -1,43 +1,15 @@
-/*******************************************************************************
- * File: src/scheduler/scheduler_types/round_robin.h
- * Description: Round Robin Scheduler Interface
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_ROUND_ROBIN_H
 #define RTOS_ROUND_ROBIN_H
 
 #include "scheduler.h"
-
-/**
- * @file round_robin.h
- * @brief Round Robin Scheduler Interface
- *
- * This file contains the interface for the Round Robin Scheduler
- * implementation. Round robin scheduling gives each task equal CPU time,
- * cycling through a circular ready queue with time-slice preemption.
- */
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/**
- * @brief Round robin scheduler vtable interface
- * Exposed interface for the Round Robin Scheduler.
- * This allows the scheduler manager to access round robin scheduling
- * functionality.
- */
 extern const rtos_scheduler_t round_robin_scheduler;
 
-/**
- * @brief Round robin-specific private data
- *
- * Round robin scheduler uses a circular FIFO ready list and time-sorted
- * delayed list. Tasks are scheduled in order, each receiving equal time.
- */
 typedef struct
 {
     rtos_tcb_t *ready_list;      /**< Circular FIFO ready list (head) */

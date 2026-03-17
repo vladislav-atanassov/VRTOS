@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/utils/rtos_assert.c
- * Description: RTOS Assertion Implementation
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #include "rtos_assert.h"
 
 #include "config.h"
@@ -17,13 +10,6 @@
 #if defined(__GNUC__)
 #include "core_cm4.h"
 #endif
-
-/**
- * @file rtos_assert.c
- * @brief RTOS Assertion Implementation
- *
- * This file contains the implementation of assertion handling for the RTOS.
- */
 
 #if RTOS_ASSERT_ENABLED
 

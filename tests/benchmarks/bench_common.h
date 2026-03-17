@@ -1,32 +1,7 @@
-/*******************************************************************************
- * File: tests/benchmarks/bench_common.h
- * Description: Shared infrastructure for VRTOS benchmark executables
- * Author: Student
- * Date: 2025
- *
- * PURPOSE
- * -------
- * Provides common macros, defaults, and startup infrastructure shared across
- * all VRTOS benchmark programs in tests/benchmarks/.
- *
- * Benchmarks are standalone executables (separate platformio environments)
- * that measure cycle-accurate timing of RTOS primitives using the DWT-based
- * profiling subsystem already built into VRTOS.
- *
- * DESIGN NOTES
- * ------------
- * - Deliberately does NOT include test_log.h here.
- *   test_log.h must be included AFTER uart_tx.h in every .c file so that
- *   its #undef/#define sequence correctly overrides printf-based macros.
- *   Each benchmark .c file is responsible for its own include order.
- *
- * - Reuses test_common.h infrastructure (startup timer, log flush task)
- *   for consistent startup behavior across tests and benchmarks.
- *
- * - Output goes to ulog (ring buffer), drained by the LogFlush task.
- *   Benchmark results are printed with rtos_profiling_print_stat() after
- *   all measurement iterations complete.
- ******************************************************************************/
+/*
+ * Include test_log.h AFTER uart_tx.h in each benchmark .c file — not here.
+ * Results are printed via rtos_profiling_print_stat() after all iterations.
+ */
 
 #ifndef BENCH_COMMON_H
 #define BENCH_COMMON_H
@@ -37,14 +12,7 @@
 
 #include <stdint.h>
 
-/* ========================= BENCHMARK CONFIGURATION ======================== */
-
-/**
- * @brief Number of measured iterations per benchmark.
- *
- * Overridable via build flag: -D BENCH_ITERATIONS=500
- * 1000 iterations gives a statistically stable min/max/avg at low overhead.
- */
+/* Overridable: -D BENCH_ITERATIONS=500 */
 #ifndef BENCH_ITERATIONS
 #define BENCH_ITERATIONS (1000U)
 #endif

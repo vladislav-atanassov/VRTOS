@@ -1,29 +1,11 @@
-/*******************************************************************************
- * File: tests/scheduler/test_log.h
- * Description: Thread-Safe Test Logging — ulog-backed replacements for
- *              the printf-based test_log macros in uart_tx.h
- *
- * WHY THIS FILE EXISTS
- * --------------------
- * uart_tx.h provides test_log_task / test_log_framework via raw printf().
- * printf is NOT reentrant: when a SysTick fires mid-printf and preemption
- * switches to another task that also calls printf, the internal state gets
- * corrupted and the system hangs.
- *
- * This header re-defines those macros to use the ulog() ring buffer, which
- * is protected by a critical section. A log_flush_task (priority 0) drains
- * the ring buffer to UART in the background.
- *
- * USAGE
- * -----
- * In every test source file, include this AFTER uart_tx.h:
+/*
+ * Include this AFTER uart_tx.h to override its printf-based macros with
+ * ulog() ring-buffer versions. printf is not reentrant — without this,
+ * a SysTick preemption mid-printf corrupts state and hangs the system.
  *
  *   #include "uart_tx.h"
- *   #include "test_log.h"   // overrides test_log_task / test_log_framework
- *
- * In main(), call test_create_log_flush_task() (from test_common.h) before
- * rtos_start_scheduler().
- ******************************************************************************/
+ *   #include "test_log.h"
+ */
 
 #ifndef TEST_LOG_H
 #define TEST_LOG_H

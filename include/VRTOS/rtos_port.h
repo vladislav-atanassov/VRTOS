@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: include/rtos_port.h
- * Description: Porting Layer Interface
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef RTOS_PORT_H
 #define RTOS_PORT_H
 

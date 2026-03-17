@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/log_event_ids.h
- * Description: Shared Event IDs for KLog and ProfTrace
- ******************************************************************************/
-
 #ifndef LOG_EVENT_IDS_H
 #define LOG_EVENT_IDS_H
 

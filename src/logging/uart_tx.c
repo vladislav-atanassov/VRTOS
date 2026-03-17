@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/logging/uart_tx.c
- * Description: UART TX — Interrupt-Driven via SPSC Ring Buffer
- ******************************************************************************/
-
 #include "uart_tx.h"
 
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
@@ -61,13 +56,9 @@ void log_uart_init(log_level_t level)
     g_log_level = level;
 }
 
-/**
- * @brief Retarget for printf — copies to TX ring buffer, waits if full
- *
- * When the buffer is full, spin-waits for the TXE ISR to drain bytes.
- * Since only the lowest-priority flush task calls this, spinning does
- * not block higher-priority tasks — they preempt freely via PendSV.
- */
+/* printf retarget — copies to TX ring buffer, spins if full.
+ * Only the lowest-priority flush task calls this, so spinning
+ * doesn't block higher-priority tasks. */
 int _write(int file, char *ptr, int len)
 {
     (void) file;
@@ -88,13 +79,8 @@ int _write(int file, char *ptr, int len)
     return len;
 }
 
-/**
- * @brief USART2 ISR — drains one byte per invocation from TX ring buffer
- *
- * Triggered when the UART TX data register is empty (TXE flag set).
- * Writes the next byte from the ring buffer to UART DR.
- * When the buffer is empty, disables TXE interrupt to stop firing.
- */
+/* TXE ISR — writes one byte from ring buffer per invocation.
+ * Disables TXE interrupt when buffer is empty. */
 void USART2_IRQHandler(void)
 {
     if ((USART2->SR & USART_SR_TXE) && (USART2->CR1 & USART_CR1_TXEIE))
@@ -111,14 +97,8 @@ void USART2_IRQHandler(void)
     }
 }
 
-/**
- * @brief Blocking flush — drains the TX buffer by polling
- *
- * Use this:
- * - During pre-scheduler boot (before NVIC/interrupts are reliable)
- * - In hard fault handlers (interrupts may be disabled)
- * - After final printf before entering WFI
- */
+/* Blocking flush — drains TX buffer by polling.
+ * Use during pre-scheduler boot, fault handlers, or before WFI. */
 void uart_tx_flush(void)
 {
     USART2->CR1 &= ~USART_CR1_TXEIE;

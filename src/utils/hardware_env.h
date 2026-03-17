@@ -1,10 +1,3 @@
-/*******************************************************************************
- * File: src/utils/hardware_env.h
- * Description: Hardware Environment - Shared hardware initialization for tests
- * Author: Student
- * Date: 2025
- ******************************************************************************/
-
 #ifndef HARDWARE_ENV_H
 #define HARDWARE_ENV_H
 

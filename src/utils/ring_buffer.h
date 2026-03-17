@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/utils/ring_buffer.h
- * Description: Generic Lock-Free Ring Buffer
- ******************************************************************************/
-
 #ifndef RING_BUFFER_H
 #define RING_BUFFER_H
 
