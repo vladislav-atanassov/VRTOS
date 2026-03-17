@@ -88,6 +88,20 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle);
 rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle);
 
 /**
+ * @brief Delete a task and remove it from all scheduler and sync-object lists.
+ *
+ * Pass NULL to delete the calling task (self-delete). Self-delete triggers a
+ * yield and never returns. The TCB slot is permanently consumed (bump allocator
+ * cannot free stack RAM). The idle task cannot be deleted.
+ *
+ * Note: if the deleted task held a mutex, that mutex remains locked.
+ *
+ * @param task_handle Task to delete, or NULL to delete the current task.
+ * @return RTOS_SUCCESS, RTOS_ERROR_INVALID_PARAM, or RTOS_ERROR_INVALID_STATE
+ */
+rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle);
+
+/**
  * @brief Check if a task's stack has overflowed
  *
  * @param task_handle Task to check (NULL = check all tasks)

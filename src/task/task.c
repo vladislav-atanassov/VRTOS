@@ -401,6 +401,87 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
 }
 
 /**
+ * @brief Delete a task and remove it from all scheduler and sync-object lists.
+ */
+rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
+{
+    rtos_port_enter_critical();
+
+    rtos_tcb_t *task = (task_handle != NULL) ? task_handle : g_kernel.current_task;
+
+    if (task == NULL)
+    {
+        rtos_port_exit_critical();
+        return RTOS_ERROR_INVALID_PARAM;
+    }
+
+    if (task->state == RTOS_TASK_STATE_DELETED)
+    {
+        rtos_port_exit_critical();
+        return RTOS_ERROR_INVALID_STATE;
+    }
+
+    if (task->priority == RTOS_IDLE_TASK_PRIORITY)
+    {
+        rtos_port_exit_critical();
+        return RTOS_ERROR_INVALID_STATE;
+    }
+
+    if (task->state == RTOS_TASK_STATE_READY)
+    {
+        rtos_scheduler_remove_from_ready_list(task);
+    }
+    else if (task->state == RTOS_TASK_STATE_BLOCKED)
+    {
+        rtos_scheduler_remove_from_delayed_list(task);
+
+        if (task->blocked_on != NULL)
+        {
+            switch (task->blocked_on_type)
+            {
+                case RTOS_SYNC_TYPE_MUTEX:
+                    rtos_mutex_remove_task_from_wait(task->blocked_on, task);
+                    break;
+                case RTOS_SYNC_TYPE_SEMAPHORE:
+                    rtos_sem_remove_task_from_wait(task->blocked_on, task);
+                    break;
+                case RTOS_SYNC_TYPE_QUEUE:
+                    rtos_queue_remove_task_from_wait(task->blocked_on, task);
+                    break;
+                case RTOS_SYNC_TYPE_NOTIFICATION:
+                    /* Self-pointer sentinel — no external list, cleared below */
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    /* RTOS_TASK_STATE_RUNNING / SUSPENDED: not in any list */
+
+    task->next_waiting    = NULL;
+    task->blocked_on      = NULL;
+    task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+    task->state           = RTOS_TASK_STATE_DELETED;
+
+    KLOGI(KEVT_TASK_DELETE, task->task_id, 0);
+
+    bool is_self = (task == g_kernel.current_task);
+    if (is_self)
+    {
+        g_kernel.current_task = NULL;
+    }
+
+    rtos_port_exit_critical();
+
+    if (is_self)
+    {
+        rtos_yield(); /* Never returns */
+    }
+
+    return RTOS_SUCCESS;
+}
+
+/**
  * @brief Allocate a TCB from the pool
  */
 static rtos_tcb_t *rtos_task_allocate_tcb(void)
