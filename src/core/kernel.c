@@ -236,8 +236,7 @@ void rtos_kernel_switch_context(void)
 
     if (g_kernel.current_task != NULL)
     {
-        if (g_kernel.current_task->state != RTOS_TASK_STATE_BLOCKED &&
-            g_kernel.current_task->state != RTOS_TASK_STATE_SUSPENDED)
+        if (g_kernel.current_task->state == RTOS_TASK_STATE_RUNNING)
         {
             g_kernel.current_task->state = RTOS_TASK_STATE_READY;
             rtos_scheduler_add_to_ready_list(g_kernel.current_task);
@@ -294,13 +293,13 @@ void rtos_kernel_switch_context(void)
  * @return true if transition is valid, false otherwise
  *
  * Valid transitions:
- *   READY    -> RUNNING, SUSPENDED
- *   RUNNING  -> READY, BLOCKED, SUSPENDED
- *   BLOCKED  -> READY, SUSPENDED
- *   SUSPENDED -> READY
- *   DELETED  -> (none)
+ *   READY     -> RUNNING, SUSPENDED, DELETED
+ *   RUNNING   -> READY, BLOCKED, SUSPENDED, DELETED
+ *   BLOCKED   -> READY, SUSPENDED, DELETED
+ *   SUSPENDED -> READY, DELETED
+ *   DELETED   -> (none)
  */
-static bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state)
+bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state)
 {
     if (task == NULL)
     {
@@ -313,20 +312,27 @@ static bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_s
     switch (old_state)
     {
         case RTOS_TASK_STATE_READY:
-            valid = (new_state == RTOS_TASK_STATE_RUNNING || new_state == RTOS_TASK_STATE_SUSPENDED);
+            valid = (new_state == RTOS_TASK_STATE_RUNNING  ||
+                     new_state == RTOS_TASK_STATE_SUSPENDED ||
+                     new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_RUNNING:
-            valid = (new_state == RTOS_TASK_STATE_READY || new_state == RTOS_TASK_STATE_BLOCKED ||
-                     new_state == RTOS_TASK_STATE_SUSPENDED);
+            valid = (new_state == RTOS_TASK_STATE_READY     ||
+                     new_state == RTOS_TASK_STATE_BLOCKED   ||
+                     new_state == RTOS_TASK_STATE_SUSPENDED ||
+                     new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_BLOCKED:
-            valid = (new_state == RTOS_TASK_STATE_READY || new_state == RTOS_TASK_STATE_SUSPENDED);
+            valid = (new_state == RTOS_TASK_STATE_READY     ||
+                     new_state == RTOS_TASK_STATE_SUSPENDED ||
+                     new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_SUSPENDED:
-            valid = (new_state == RTOS_TASK_STATE_READY);
+            valid = (new_state == RTOS_TASK_STATE_READY   ||
+                     new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_DELETED:
@@ -358,14 +364,10 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
 
     rtos_port_enter_critical();
 
-    if (task->state != RTOS_TASK_STATE_BLOCKED && task->state != RTOS_TASK_STATE_RUNNING &&
-        task->state != RTOS_TASK_STATE_SUSPENDED)
+    if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_READY))
     {
-        if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_READY))
-        {
-            rtos_port_exit_critical();
-            return;
-        }
+        rtos_port_exit_critical();
+        return;
     }
 
     task->state = RTOS_TASK_STATE_READY;
@@ -408,9 +410,8 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 
     rtos_port_enter_critical();
 
-    if (task->state != RTOS_TASK_STATE_RUNNING && task->state != RTOS_TASK_STATE_READY)
+    if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_BLOCKED))
     {
-        KLOGE(KEVT_TASK_BLOCK, task->task_id, (uint32_t) task->state);
         rtos_port_exit_critical();
         return;
     }

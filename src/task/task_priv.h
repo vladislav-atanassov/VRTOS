@@ -88,4 +88,9 @@ void rtos_kernel_task_ready(rtos_task_handle_t task);
 void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks);
 void rtos_kernel_task_unblock(rtos_task_handle_t task);
 
+/* Sync-object wait-list removal helpers — called by rtos_task_delete() */
+void rtos_mutex_remove_task_from_wait(void *mutex_ptr, rtos_tcb_t *task);
+void rtos_sem_remove_task_from_wait(void *sem_ptr, rtos_tcb_t *task);
+void rtos_queue_remove_task_from_wait(void *queue_ptr, rtos_tcb_t *task);
+
 #endif /* TASK_PRIV_H */

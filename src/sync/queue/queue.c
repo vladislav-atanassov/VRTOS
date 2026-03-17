@@ -75,6 +75,13 @@ static void queue_remove_from_waiting_list(rtos_tcb_t **list_head, rtos_tcb_t *t
     task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 }
 
+void rtos_queue_remove_task_from_wait(void *queue_ptr, rtos_tcb_t *task)
+{
+    rtos_queue_t *q = (rtos_queue_t *) queue_ptr;
+    queue_remove_from_waiting_list(&q->sender_wait_list, task);
+    queue_remove_from_waiting_list(&q->receiver_wait_list, task);
+}
+
 static rtos_tcb_t *queue_pop_highest_priority_waiter(rtos_tcb_t **list_head)
 {
     if (*list_head == NULL)

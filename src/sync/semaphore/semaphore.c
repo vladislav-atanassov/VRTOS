@@ -88,6 +88,11 @@ static rtos_tcb_t *sem_pop_highest_priority_waiter(rtos_semaphore_t *sem)
     return task;
 }
 
+void rtos_sem_remove_task_from_wait(void *sem_ptr, rtos_tcb_t *task)
+{
+    sem_remove_from_waiting_list((rtos_semaphore_t *) sem_ptr, task);
+}
+
 rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_count, uint32_t max_count)
 {
     if (sem == NULL)

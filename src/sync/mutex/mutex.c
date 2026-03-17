@@ -291,6 +291,11 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 /**
  * @brief Unlock/release a mutex
  */
+void rtos_mutex_remove_task_from_wait(void *mutex_ptr, rtos_tcb_t *task)
+{
+    mutex_remove_from_waiting_list((rtos_mutex_t *) mutex_ptr, task);
+}
+
 rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 {
     if (m == NULL)

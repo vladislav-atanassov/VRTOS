@@ -32,5 +32,6 @@ extern rtos_kernel_cb_t g_kernel;
 /* Internal kernel functions */
 void rtos_kernel_tick_handler(void);
 void rtos_kernel_switch_context(void);
+bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state);
 
 #endif /* KERNEL_PRIV_H */

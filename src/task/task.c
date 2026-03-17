@@ -339,8 +339,7 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    /* Cannot suspend deleted task */
-    if (task->state == RTOS_TASK_STATE_DELETED)
+    if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_SUSPENDED))
     {
         rtos_port_exit_critical();
         return RTOS_ERROR_INVALID_STATE;
