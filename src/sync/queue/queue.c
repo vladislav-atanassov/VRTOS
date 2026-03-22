@@ -247,10 +247,8 @@ copy_data:
     {
         KLOGD(KEVT_QUEUE_WAKE_RECV, waiting_receiver->task_id, 0);
 
-        rtos_port_exit_critical();
-
         rtos_kernel_task_unblock(waiting_receiver);
-
+        rtos_port_exit_critical();
         return RTOS_SUCCESS;
     }
 
@@ -352,10 +350,8 @@ copy_data:
     {
         KLOGD(KEVT_QUEUE_WAKE_SEND, waiting_sender->task_id, 0);
 
-        rtos_port_exit_critical();
-
         rtos_kernel_task_unblock(waiting_sender);
-
+        rtos_port_exit_critical();
         return RTOS_SUCCESS;
     }
 

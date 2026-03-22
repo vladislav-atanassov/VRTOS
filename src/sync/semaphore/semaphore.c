@@ -202,9 +202,9 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     {
         /* Wake the highest priority waiter instead of incrementing count */
         KLOGD(KEVT_SEM_WAKE, waiter->task_id, 0);
-        rtos_port_exit_critical();
 
         rtos_kernel_task_unblock(waiter);
+        rtos_port_exit_critical();
         return RTOS_SEM_OK;
     }
 
