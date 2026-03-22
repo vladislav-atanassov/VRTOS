@@ -2,6 +2,7 @@
 
 #include "VRTOS.h"
 #include "config.h"
+#include "kernel_priv.h"
 #include "klog.h"
 #include "scheduler.h"
 #include "task_priv.h"
@@ -98,7 +99,7 @@ static void round_robin_add_to_delayed_list_internal(rtos_task_handle_t task, rt
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
-    while (current != NULL && current->delay_until <= task->delay_until)
+    while (current != NULL && (int32_t)(current->delay_until - task->delay_until) <= 0)
     {
         prev    = current;
         current = current->next;
@@ -171,7 +172,7 @@ static void round_robin_update_delayed_tasks_internal(void)
     {
         rtos_tcb_t *next_task = task->next;
 
-        if (current_tick >= task->delay_until)
+        if ((int32_t)(current_tick - task->delay_until) >= 0)
         {
             round_robin_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
@@ -252,16 +253,21 @@ static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos
         return false;
     }
 
-    if (g_round_robin_data.slice_remaining > 0)
+    /* Only decrement the time slice on the tick path (current task still running).
+     * When a new task becomes ready, new_task != current_task — skip decrement
+     * to avoid depleting the slice faster than intended. */
+    if (new_task == g_kernel.current_task)
     {
-        g_round_robin_data.slice_remaining--;
-    }
+        if (g_round_robin_data.slice_remaining > 0)
+        {
+            g_round_robin_data.slice_remaining--;
+        }
 
-    /* Preempt if time slice expired and there are other ready tasks */
-    if (g_round_robin_data.slice_remaining == 0 && g_round_robin_data.ready_count > 1)
-    {
-        KLOGT(KEVT_SCHED_TIME_SLICE, 0, 0);
-        return true;
+        if (g_round_robin_data.slice_remaining == 0 && g_round_robin_data.ready_count > 1)
+        {
+            KLOGT(KEVT_SCHED_TIME_SLICE, 0, 0);
+            return true;
+        }
     }
 
     return false;

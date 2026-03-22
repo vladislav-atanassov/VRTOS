@@ -99,7 +99,7 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
-    while (current != NULL && current->delay_until <= task->delay_until)
+    while (current != NULL && (int32_t)(current->delay_until - task->delay_until) <= 0)
     {
         prev    = current;
         current = current->next;
@@ -164,7 +164,7 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
     {
         rtos_tcb_t *next_task = task->next;
 
-        if (current_tick >= task->delay_until)
+        if ((int32_t)(current_tick - task->delay_until) >= 0)
         {
             preemptive_sp_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
