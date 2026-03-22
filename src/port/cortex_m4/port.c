@@ -51,7 +51,7 @@ void rtos_port_start_systick(void)
         return;
     }
 
-    NVIC_SetPriority(SysTick_IRQn, 0xE0);
+    NVIC_SetPriority(SysTick_IRQn, PORT_IRQ_PRIORITY_KERNEL >> 4);
 }
 
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter)
