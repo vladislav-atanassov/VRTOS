@@ -279,6 +279,14 @@ void rtos_kernel_switch_context(void)
             rtos_scheduler_remove_from_ready_list(g_kernel.current_task);
             g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
         }
+        else
+        {
+            KLOGE(KEVT_ERROR_GENERIC, 0, 0);
+            while (1)
+            {
+                __asm volatile("wfi");
+            }
+        }
     }
 
     rtos_port_exit_critical();
