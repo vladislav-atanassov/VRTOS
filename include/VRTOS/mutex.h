@@ -29,9 +29,10 @@ typedef enum
 /* Minimal mutex structure. Keep fields intentionally small and extendable. */
 typedef struct rtos_mutex
 {
-    rtos_tcb_t *owner;        /* current owner TCB (NULL if unlocked) */
-    rtos_tcb_t *waiting_list; /* singly-linked list of waiting TCBs (uses tcb->next_waiting) */
-    uint8_t     lock_count;   /* recursion depth for owner (future use) */
+    rtos_tcb_t         *owner;        /* current owner TCB (NULL if unlocked) */
+    rtos_tcb_t         *waiting_list; /* singly-linked list of waiting TCBs (uses tcb->next_waiting) */
+    struct rtos_mutex  *next_held;    /* next mutex in owner's held-mutex chain */
+    uint8_t             lock_count;   /* recursion depth for owner (future use) */
 } rtos_mutex_t;
 
 /**

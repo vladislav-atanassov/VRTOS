@@ -104,11 +104,12 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     new_task->delay_until          = 0;
     new_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
 
-    new_task->next            = NULL;
-    new_task->prev            = NULL;
-    new_task->next_waiting    = NULL;
-    new_task->blocked_on      = NULL;
-    new_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+    new_task->next             = NULL;
+    new_task->prev             = NULL;
+    new_task->next_waiting     = NULL;
+    new_task->blocked_on       = NULL;
+    new_task->blocked_on_type  = RTOS_SYNC_TYPE_NONE;
+    new_task->held_mutex_list  = NULL;
 
     new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
     rtos_scheduler_add_to_ready_list(new_task);

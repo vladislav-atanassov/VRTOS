@@ -4,6 +4,7 @@
 #include "kernel_priv.h"
 #include "klog.h"
 #include "rtos_port.h"
+#include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
 
@@ -161,6 +162,27 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
     }
 }
 
+static void mutex_remove_from_held_list(rtos_tcb_t *task, rtos_mutex_t *m)
+{
+    if (task->held_mutex_list == m)
+    {
+        task->held_mutex_list = m->next_held;
+    }
+    else
+    {
+        rtos_mutex_t *cur = task->held_mutex_list;
+        while (cur != NULL && cur->next_held != m)
+        {
+            cur = cur->next_held;
+        }
+        if (cur != NULL)
+        {
+            cur->next_held = m->next_held;
+        }
+    }
+    m->next_held = NULL;
+}
+
 static void mutex_restore_priority(rtos_tcb_t *task)
 {
     if (task == NULL)
@@ -168,10 +190,20 @@ static void mutex_restore_priority(rtos_tcb_t *task)
         return;
     }
 
-    if (task->priority != task->base_priority)
+    rtos_priority_t max_prio = task->base_priority;
+
+    for (rtos_mutex_t *m = task->held_mutex_list; m != NULL; m = m->next_held)
     {
-        KLOGD(KEVT_MUTEX_PIP_RESTORE, task->task_id, task->base_priority);
-        task->priority = task->base_priority;
+        if (m->waiting_list != NULL && m->waiting_list->priority > max_prio)
+        {
+            max_prio = m->waiting_list->priority;
+        }
+    }
+
+    if (task->priority != max_prio)
+    {
+        KLOGD(KEVT_MUTEX_PIP_RESTORE, task->task_id, max_prio);
+        task->priority = max_prio;
     }
 }
 
@@ -189,6 +221,7 @@ rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
 
     m->owner        = NULL;
     m->waiting_list = NULL;
+    m->next_held    = NULL;
     m->lock_count   = 0;
 
     rtos_port_exit_critical();
@@ -222,6 +255,8 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     {
         m->owner      = current_task;
         m->lock_count = 1;
+        m->next_held  = current_task->held_mutex_list;
+        current_task->held_mutex_list = m;
         rtos_port_exit_critical();
         KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 0);
         return RTOS_MUTEX_OK;
@@ -323,8 +358,19 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
         return RTOS_MUTEX_OK;
     }
 
-    /* Full unlock - restore priority first */
+    /* Full unlock - remove from held list, then restore priority */
+    mutex_remove_from_held_list(current_task, m);
     mutex_restore_priority(current_task);
+
+    /* If priority changed and task is in ready list, re-insert at correct bucket */
+    if (current_task->state == RTOS_TASK_STATE_RUNNING || current_task->state == RTOS_TASK_STATE_READY)
+    {
+        if (current_task->state == RTOS_TASK_STATE_READY)
+        {
+            rtos_scheduler_remove_from_ready_list(current_task);
+            rtos_scheduler_add_to_ready_list(current_task);
+        }
+    }
 
     /* Transfer ownership to highest priority waiter */
     rtos_tcb_t *waiter = mutex_pop_highest_priority_waiter(m);
@@ -332,12 +378,13 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     {
         m->owner      = waiter;
         m->lock_count = 1;
+        m->next_held  = waiter->held_mutex_list;
+        waiter->held_mutex_list = m;
 
         KLOGD(KEVT_MUTEX_UNLOCK, waiter->task_id, 0);
 
-        rtos_port_exit_critical();
-
         rtos_kernel_task_unblock(waiter);
+        rtos_port_exit_critical();
         return RTOS_MUTEX_OK;
     }
 

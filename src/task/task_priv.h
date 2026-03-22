@@ -6,6 +6,8 @@
 #include "rtos_assert.h"
 #include "rtos_types.h"
 
+struct rtos_mutex; /* forward declaration for held-mutex tracking */
+
 /* Task Control Block */
 typedef struct rtos_task_control_block
 {
@@ -40,6 +42,9 @@ typedef struct rtos_task_control_block
     struct rtos_task_control_block *next_waiting;    /**< Next task in sync wait queue */
     void                           *blocked_on;      /**< Sync object task is waiting on */
     rtos_sync_type_t                blocked_on_type; /**< Type of sync object */
+
+    /* Mutex ownership tracking (for correct priority inheritance restoration) */
+    struct rtos_mutex *held_mutex_list; /**< Singly-linked list of mutexes held by this task */
 
     /* Task notification support */
     uint32_t notification_value;   /**< Notification value (bitfield/counter) */
