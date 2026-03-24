@@ -11,6 +11,7 @@
 #include "task_priv.h"
 #include "utils.h"
 
+#include <stdint.h>
 #include <string.h>
 
 rtos_tcb_t g_task_pool[RTOS_MAX_TASKS] = {0};
@@ -92,7 +93,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     *stack_memory = PORT_STACK_CANARY_VALUE;
 #endif
 
-    new_task->task_id              = g_task_count;
+    new_task->task_id              = (uint8_t)(new_task - g_task_pool);
     new_task->name                 = name;
     new_task->task_function        = task_function;
     new_task->parameter            = parameter;
@@ -568,5 +569,5 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size)
     uint8_t *stack_top = (uint8_t *) stack_block + size;
 
     /* Ensure 8-byte alignment of top (should be naturally aligned) */
-    return (uint32_t *) ALIGN8_DOWN_VALUE((uint32_t) stack_top);
+    return (uint32_t *) ALIGN8_DOWN_VALUE((uintptr_t) stack_top);
 }
