@@ -17,13 +17,15 @@ VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrolle
   - **Mutexes** with Priority Inheritance Protocol (PIP) to prevent priority inversion
   - **Counting Semaphores** with timeout support
   - **Message Queues** with blocking send/receive and priority-ordered wait lists
+  - **Event Groups** with bitwise wait conditions (wait-any/wait-all) and ISR-safe signaling
+- **Task Notifications** - Lightweight direct task-to-task signaling (set bits, increment, overwrite)
 - **Software Timers** - One-shot and auto-reload timers with sorted active list
-- **Task Management** - Dynamic task creation with configurable priorities and stack sizes
-- **Timing Services** - System tick with 1ms resolution and delay functions
-- **Cortex-M4 Optimization** - Efficient context switching and interrupt handling
+- **Task Management** - Dynamic creation, suspend/resume, delete with automatic mutex cleanup
+- **Timing Services** - System tick with 1ms resolution, `rtos_delay_ms()` and `rtos_delay_until()`
+- **Cortex-M4 Optimization** - Context switching with lazy FPU stacking
 - **Memory Management** - Static bump allocator with stack overflow detection (canary values)
 - **Profiling Support** - DWT cycle counter-based profiling for WCET analysis
-- **Comprehensive Logging** - Multi-level debug output via UART with structured test logging
+- **Comprehensive Logging** - Binary kernel logger (KLog) + user-facing deferred logger (ULog)
 
 ## Architecture
 
@@ -38,7 +40,7 @@ VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrolle
 │           (Public Interface)           │
 ├────────────────────────────────────────┤
 │       Synchronization Primitives       │
-│       (Mutex, Semaphore, Queue)        │
+│  (Mutex, Semaphore, Queue, EventGroup) │
 ├────────────────────────────────────────┤
 │          Scheduler Manager             │
 │          (Vtable Interface)            │
@@ -242,6 +244,70 @@ rtos_timer_change_period(timer, 500);
 rtos_timer_stop(timer);
 ```
 
+> **Warning**: Timer callbacks execute in **ISR context** (SysTick handler). They must not call blocking RTOS APIs (`rtos_mutex_lock`, `rtos_semaphore_wait`, `rtos_delay_ms`, etc.). Use ISR-safe APIs only (e.g. `rtos_event_group_set_bits_from_isr`, `rtos_task_notify`).
+
+### Event Groups
+
+**Features**:
+
+- Bitwise wait conditions: wait for ANY or ALL bits
+- Clear-on-exit option for automatic bit clearing
+- Priority-ordered wait list with multiple concurrent waiters
+- ISR-safe `set_bits_from_isr()` variant
+- Deferred bit clearing to avoid race conditions
+
+**API**:
+
+```c
+rtos_event_group_t eg;
+rtos_event_group_init(&eg);
+
+// Wait for bits 0 and 2 to both be set, clear them on exit
+uint32_t bits;
+rtos_event_group_wait_bits(&eg, 0x05, true, true, &bits, RTOS_EG_MAX_WAIT);
+
+// Set bits from task or ISR context
+rtos_event_group_set_bits(&eg, 0x05);
+rtos_event_group_set_bits_from_isr(&eg, 0x01);
+```
+
+### Task Notifications
+
+**Features**:
+
+- Lightweight direct task-to-task signaling (no kernel object needed)
+- Multiple actions: set bits, increment, overwrite, or just signal
+- Can be used as a fast binary/counting semaphore replacement
+- ISR-safe sending
+
+**API**:
+
+```c
+// Send notification with value
+rtos_task_notify(target_task, 0x01, RTOS_NOTIFY_ACTION_SET_BITS);
+
+// Lightweight give/take (counting semaphore pattern)
+rtos_task_notify_give(target_task);
+rtos_task_notify_take(true, RTOS_NOTIFY_MAX_WAIT);
+
+// Bit-level wait with entry/exit clear control
+uint32_t value;
+rtos_task_notify_wait(0x00, 0xFF, &value, 1000);
+```
+
+### Task Lifecycle Management
+
+**API**:
+
+```c
+// Suspend and resume
+rtos_task_suspend(task_handle);  // NULL = self-suspend
+rtos_task_resume(task_handle);
+
+// Delete (automatically releases held mutexes)
+rtos_task_delete(task_handle);   // NULL = self-delete
+```
+
 ## Memory Management
 
 **Current Implementation**: Bump allocator (simple, predictable)
@@ -292,6 +358,7 @@ VRTOS/
 │   ├── mutex.h            # Mutex API
 │   ├── semaphore.h        # Semaphore API
 │   ├── queue.h            # Queue API
+│   ├── event_group.h      # Event group API
 │   ├── timer.h            # Software timer API
 │   ├── memory.h           # Memory API
 │   ├── profiling.h        # Profiling API
@@ -309,11 +376,13 @@ VRTOS/
 │   │       └── round_robin.c     # Round-robin
 │   ├── task/              # Task management
 │   │   ├── task.c         # Task creation and state management
+│   │   ├── task_notify.c  # Task notification mechanism
 │   │   └── task_priv.h    # Private task definitions
 │   ├── sync/              # Synchronization primitives
 │   │   ├── mutex/         # Mutex with priority inheritance
 │   │   ├── semaphore/     # Counting semaphore
-│   │   └── queue/         # Message queue
+│   │   ├── queue/         # Message queue
+│   │   └── event_group/   # Event group (bit-field sync)
 │   ├── timer/             # Software timers
 │   │   ├── timer.c        # Timer API
 │   │   └── timer_list.c   # Active timer list management
@@ -341,16 +410,22 @@ VRTOS/
 │       ├── profiling_demo/
 │       └── fpu_context_test/
 ├── tests/                 # Test suite
-│   └── scheduler/         # Scheduler tests (one dir per policy)
-│       ├── round_robin/
-│       │   ├── test_scheduler_rr.c
-│       │   └── test_config.h
-│       ├── preemptive/
-│       │   ├── test_scheduler_preemptive.c
-│       │   └── test_config.h
-│       └── cooperative/
-│           ├── test_scheduler_cooperative.c
-│           └── test_config.h
+│   ├── integration/       # Sync primitive invariant tests
+│   │   ├── test_mutex_state.c       # PIP + ownership invariants
+│   │   ├── test_semaphore_state.c   # Counting semaphore invariants
+│   │   ├── test_queue_state.c       # Queue blocking invariants
+│   │   ├── test_event_group_state.c # Event group bit-wait tests
+│   │   ├── test_notification_state.c # Task notification tests
+│   │   └── test_task_state_transitions.c # Task lifecycle tests
+│   ├── scheduler/         # Scheduler tests (one dir per policy)
+│   │   ├── round_robin/
+│   │   ├── preemptive/
+│   │   └── cooperative/
+│   └── benchmarks/        # Cycle-accurate benchmarks
+│       ├── bench_context_switch/
+│       ├── bench_mutex/
+│       ├── bench_queue/
+│       └── bench_semaphore/
 ├── config/                # Board-specific configuration
 │   ├── rtos_config_template.h  # Skeleton for new boards
 │   └── stm32f446re/       # STM32F446RE board config
@@ -463,16 +538,25 @@ python test_runner.py test_scheduler_rr --duration 10
 
 **Scheduler Tests**:
 
-- `test_scheduler_preemptive` - Preemptive priority scheduling
-- `test_scheduler_cooperative` - Cooperative scheduling
-- `test_scheduler_rr` - Round-robin scheduling
+- `test_scheduler_preemptive_state` - Preemptive priority scheduling invariants
+- `test_scheduler_cooperative_state` - Cooperative scheduling invariants
+- `test_scheduler_rr_state` - Round-robin scheduling invariants
 
 **Integration Tests**:
 
-- `test_mutex_priority` - Mutex priority inheritance
-- `test_semaphore_pc` - Semaphore producer-consumer
-- `test_queue_blocking` - Queue blocking operations
-- `test_states` - Task state transitions
+- `test_mutex_state` - Mutex state and priority inheritance invariants
+- `test_semaphore_state` - Counting semaphore invariants
+- `test_queue_state` - Queue blocking and wake invariants
+- `test_event_group_state` - Event group bit-wait invariants
+- `test_notification_state` - Task notification invariants
+- `test_task_state_transitions` - Task lifecycle state transitions
+
+**Benchmarks**:
+
+- `bench_context_switch` - Context switch cycle measurement
+- `bench_mutex` - Mutex lock/unlock latency
+- `bench_queue` - Queue send/receive latency
+- `bench_semaphore` - Semaphore signal/wait latency
 
 ## Test Automation
 
