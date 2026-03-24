@@ -450,6 +450,18 @@ rtos_status_t rtos_queue_reset(rtos_queue_handle_t queue_handle)
         }
     }
 
+    /* Also wake all waiting receivers — queue data is gone, let them
+     * re-evaluate or time out rather than blocking forever. */
+    while (queue->receiver_wait_list != NULL)
+    {
+        rtos_tcb_t *receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
+        if (receiver != NULL)
+        {
+            KLOGD(KEVT_QUEUE_WAKE_RECV, receiver->task_id, 0);
+            rtos_kernel_task_unblock(receiver);
+        }
+    }
+
     rtos_port_exit_critical();
 
     KLOGI(KEVT_QUEUE_RESET, 0, 0);
