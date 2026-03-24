@@ -174,7 +174,7 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 
     rtos_port_start_systick();
 
-#ifdef RTOS_PROFILING_SYSTEM_ENABLED
+#if RTOS_PROFILING_SYSTEM_ENABLED
     rtos_profiling_init();
 #endif
 
