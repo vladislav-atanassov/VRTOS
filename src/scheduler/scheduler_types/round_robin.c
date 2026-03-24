@@ -9,6 +9,14 @@
 
 #include <string.h>
 
+round_robin_private_data_t g_round_robin_data = {.ready_list      = NULL,
+                                                  .ready_list_tail = NULL,
+                                                  .delayed_list    = NULL,
+                                                  .current_task    = NULL,
+                                                  .slice_remaining = 0,
+                                                  .ready_count     = 0,
+                                                  .delayed_count   = 0};
+
 static void round_robin_add_to_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL)

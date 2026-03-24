@@ -18,9 +18,8 @@ typedef struct
     uint8_t     delayed_count; /**< Number of delayed tasks */
 } cooperative_private_data_t;
 
-/* Static private data instance */
-__attribute__((used)) static cooperative_private_data_t g_cooperative_data = {
-    .ready_list = NULL, .delayed_list = NULL, .ready_count = 0, .delayed_count = 0};
+/* Private data instance — defined in cooperative.c */
+extern cooperative_private_data_t g_cooperative_data;
 
 #ifdef __cplusplus
 }

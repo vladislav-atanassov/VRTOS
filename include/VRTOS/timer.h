@@ -21,6 +21,12 @@ typedef enum
  * @brief Timer callback function type
  * @param timer_handle Handle of the timer that expired
  * @param parameter User parameter provided at creation
+ *
+ * @warning Timer callbacks execute in ISR context (SysTick handler).
+ *          They must NOT call blocking RTOS APIs (rtos_mutex_lock,
+ *          rtos_semaphore_wait, rtos_delay_ms, etc.). Keep callbacks
+ *          short to avoid tick jitter. Use ISR-safe APIs only
+ *          (e.g. rtos_event_group_set_bits_from_isr, rtos_task_notify).
  */
 typedef void (*rtos_timer_callback_t)(void *timer_handle, void *parameter);
 

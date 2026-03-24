@@ -7,6 +7,9 @@
 
 #include <string.h>
 
+cooperative_private_data_t g_cooperative_data = {
+    .ready_list = NULL, .delayed_list = NULL, .ready_count = 0, .delayed_count = 0};
+
 static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL)

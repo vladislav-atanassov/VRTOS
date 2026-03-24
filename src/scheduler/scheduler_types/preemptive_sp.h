@@ -18,9 +18,8 @@ typedef struct
     uint8_t     ready_priorities; /**< Bitmask of priorities with ready tasks */
 } preemptive_sp_private_data_t;
 
-/* Static private data instance */
-__attribute__((used)) static preemptive_sp_private_data_t g_preemptive_sp_data = {
-    .ready_lists = {NULL}, .delayed_list = NULL, .ready_priorities = 0};
+/* Private data instance — defined in preemptive_sp.c */
+extern preemptive_sp_private_data_t g_preemptive_sp_data;
 
 #ifdef __cplusplus
 }

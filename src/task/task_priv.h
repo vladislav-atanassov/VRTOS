@@ -50,6 +50,11 @@ typedef struct rtos_task_control_block
     uint32_t notification_value;   /**< Notification value (bitfield/counter) */
     uint8_t  notification_pending; /**< 0 = not pending, 1 = pending */
 
+    /* Event group wait parameters (valid only when blocked_on_type == EVENT_GROUP) */
+    uint32_t event_wait_bits;     /**< Bits this task is waiting for */
+    uint8_t  event_wait_all;      /**< 1 = wait for ALL bits, 0 = wait for ANY */
+    uint8_t  event_clear_on_exit; /**< 1 = clear waited bits on successful wake */
+
 #if RTOS_PROFILING_SYSTEM_ENABLED
     uint32_t ready_timestamp; /**< DWT cycle count when task became READY */
 #endif
@@ -97,5 +102,6 @@ void rtos_kernel_task_unblock(rtos_task_handle_t task);
 void rtos_mutex_remove_task_from_wait(void *mutex_ptr, rtos_tcb_t *task);
 void rtos_sem_remove_task_from_wait(void *sem_ptr, rtos_tcb_t *task);
 void rtos_queue_remove_task_from_wait(void *queue_ptr, rtos_tcb_t *task);
+void rtos_event_group_remove_task_from_wait(void *eg_ptr, rtos_tcb_t *task);
 
 #endif /* TASK_PRIV_H */

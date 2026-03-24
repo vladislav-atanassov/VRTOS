@@ -158,6 +158,7 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     {
         /* Infinite wait - block without delay timeout */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
+        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }

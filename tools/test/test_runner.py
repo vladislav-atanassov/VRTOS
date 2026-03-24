@@ -87,6 +87,8 @@ VERDICT_TESTS = {
     'test_mutex_state',
     'test_semaphore_state',
     'test_queue_state',
+    'test_notification_state',
+    'test_event_group_state',
     'test_task_state_transitions',
 }
 

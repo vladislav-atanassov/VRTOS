@@ -2,6 +2,7 @@
 #include "assert.h"
 #include "kernel_priv.h"
 #include "klog.h"
+#include "memory.h"
 #include "profiling.h"
 #include "rtos_port.h"
 #include "scheduler.h"
@@ -40,6 +41,8 @@ rtos_status_t rtos_init(void)
     g_kernel.current_task        = NULL;
     g_kernel.next_task           = NULL;
     g_kernel.scheduler_suspended = 0;
+
+    rtos_memory_init();
 
     status = rtos_task_init_system();
     if (status != RTOS_SUCCESS)
@@ -155,12 +158,13 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
     rtos_port_enter_critical();
 
     rtos_tick_t current_time = g_kernel.tick_count;
-    rtos_tick_t elapsed      = current_time - *prev_wake_time;
+    /* Use signed comparison for tick wraparound safety */
+    int32_t     elapsed      = (int32_t)(current_time - *prev_wake_time);
     bool        should_delay = false;
 
-    if (elapsed < time_increment)
+    if (elapsed >= 0 && (uint32_t)elapsed < time_increment)
     {
-        rtos_tick_t ticks_to_delay = time_increment - elapsed;
+        rtos_tick_t ticks_to_delay = time_increment - (uint32_t)elapsed;
 
         if (g_kernel.current_task == NULL)
         {
@@ -228,7 +232,9 @@ void rtos_kernel_tick_handler(void)
 void rtos_kernel_switch_context(void)
 {
     if (g_kernel.scheduler_suspended > 0)
+    {
         return;
+    }
 
     RTOS_SYS_PROFILE_START(ctx_switch);
 
@@ -424,8 +430,14 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
         return;
     }
 
+    /* Only remove from ready list if task was actually in READY state.
+     * RUNNING tasks are not in the ready list. */
+    if (task->state == RTOS_TASK_STATE_READY)
+    {
+        rtos_scheduler_remove_from_ready_list(task);
+    }
+
     task->state = RTOS_TASK_STATE_BLOCKED;
-    rtos_scheduler_remove_from_ready_list(task);
 
     if (delay_ticks > 0)
     {
@@ -452,10 +464,10 @@ void rtos_kernel_task_unblock(rtos_task_handle_t task)
         return;
     }
 
-    rtos_port_enter_critical();
-
+    /* rtos_kernel_task_ready() enters/exits its own critical section and may
+     * call rtos_yield() on the preemption path.  Wrapping an additional
+     * critical section here would keep BASEPRI elevated across the yield,
+     * preventing PendSV from firing.  Delegate entirely. */
     rtos_scheduler_remove_from_delayed_list(task);
     rtos_kernel_task_ready(task);
-
-    rtos_port_exit_critical();
 }

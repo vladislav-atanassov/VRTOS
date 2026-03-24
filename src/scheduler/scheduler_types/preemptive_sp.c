@@ -8,6 +8,9 @@
 
 #include <string.h>
 
+preemptive_sp_private_data_t g_preemptive_sp_data = {
+    .ready_lists = {NULL}, .delayed_list = NULL, .ready_priorities = 0};
+
 static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
 {
     if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)

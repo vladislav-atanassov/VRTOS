@@ -103,8 +103,17 @@ typedef enum
     KEVT_NOTIFY_TIMEOUT,
     KEVT_NOTIFY_WAKE,
 
+    /* Event Group */
+    KEVT_EG_INIT = 0x0110,
+    KEVT_EG_SET,
+    KEVT_EG_CLEAR,
+    KEVT_EG_WAIT,
+    KEVT_EG_BLOCK,
+    KEVT_EG_TIMEOUT,
+    KEVT_EG_WAKE,
+
     /* Memory */
-    KEVT_STACK_ALLOC_FAIL,
+    KEVT_STACK_ALLOC_FAIL = 0x0120,
 
     /* ===== Profiling Events (ProfTrace) ===== */
 

@@ -21,14 +21,8 @@ typedef struct
     uint8_t     delayed_count;   /**< Number of delayed tasks */
 } round_robin_private_data_t;
 
-/* Static private data instance */
-__attribute__((used)) static round_robin_private_data_t g_round_robin_data = {.ready_list      = NULL,
-                                                                              .ready_list_tail = NULL,
-                                                                              .delayed_list    = NULL,
-                                                                              .current_task    = NULL,
-                                                                              .slice_remaining = 0,
-                                                                              .ready_count     = 0,
-                                                                              .delayed_count   = 0};
+/* Private data instance — defined in round_robin.c */
+extern round_robin_private_data_t g_round_robin_data;
 
 #ifdef __cplusplus
 }

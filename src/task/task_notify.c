@@ -1,6 +1,7 @@
 #include "VRTOS.h"
 #include "klog.h"
 #include "rtos_port.h"
+#include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
 
@@ -115,6 +116,7 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
     {
         /* Infinite wait - block without delay timeout */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
+        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }
@@ -196,6 +198,7 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
         current_task->state = RTOS_TASK_STATE_BLOCKED;
+        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }

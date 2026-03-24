@@ -4,6 +4,7 @@
 #include "kernel_priv.h"
 #include "klog.h"
 #include "memory.h"
+#include "mutex.h"
 #include "port_common.h"
 #include "rtos_port.h"
 #include "scheduler.h"
@@ -451,6 +452,9 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
                 case RTOS_SYNC_TYPE_NOTIFICATION:
                     /* Self-pointer sentinel — no external list, cleared below */
                     break;
+                case RTOS_SYNC_TYPE_EVENT_GROUP:
+                    rtos_event_group_remove_task_from_wait(task->blocked_on, task);
+                    break;
                 default:
                     break;
             }
@@ -461,6 +465,43 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
     task->next_waiting    = NULL;
     task->blocked_on      = NULL;
     task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+
+    /* S1: Force-release all mutexes held by this task to prevent permanent
+     * deadlocks.  For each mutex, transfer ownership to the highest-priority
+     * waiter (if any) or mark it free. */
+    while (task->held_mutex_list != NULL)
+    {
+        rtos_mutex_t *m   = task->held_mutex_list;
+        task->held_mutex_list = m->next_held;
+        m->next_held          = NULL;
+
+        /* Try to hand off to the highest-priority waiter */
+        rtos_tcb_t *waiter = m->waiting_list;
+        if (waiter != NULL)
+        {
+            /* Pop head (highest priority due to ordered insertion) */
+            m->waiting_list       = waiter->next_waiting;
+            waiter->next_waiting  = NULL;
+            waiter->blocked_on    = NULL;
+            waiter->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+
+            m->owner      = waiter;
+            m->lock_count = 1;
+            m->next_held  = waiter->held_mutex_list;
+            waiter->held_mutex_list = m;
+
+            /* Unblock the new owner (will be made READY) */
+            rtos_scheduler_remove_from_delayed_list(waiter);
+            waiter->state = RTOS_TASK_STATE_READY;
+            rtos_scheduler_add_to_ready_list(waiter);
+        }
+        else
+        {
+            m->owner      = NULL;
+            m->lock_count = 0;
+        }
+    }
+
     task->state           = RTOS_TASK_STATE_DELETED;
 
     KLOGI(KEVT_TASK_DELETE, task->task_id, 0);

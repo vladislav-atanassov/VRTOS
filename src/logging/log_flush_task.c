@@ -273,6 +273,34 @@ static void klog_format_record(const klog_record_t *r)
             log_print("[K/%s] %-14s (%s)", lvl, "QueueReset", ctx);
             break;
 
+        /* ---- Event Group ---- */
+        case KEVT_EG_INIT:
+            log_print("[K/%s] %-14s (%s)", lvl, "EGInit", ctx);
+            break;
+        case KEVT_EG_SET:
+            log_print("[K/%s] %-14s set=0x%08lX cur=0x%08lX (%s)", lvl, "EGSet", (unsigned long) r->arg0,
+                      (unsigned long) r->arg1, ctx);
+            break;
+        case KEVT_EG_CLEAR:
+            log_print("[K/%s] %-14s clr=0x%08lX cur=0x%08lX (%s)", lvl, "EGClear", (unsigned long) r->arg0,
+                      (unsigned long) r->arg1, ctx);
+            break;
+        case KEVT_EG_WAIT:
+            log_print("[K/%s] %-14s bits=0x%08lX cur=0x%08lX (%s)", lvl, "EGWait", (unsigned long) r->arg0,
+                      (unsigned long) r->arg1, ctx);
+            break;
+        case KEVT_EG_BLOCK:
+            log_print("[K/%s] %-14s %s tmo=%lu (%s)", lvl, "EGBlock", rtos_task_get_name((uint8_t) r->arg0),
+                      (unsigned long) r->arg1, ctx);
+            break;
+        case KEVT_EG_TIMEOUT:
+            log_print("[K/%s] %-14s %s (%s)", lvl, "EGTimeout", rtos_task_get_name((uint8_t) r->arg0), ctx);
+            break;
+        case KEVT_EG_WAKE:
+            log_print("[K/%s] %-14s %s bits=0x%08lX (%s)", lvl, "EGWake", rtos_task_get_name((uint8_t) r->arg0),
+                      (unsigned long) r->arg1, ctx);
+            break;
+
         /* ---- Memory ---- */
         case KEVT_STACK_ALLOC_FAIL:
             log_print("[K/%s] %-14s size=%lu (%s)", lvl, "StackAllocFail!", (unsigned long) r->arg0, ctx);
