@@ -89,9 +89,15 @@ rtos_status_t rtos_start_scheduler(void)
         return RTOS_ERROR_GENERAL;
     }
 
-    g_kernel.current_task        = g_kernel.next_task;
-    g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
+    g_kernel.current_task = g_kernel.next_task;
 
+    /* Validate state transition: first task must be READY before we promote it */
+    if (g_kernel.current_task->state != RTOS_TASK_STATE_READY)
+    {
+        return RTOS_ERROR_INVALID_STATE;
+    }
+
+    g_kernel.current_task->state = RTOS_TASK_STATE_RUNNING;
     rtos_scheduler_remove_from_ready_list(g_kernel.current_task);
 
     g_kernel.state = RTOS_KERNEL_STATE_RUNNING;
