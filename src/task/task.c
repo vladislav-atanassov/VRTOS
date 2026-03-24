@@ -128,13 +128,21 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
 /**
  * @brief Get the idle task
  */
+static rtos_tcb_t *g_idle_task_cache = NULL;
+
 rtos_tcb_t *rtos_task_get_idle_task(void)
 {
+    if (g_idle_task_cache != NULL)
+    {
+        return g_idle_task_cache;
+    }
+
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
         if (g_task_pool[i].task_function != NULL && g_task_pool[i].priority == RTOS_IDLE_TASK_PRIORITY)
         {
-            return &g_task_pool[i];
+            g_idle_task_cache = &g_task_pool[i];
+            return g_idle_task_cache;
         }
     }
     return NULL;
