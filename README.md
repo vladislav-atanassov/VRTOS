@@ -350,7 +350,7 @@ rtos_profiling_print_stat(&my_stats);
 
 ```md
 VRTOS/
-├── include/VRTOS/          # Public API headers
+├── include/               # Public API headers
 │   ├── VRTOS.h            # Main RTOS header
 │   ├── config.h           # Configuration defaults
 │   ├── task.h             # Task management API
@@ -458,7 +458,7 @@ Configuration uses a hierarchical override system:
 config/<board>/rtos_config.h   ← board-specific overrides (included first)
     ├── memory_map.h           ← flash/SRAM layout
     └── clock_config.h         ← clock aliases
-include/VRTOS/config.h         ← generic defaults (wrapped in #ifndef guards)
+include/config.h         ← generic defaults (wrapped in #ifndef guards)
 ```
 
 Board overrides are applied by defining macros **before** the defaults in `config.h`.
