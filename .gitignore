@@ -11,3 +11,5 @@
 *.bin
 *.hex
 compile_commands.json
+ldscripts/stm32f446re.ld
+include/rtos/build_info.h

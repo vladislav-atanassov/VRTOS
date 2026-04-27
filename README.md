@@ -91,7 +91,7 @@ struct rtos_scheduler {
 };
 ```
 
-## Performance (STM32F446RE @ 16 MHz)
+## Performance (STM32F446RE @ 84 MHz)
 
 Captured from system profiling and the automated benchmark suite:
 
@@ -99,22 +99,22 @@ Captured from system profiling and the automated benchmark suite:
 
 | Metric | Min | Max | Avg | Description |
 |--------|-----|-----|-----|-------------|
-| **ContextSwitch** | 451 cyc (28 µs) | 1214 cyc (75 µs) | 511 cyc (31 µs) | Task yield to restore |
-| **PendSV_Full** | 553 cyc (34 µs) | 1433 cyc (89 µs) | 706 cyc (44 µs) | Full PendSV handler |
-| **Scheduler** | 30 cyc (1 µs) | 765 cyc (47 µs) | 65 cyc (4 µs) | `get_next_task()` decision |
-| **TickHandler** | 350 cyc (21 µs) | 519 cyc (32 µs) | 367 cyc (22 µs) | SysTick ISR processing |
-| **TickJitter** | 0 cyc (0 µs) | 4 cyc (0 µs) | 1 cyc (0 µs) | SysTick timing deviation |
-| **SchedLatency** | 862 cyc (53 µs) | 880 cyc (55 µs) | 862 cyc (53 µs) | Ready → Running delay |
+| **ContextSwitch** | 451 cyc (5 µs) | 1214 cyc (14 µs) | 511 cyc (6 µs) | Task yield to restore |
+| **PendSV_Full** | 553 cyc (7 µs) | 1433 cyc (17 µs) | 706 cyc (8 µs) | Full PendSV handler |
+| **Scheduler** | 30 cyc (<1 µs) | 765 cyc (9 µs) | 65 cyc (<1 µs) | `get_next_task()` decision |
+| **TickHandler** | 350 cyc (4 µs) | 519 cyc (6 µs) | 367 cyc (4 µs) | SysTick ISR processing |
+| **TickJitter** | 0 cyc (0 µs) | 4 cyc (<1 µs) | 1 cyc (<1 µs) | SysTick timing deviation |
+| **SchedLatency** | 862 cyc (10 µs) | 880 cyc (10 µs) | 862 cyc (10 µs) | Ready → Running delay |
 
 ### Synchronization & IPC Primitives
 
 | Primitive | Operation | Min | Max | Avg | Description |
 |-----------|-----------|-----|-----|-----|-------------|
-| **Mutex** | Uncontended | 216 cyc (13 µs) | 898 cyc (56 µs) | 229 cyc (14 µs) | Fast-path lock/unlock |
-| **Mutex** | Contended Wake | 1282 cyc (80 µs) | 2690 cyc (168 µs) | 1341 cyc (83 µs) | Waking a blocked task |
-| **Semaphore** | Uncontended | 181 cyc (11 µs) | 181 cyc (11 µs) | 181 cyc (11 µs) | Fast-path take/give |
-| **Semaphore** | Wake Latency | 1247 cyc (77 µs) | 1247 cyc (77 µs) | 1247 cyc (77 µs) | Waking a blocked task |
-| **Queue** | Delivery | 1424 cyc (89 µs) | 2800 cyc (175 µs) | 1531 cyc (95 µs) | Send to blocked receiver |
+| **Mutex** | Uncontended | 216 cyc (3 µs) | 898 cyc (11 µs) | 229 cyc (3 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended Wake | 1282 cyc (15 µs) | 2690 cyc (32 µs) | 1341 cyc (16 µs) | Waking a blocked task |
+| **Semaphore** | Uncontended | 181 cyc (2 µs) | 181 cyc (2 µs) | 181 cyc (2 µs) | Fast-path take/give |
+| **Semaphore** | Wake Latency | 1247 cyc (15 µs) | 1247 cyc (15 µs) | 1247 cyc (15 µs) | Waking a blocked task |
+| **Queue** | Delivery | 1424 cyc (17 µs) | 2800 cyc (33 µs) | 1531 cyc (18 µs) | Send to blocked receiver |
 
 ## Scheduling Policies
 
@@ -150,7 +150,7 @@ Captured from system profiling and the automated benchmark suite:
 ### Round-Robin (Time-Sliced)
 
 - **Algorithm**: FIFO queue with automatic time-slice preemption
-- **Preemption**: Automatic when time slice (20 ticks default) expires
+- **Preemption**: Automatic when time slice (1 tick default) expires
 - **Data Structure**: Circular FIFO ready list with tail pointer
 - **Use Case**: Fair CPU distribution among equal-priority tasks
 
@@ -312,7 +312,7 @@ rtos_task_delete(task_handle);   // NULL = self-delete
 
 **Current Implementation**: Bump allocator (simple, predictable)
 
-- Static heap: 16KB configurable via `RTOS_TOTAL_HEAP_SIZE`
+- Static heap: configurable via `RTOS_TOTAL_HEAP_SIZE` (default 16 KB; STM32F446RE board config overrides to 8 KB)
 - 8-byte alignment for all allocations
 - No deallocation (suitable for static task creation)
 - Stack overflow detection via canary values (`0xC0DEC0DE`)
@@ -430,8 +430,10 @@ VRTOS/
 │   ├── rtos_config_template.h  # Skeleton for new boards
 │   └── stm32f446re/       # STM32F446RE board config
 │       ├── rtos_config.h  # Board overrides
-│       ├── memory_map.h   # Flash/SRAM layout
+│       ├── memory_map.h   # Flash/SRAM layout (shared with linker)
 │       └── clock_config.h # Clock aliases
+├── ldscripts/             # Linker scripts
+│   └── stm32f446re.ld.in  # Preprocessable template (generates stm32f446re.ld at build time)
 ├── logs/                  # Captured output
 │   ├── klogs/             # KLog decoder captures
 │   └── tests/             # Test runner logs
@@ -443,10 +445,8 @@ VRTOS/
 │   │   ├── pre_build.py
 │   │   └── post_build.py
 │   └── test/              # Test automation
-│       ├── test_runner.py      # Automated test execution
-│       ├── log_parser.py       # Parse test logs to CSV
-│       ├── timeline_analyzer.py # Compare actual vs expected
-│       └── expected_timeline_*.csv # Expected scheduler behavior
+│       ├── test_runner.py  # Automated upload, capture, and verdict analysis
+│       └── log_parser.py   # Parse serial logs to CSV
 └── platformio.ini         # PlatformIO configuration
 ```
 
@@ -476,10 +476,10 @@ and uncomment the values you need to override.
 
 /* Scheduler */
 #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
-#define RTOS_TIME_SLICE_TICKS (20)  // 20ms @ 1ms tick
+#define RTOS_TIME_SLICE_TICKS (1)   // 1ms @ 1ms tick
 
 /* Memory */
-#define RTOS_TOTAL_HEAP_SIZE         (16384U)  // 16KB heap
+#define RTOS_TOTAL_HEAP_SIZE         (16384U)  // 16KB heap (STM32F446RE overrides to 8KB)
 #define RTOS_DEFAULT_TASK_STACK_SIZE (1024U)   // 1KB default
 #define RTOS_MINIMUM_TASK_STACK_SIZE (256U)    // 256B minimum
 
@@ -519,12 +519,11 @@ pio run -e basic_blinky --target upload
 # Build and upload producer-consumer example
 pio run -e producer_consumer --target upload
 
-# Monitor serial output (115200 baud)
+# Monitor serial output (921600 baud)
 pio device monitor -e basic_blinky
 
 # Run automated scheduler test
-cd tools/test
-python test_runner.py test_scheduler_rr --duration 10
+python tools/test/test_runner.py test_scheduler_rr_state --duration 10
 ```
 
 ### Available Environments
@@ -567,17 +566,16 @@ The test suite includes automated validation of scheduler behavior:
 1. **Upload firmware** to STM32 board
 2. **Capture serial logs** (tab-delimited format)
 3. **Parse logs** to CSV format
-4. **Analyze timeline** against expected behavior
+4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL:N` line that the runner detects and returns as the exit code
 
 ### Running Tests
 
 ```bash
-# Automated end-to-end test
-python tools/test/test_runner.py test_scheduler_rr --duration 10
+# Automated end-to-end test (upload, capture, verdict)
+python tools/test/test_runner.py test_scheduler_rr_state --duration 10
 
-# Manual steps
+# Parse a captured log file manually
 python tools/test/log_parser.py captured_log.txt -o parsed.csv
-python tools/test/timeline_analyzer.py parsed.csv expected_timeline_rr.csv
 ```
 
 ### Log Format

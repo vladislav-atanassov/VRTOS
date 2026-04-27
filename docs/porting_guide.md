@@ -94,6 +94,12 @@ Copy `config/rtos_config_template.h` to `config/<board>/rtos_config.h` and uncom
 
 Add `memory_map.h` (flash/SRAM bounds) and `clock_config.h` (clock aliases) as needed.
 
+`memory_map.h` must wrap integer literals in the `_UL(x)` macro so the same file can be consumed by both C source and the linker preprocessor. See `config/stm32f446re/memory_map.h` for the reference pattern.
+
+### 4a. Create the linker script template
+
+Copy `ldscripts/stm32f446re.ld.in` to `ldscripts/<board>.ld.in` and update the `#include` path and MEMORY region names if needed. The template is preprocessed by `arm-none-eabi-gcc -E -P -x c-header -D LINKER_SCRIPT -I config/<board>/` during pre-build to produce `ldscripts/<board>.ld`. Update `tools/scripts/pre_build.py` and `platformio.ini` (`board_build.ldscript`) to point at the new files.
+
 ### 5. Update `platformio.ini`
 
 Add a new port section with `build_flags` and `port_src_filter`, then create a board environment:
