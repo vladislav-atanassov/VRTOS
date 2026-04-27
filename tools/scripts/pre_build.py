@@ -1,91 +1,75 @@
-# /*******************************************************************************
-#  * File: tools/scripts/pre_build.py
-#  * Description: Pre-build Script for RTOS Project
-#  * Author: Student
-#  * Date: 2025
-#  ******************************************************************************/
-
 #!/usr/bin/env python3
 """
-Pre-build script for RTOS project.
+Pre-build script for VRTOS.
 
-This script performs pre-build tasks such as:
-- Validating configuration
-- Generating build information
-- Checking dependencies
+Runs as a PlatformIO extra_script (pre: phase). Two actions:
+  1. Preprocess ldscripts/stm32f446re.ld.in → ldscripts/stm32f446re.ld
+     so the linker sees memory layout sourced from config/stm32f446re/memory_map.h.
+  2. Generate include/rtos/build_info.h with timestamp and git hash.
 """
 
 import os
-import sys
-import datetime
 import subprocess
+import datetime
 
-def validate_config():
-    """Validate RTOS configuration parameters."""
-    print("Validating RTOS configuration...")
-    
-    # Check if required files exist
-    required_files = [
-        "include/rtos/config.h",
-        "config/stm32f446re/rtos_config.h",
-        "src/core/kernel.c",
-        "port/cortex_m4/port.c"
-    ]
-    
-    for file_path in required_files:
-        if not os.path.exists(file_path):
-            print(f"ERROR: Required file missing: {file_path}")
-            return False
-    
-    print("Configuration validation passed.")
-    return True
+Import("env")  # PlatformIO SCons environment
 
-def generate_build_info():
-    """Generate build information header."""
-    print("Generating build information...")
-    
+
+def generate_linker_script(source, target, env):
+    cc = env.get("CC", "arm-none-eabi-gcc")
+    project_dir = env.subst("$PROJECT_DIR")
+
+    template = os.path.join(project_dir, "ldscripts", "stm32f446re.ld.in")
+    output   = os.path.join(project_dir, "ldscripts", "stm32f446re.ld")
+    inc_dir  = os.path.join(project_dir, "config", "stm32f446re")
+
+    cmd = [cc, "-E", "-P", "-x", "c-header",
+           "-D", "LINKER_SCRIPT",
+           "-I", inc_dir,
+           template, "-o", output]
+
+    print(f"Generating linker script: {os.path.relpath(output, project_dir)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"ERROR: Linker script generation failed:\n{result.stderr}")
+        env.Exit(1)
+    print("Linker script generated.")
+
+
+def generate_build_info(source, target, env):
+    project_dir = env.subst("$PROJECT_DIR")
+
     try:
-        # Get git commit hash if available
         git_hash = subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            cwd=project_dir
         ).decode().strip()
-    except:
+    except Exception:
         git_hash = "unknown"
-    
-    # Generate build info header
-    build_info_header = f"""/*
- * Auto-generated build information
- * Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    content = f"""/*
+ * Auto-generated — do not edit.
+ * Generated: {now}
  */
 
 #ifndef BUILD_INFO_H
 #define BUILD_INFO_H
 
-#define BUILD_DATE_TIME     "{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-#define BUILD_GIT_HASH      "{git_hash}"
-#define BUILD_VERSION       "1.0.0-MVP"
+#define BUILD_DATE_TIME "{now}"
+#define BUILD_GIT_HASH  "{git_hash}"
+#define BUILD_VERSION   "1.0.0"
 
 #endif /* BUILD_INFO_H */
 """
-    
-    # Write to include directory
-    os.makedirs("include/rtos", exist_ok=True)
-    with open("include/rtos/build_info.h", "w") as f:
-        f.write(build_info_header)
-    
-    print(f"Build info generated (Git: {git_hash})")
+    out_dir  = os.path.join(project_dir, "include", "rtos")
+    out_file = os.path.join(out_dir, "build_info.h")
+    os.makedirs(out_dir, exist_ok=True)
+    with open(out_file, "w") as f:
+        f.write(content)
+    print(f"Build info generated (git: {git_hash})")
 
-def main():
-    """Main pre-build function."""
-    print("=== RTOS Pre-build Script ===")
-    
-    if not validate_config():
-        sys.exit(1)
-    
-    generate_build_info()
-    
-    print("Pre-build tasks completed successfully.")
 
-if __name__ == "__main__":
-    main()
+env.AddPreAction("$BUILD_DIR/firmware.elf", generate_linker_script)
+env.AddPreAction("$BUILD_DIR/firmware.elf", generate_build_info)
