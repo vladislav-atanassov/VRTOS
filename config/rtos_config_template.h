@@ -22,6 +22,14 @@
 // #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
 // #define RTOS_TIME_SLICE_TICKS       (20)
 
+/* ======================== Power Management ============================== */
+/* Tickless idle: stop the SysTick during long idle windows, sleep with WFI,
+ * and reconcile the tick count on wake. Off by default. */
+// #define RTOS_CONFIG_USE_TICKLESS_IDLE               (1U)
+/* Idle windows shorter than this (in ticks) skip tickless sleep — the
+ * SysTick reprogramming overhead is not worth it. */
+// #define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
+
 /* ======================== Memory ======================================== */
 // #define RTOS_TOTAL_HEAP_SIZE        (8192U)
 

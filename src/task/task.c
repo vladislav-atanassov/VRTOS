@@ -280,6 +280,27 @@ void rtos_task_debug_print_all(void)
     }
 }
 
+static inline void handle_idle_sleep(void)
+{
+#if (RTOS_CONFIG_USE_TICKLESS_IDLE == 1)
+    uint32_t expected_idle_ticks = rtos_scheduler_get_expected_idle_ticks();
+
+    if (expected_idle_ticks >= RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP)
+    {
+        rtos_port_suppress_ticks_and_sleep(expected_idle_ticks);
+        return;
+    }
+#endif
+    __asm volatile("wfi"); /* Wait for interrupt */
+}
+
+static inline void handle_idle_yield(void)
+{
+#if (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_COOPERATIVE)
+    rtos_yield();
+#endif
+}
+
 /**
  * @brief Idle task function
  */
@@ -291,11 +312,8 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
 
     while (1)
     {
-        __asm volatile("wfi"); /* Wait for interrupt */
-
-#if (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_COOPERATIVE)
-        rtos_yield();
-#endif
+        handle_idle_sleep();
+        handle_idle_yield();
     }
 }
 

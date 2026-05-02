@@ -18,6 +18,18 @@
 #define RTOS_TICK_PERIOD_MS (1000U / RTOS_TICK_RATE_HZ) /**< Tick period in ms */
 #endif
 
+/* Enable Tickless Idle mode for low power consumption */
+#ifndef RTOS_CONFIG_USE_TICKLESS_IDLE
+#define RTOS_CONFIG_USE_TICKLESS_IDLE (0U)
+#endif
+
+/* Minimum number of ticks the system must be idle before entering tickless sleep.
+   This prevents entering low-power modes for very short durations where the 
+   overhead of reprogramming timers exceeds the power saved. */
+#ifndef RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP
+#define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
+#endif
+
 /* ======================== Task Configuration ============================ */
 
 #ifndef RTOS_MAX_TASKS

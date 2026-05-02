@@ -359,6 +359,24 @@ static void round_robin_update_delayed_tasks(rtos_scheduler_instance_t *instance
     round_robin_update_delayed_tasks_internal();
 }
 
+static uint32_t round_robin_get_expected_idle_ticks(rtos_scheduler_instance_t *instance)
+{
+    (void) instance;
+    if (g_round_robin_data.delayed_list == NULL)
+    {
+        return 0xFFFFFFFF; /* Max wait */
+    }
+
+    rtos_tick_t current_tick = rtos_get_tick_count();
+    rtos_tick_t next_wake = g_round_robin_data.delayed_list->delay_until;
+
+    if ((int32_t)(next_wake - current_tick) <= 0)
+    {
+        return 0;
+    }
+    return (uint32_t)(next_wake - current_tick);
+}
+
 static size_t round_robin_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
 {
     if (instance == NULL || stats_buffer == NULL || buffer_size == 0)
@@ -403,6 +421,7 @@ const rtos_scheduler_t round_robin_scheduler = {
     .add_to_delayed_list      = round_robin_add_to_delayed_list,
     .remove_from_delayed_list = round_robin_remove_from_delayed_list,
     .update_delayed_tasks     = round_robin_update_delayed_tasks,
+    .get_expected_idle_ticks  = round_robin_get_expected_idle_ticks,
 
     .get_statistics = round_robin_get_statistics};
 

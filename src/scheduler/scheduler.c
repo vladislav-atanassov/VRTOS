@@ -188,6 +188,20 @@ void rtos_scheduler_update_delayed_tasks(void)
 }
 
 /**
+ * @brief Get expected idle ticks
+ */
+uint32_t rtos_scheduler_get_expected_idle_ticks(void)
+{
+    if (!g_scheduler_instance.initialized || g_scheduler_instance.vtable == NULL || 
+        g_scheduler_instance.vtable->get_expected_idle_ticks == NULL)
+    {
+        return 0;
+    }
+
+    return g_scheduler_instance.vtable->get_expected_idle_ticks(&g_scheduler_instance);
+}
+
+/**
  * @brief Get scheduler statistics
  */
 size_t rtos_scheduler_get_statistics(void *stats_buffer, size_t buffer_size)

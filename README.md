@@ -20,6 +20,7 @@ VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrolle
   - **Event Groups** with bitwise wait conditions (wait-any/wait-all) and ISR-safe signaling
 - **Task Notifications** - Lightweight direct task-to-task signaling (set bits, increment, overwrite)
 - **Software Timers** - One-shot and auto-reload timers with sorted active list
+- **Tickless Idle** - Optional low-power mode that suppresses the SysTick during long idle windows and reconciles tick count on wake
 - **Task Management** - Dynamic creation, suspend/resume, delete with automatic mutex cleanup
 - **Timing Services** - System tick with 1ms resolution, `rtos_delay_ms()` and `rtos_delay_until()`
 - **Cortex-M4 Optimization** - Context switching with lazy FPU stacking
@@ -245,6 +246,38 @@ rtos_timer_stop(timer);
 ```
 
 > **Warning**: Timer callbacks execute in **ISR context** (SysTick handler). They must not call blocking RTOS APIs (`rtos_mutex_lock`, `rtos_semaphore_wait`, `rtos_delay_ms`, etc.). Use ISR-safe APIs only (e.g. `rtos_event_group_set_bits_from_isr`, `rtos_task_notify`).
+
+## Tickless Idle
+
+When the only runnable task is the idle task, VRTOS can suppress the periodic SysTick interrupt and put the CPU into `WFI` until either the next scheduled task wake-up or an external interrupt. On wake, the kernel reads the SysTick counter, computes how long the CPU actually slept, and fast-forwards `rtos_tick_count` so timing services remain correct. Without this feature the SysTick would keep firing every 1 ms, waking the CPU thousands of times per second just to decrement counters.
+
+**How it works** (Cortex-M4, [src/port/cortex_m4/port.c:352](src/port/cortex_m4/port.c#L352)):
+
+1. **Idle task** asks the scheduler how many ticks until the next ready/delay expiry — `rtos_scheduler_get_expected_idle_ticks()`.
+2. If the result is below `RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP`, do nothing — the reprogramming overhead would exceed the savings. Otherwise call `rtos_port_suppress_ticks_and_sleep()`.
+3. **Port layer** masks IRQs, re-checks that no `PendSV` is pending, stops SysTick, reprograms `LOAD` to the requested sleep duration (capped to the 24-bit SysTick limit, ~199 ms at 84 MHz), restarts SysTick, then issues `WFI`.
+4. **On wake** (either SysTick rollover or an external IRQ), the port reads `SysTick->VAL` and `COUNTFLAG` to determine the actual ticks elapsed, calls `rtos_kernel_step_tick(elapsed)` to advance the kernel's tick count and unblock any tasks whose delays expired, restores the standard 1 ms tick reload, and re-enables IRQs.
+
+**Configuration**:
+
+```c
+/* Master switch — disabled by default in include/config.h */
+#define RTOS_CONFIG_USE_TICKLESS_IDLE (1U)
+
+/* Minimum idle window (in ticks) before entering tickless sleep.
+ * Short windows aren't worth the SysTick reprogramming overhead. */
+#define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
+```
+
+The STM32F446RE board config enables tickless idle by default ([config/stm32f446re/rtos_config.h](config/stm32f446re/rtos_config.h)).
+
+**Caveats**:
+
+- Maximum single sleep duration is bounded by the 24-bit SysTick (~199 ms at 84 MHz). Longer delays wake briefly and re-enter sleep.
+- Any peripheral whose clock is gated by `WFI` (e.g. peripherals on a stopped bus clock in `STOP` mode) will not wake the CPU — the current port uses plain `WFI` (Sleep mode), not `Deep Sleep`, so AHB/APB peripherals continue to run.
+- Tick-driven profiling counters reflect wall-clock time correctly, but per-task CPU usage measured by counting ticks may show the idle task as "asleep" rather than "running" during suppressed windows.
+
+**Validation**: [tests/integration/test_tickless_idle.c](tests/integration/test_tickless_idle.c) sweeps `rtos_delay_ms()` across 1 ms–2000 ms windows and asserts both the kernel tick count and `rtos_port_get_uptime_us()` advance within ±(2 ticks + 1 % of requested delay).
 
 ### Event Groups
 
@@ -477,6 +510,10 @@ and uncomment the values you need to override.
 #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
 #define RTOS_TIME_SLICE_TICKS (1)   // 1ms @ 1ms tick
 
+/* Power Management */
+#define RTOS_CONFIG_USE_TICKLESS_IDLE               (0U)  // 1 to enable tickless idle
+#define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)  // ticks; below this, stay ticking
+
 /* Memory */
 #define RTOS_TOTAL_HEAP_SIZE         (16384U)  // 16KB heap (STM32F446RE overrides to 8KB)
 #define RTOS_DEFAULT_TASK_STACK_SIZE (1024U)   // 1KB default
@@ -556,6 +593,7 @@ python tools/test/test_runner.py test_scheduler_rr_state --duration 10
 - `test_event_group_state` - Event group bit-wait invariants
 - `test_notification_state` - Task notification invariants
 - `test_task_state_transitions` - Task lifecycle state transitions
+- `test_tickless_idle` - Tickless idle: tick/uptime advance correctly across delays from 1 ms to 2 s
 
 **Benchmarks**:
 

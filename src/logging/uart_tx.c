@@ -1,5 +1,6 @@
 #include "uart_tx.h"
 
+#include "config.h"
 #include "klog.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 
@@ -49,7 +50,7 @@ void log_uart_init(log_level_t level)
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     g_huart2.Instance          = USART2;
-    g_huart2.Init.BaudRate     = 921600;
+    g_huart2.Init.BaudRate     = RTOS_UART_BAUD_RATE;
     g_huart2.Init.WordLength   = UART_WORDLENGTH_8B;
     g_huart2.Init.StopBits     = UART_STOPBITS_1;
     g_huart2.Init.Parity       = UART_PARITY_NONE;

@@ -305,6 +305,24 @@ static void cooperative_update_delayed_tasks(rtos_scheduler_instance_t *instance
     cooperative_update_delayed_tasks_internal();
 }
 
+static uint32_t cooperative_get_expected_idle_ticks(rtos_scheduler_instance_t *instance)
+{
+    (void) instance;
+    if (g_cooperative_data.delayed_list == NULL)
+    {
+        return 0xFFFFFFFF; /* Max wait */
+    }
+
+    rtos_tick_t current_tick = rtos_get_tick_count();
+    rtos_tick_t next_wake = g_cooperative_data.delayed_list->delay_until;
+
+    if ((int32_t)(next_wake - current_tick) <= 0)
+    {
+        return 0;
+    }
+    return (uint32_t)(next_wake - current_tick);
+}
+
 static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
 {
     if (instance == NULL || stats_buffer == NULL || buffer_size == 0)
@@ -347,6 +365,7 @@ const rtos_scheduler_t cooperative_scheduler = {
     .add_to_delayed_list      = cooperative_add_to_delayed_list,
     .remove_from_delayed_list = cooperative_remove_from_delayed_list,
     .update_delayed_tasks     = cooperative_update_delayed_tasks,
+    .get_expected_idle_ticks  = cooperative_get_expected_idle_ticks,
 
     .get_statistics = cooperative_get_statistics};
 

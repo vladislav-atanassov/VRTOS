@@ -33,5 +33,6 @@ extern rtos_kernel_cb_t g_kernel;
 void rtos_kernel_tick_handler(void);
 void rtos_kernel_switch_context(void);
 bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state);
+void rtos_kernel_step_tick(uint32_t ticks_slept);
 
 #endif /* KERNEL_PRIV_H */

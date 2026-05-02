@@ -348,3 +348,77 @@ __attribute__((naked)) void PendSV_Handler(void)
 #endif
         : "memory");
 }
+
+void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
+{
+    uint32_t reload_value;
+    uint32_t sleep_ticks;
+    uint32_t complete_tick_periods;
+    uint32_t cycles_per_tick = SystemCoreClock / RTOS_TICK_RATE_HZ;
+
+    __disable_irq();
+
+    /* If a context switch is pending, abort sleep */
+    if ((SCB->ICSR & SCB_ICSR_PENDSVSET_Msk) != 0)
+    {
+        __enable_irq();
+        return;
+    }
+
+    /* Stop SysTick */
+    SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+
+    /* The Cortex-M SysTick is 24-bit */
+    uint32_t max_sleep_ticks = 0x00FFFFFFUL / cycles_per_tick;
+    
+    sleep_ticks = expected_idle_ticks;
+    if (sleep_ticks > max_sleep_ticks)
+    {
+        sleep_ticks = max_sleep_ticks;
+    }
+
+    /* Set SysTick LOAD to new sleep duration */
+    reload_value = (sleep_ticks * cycles_per_tick) - 1;
+    SysTick->LOAD = reload_value;
+    SysTick->VAL = 0;
+
+    /* Restart SysTick */
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+
+    /* Sleep */
+    __asm volatile("wfi");
+
+    /* Wake Up */
+    
+    /* Stop SysTick to read VAL safely. Reading CTRL clears COUNTFLAG, so save it. */
+    uint32_t ctrl = SysTick->CTRL;
+    SysTick->CTRL = ctrl & ~SysTick_CTRL_ENABLE_Msk;
+
+    uint32_t val = SysTick->VAL;
+
+    /* Did SysTick already fire and set the COUNTFLAG? */
+    if ((ctrl & SysTick_CTRL_COUNTFLAG_Msk) != 0)
+    {
+        /* It fired, meaning the full sleep period elapsed. */
+        complete_tick_periods = sleep_ticks;
+    }
+    else
+    {
+        /* Woken up by an external interrupt early */
+        uint32_t cycles_slept = reload_value - val;
+        complete_tick_periods = cycles_slept / cycles_per_tick;
+    }
+
+    /* Step the OS tick */
+    if (complete_tick_periods > 0)
+    {
+        rtos_kernel_step_tick(complete_tick_periods);
+    }
+
+    /* Restore standard 1ms tick rate */
+    SysTick->LOAD = cycles_per_tick - 1;
+    SysTick->VAL = 0;
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+
+    __enable_irq();
+}

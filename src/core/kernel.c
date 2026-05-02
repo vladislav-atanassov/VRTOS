@@ -236,6 +236,43 @@ void rtos_kernel_tick_handler(void)
 }
 
 /**
+ * @brief Step system tick forward (used by tickless idle)
+ */
+void rtos_kernel_step_tick(uint32_t ticks_slept)
+{
+    if (ticks_slept == 0)
+    {
+        return;
+    }
+
+    /* Fast-forward the OS tick count */
+    rtos_port_enter_critical();
+    g_kernel.tick_count += ticks_slept;
+    rtos_port_exit_critical();
+
+    /* Process software timers that may have expired during sleep */
+    rtos_timer_tick();
+
+    if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING && g_scheduler_instance.initialized)
+    {
+        rtos_port_enter_critical();
+        
+        /* Move newly expired tasks to ready list */
+        rtos_scheduler_update_delayed_tasks();
+        
+        rtos_task_handle_t next_task = rtos_scheduler_get_next_task();
+        if (rtos_scheduler_should_preempt(next_task))
+        {
+            rtos_port_exit_critical();
+            rtos_yield();
+            return;
+        }
+
+        rtos_port_exit_critical();
+    }
+}
+
+/**
  * @brief Context switch handler (called by scheduler)
  */
 void rtos_kernel_switch_context(void)

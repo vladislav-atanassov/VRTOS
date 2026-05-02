@@ -120,6 +120,13 @@ struct rtos_scheduler
      */
     void (*update_delayed_tasks)(rtos_scheduler_instance_t *instance);
 
+    /**
+     * @brief Get expected idle ticks
+     * @param instance Scheduler instance
+     * @return Number of ticks until the next delayed task is ready, or maximum uint32_t
+     */
+    uint32_t (*get_expected_idle_ticks)(rtos_scheduler_instance_t *instance);
+
     /* =================== Optional Debug/Statistics =================== */
 
     /**
@@ -214,6 +221,12 @@ void rtos_scheduler_remove_from_delayed_list(rtos_task_handle_t task_handle);
  * @brief Update delayed tasks via scheduler
  */
 void rtos_scheduler_update_delayed_tasks(void);
+
+/**
+ * @brief Get expected idle ticks via scheduler
+ * @return Number of ticks until the next delayed task is ready
+ */
+uint32_t rtos_scheduler_get_expected_idle_ticks(void);
 
 #ifdef __cplusplus
 }

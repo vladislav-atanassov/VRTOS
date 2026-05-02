@@ -98,6 +98,13 @@ void rtos_port_systick_handler(void);
  */
 uint32_t rtos_port_get_uptime_us(void);
 
+/**
+ * @brief Enter tickless idle sleep mode
+ *
+ * @param expected_idle_ticks Expected duration of idle period in ticks
+ */
+void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks);
+
 #ifdef __cplusplus
 }
 #endif
