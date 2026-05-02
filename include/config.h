@@ -71,6 +71,14 @@
 #define RTOS_TOTAL_HEAP_SIZE (16384U) /**< Total heap size for task stacks */
 #endif
 
+/* ======================== Logging Configuration ========================= */
+
+/* UART baud rate for logging output. Must match `monitor_speed` in
+ * platformio.ini — the serial monitor speed is not derived automatically. */
+#ifndef RTOS_UART_BAUD_RATE
+#define RTOS_UART_BAUD_RATE (921600U) /**< UART baud rate for logging */
+#endif
+
 /* ======================== Debug Configuration =========================== */
 
 #ifndef RTOS_ASSERT_ENABLED

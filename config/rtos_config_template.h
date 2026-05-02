@@ -25,6 +25,11 @@
 /* ======================== Memory ======================================== */
 // #define RTOS_TOTAL_HEAP_SIZE        (8192U)
 
+/* ======================== Logging ======================================= */
+/* UART baud rate for log output. NOTE: `monitor_speed` in platformio.ini
+ * must be set manually to the same value — it is not derived from this. */
+// #define RTOS_UART_BAUD_RATE         (921600U)
+
 /* ======================== Features ====================================== */
 // #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 

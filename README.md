@@ -482,10 +482,18 @@ and uncomment the values you need to override.
 #define RTOS_DEFAULT_TASK_STACK_SIZE (1024U)   // 1KB default
 #define RTOS_MINIMUM_TASK_STACK_SIZE (256U)    // 256B minimum
 
+/* Logging */
+#define RTOS_UART_BAUD_RATE (921600U)  // UART baud rate for log output
+
 /* Debug */
 #define RTOS_ASSERT_ENABLED (1U)
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 ```
+
+> **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only.
+> `monitor_speed` in [platformio.ini](platformio.ini) is **not** derived from
+> it — if you change the baud rate, update both. Mismatched values produce
+> garbled serial output.
 
 ### Port-Layer Constants (`port_priv.h`)
 
@@ -518,7 +526,7 @@ pio run -e basic_blinky --target upload
 # Build and upload producer-consumer example
 pio run -e producer_consumer --target upload
 
-# Monitor serial output (921600 baud)
+# Monitor serial output (baud rate must match RTOS_UART_BAUD_RATE — default 921600)
 pio device monitor -e basic_blinky
 
 # Run automated scheduler test

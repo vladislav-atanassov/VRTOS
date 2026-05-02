@@ -9,6 +9,10 @@
 /* System clock — Nucleo-F446RE runs at 84 MHz */
 #define RTOS_SYSTEM_CLOCK_HZ (84000000U)
 
+/* UART logging baud rate. The serial monitor must match this value
+ * (see `monitor_speed` in platformio.ini). */
+#define RTOS_UART_BAUD_RATE (921600U)
+
 /* Task limits */
 #define RTOS_MAX_TASKS               (10U)
 #define RTOS_DEFAULT_TASK_STACK_SIZE (768U)
