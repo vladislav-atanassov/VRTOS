@@ -93,7 +93,7 @@ int main(void)
      */
     rtos_task_create(WorkTask, "WORKER", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &task_handle);
     rtos_task_create(ReportTask, "REPORTER", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &task_handle);
-    rtos_task_create(log_flush_task, "KLOG", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, &task_handle);
+    rtos_task_create(log_flush_task, "KLOG", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, &task_handle);
 
     rtos_start_scheduler();
 

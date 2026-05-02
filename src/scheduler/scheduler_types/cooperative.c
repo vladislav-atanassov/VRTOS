@@ -37,7 +37,7 @@ static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 
     g_cooperative_data.ready_count++;
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
+    KLOGT("Sched/Co", "Ready id=%u count=%u", task->task_id, g_cooperative_data.ready_count);
 }
 
 static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
@@ -69,7 +69,7 @@ static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
         g_cooperative_data.ready_count--;
     }
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_cooperative_data.ready_count);
+    KLOGT("Sched/Co", "ReadyRm id=%u count=%u", task->task_id, g_cooperative_data.ready_count);
 }
 
 static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
@@ -122,7 +122,7 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
 
     g_cooperative_data.delayed_count++;
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
+    KLOGT("Sched/Co", "Delayed id=%u until=%u", task->task_id, (uint32_t) task->delay_until);
 }
 
 static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t task)
@@ -156,7 +156,7 @@ static void cooperative_remove_from_delayed_list_internal(rtos_task_handle_t tas
         g_cooperative_data.delayed_count--;
     }
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, g_cooperative_data.delayed_count);
+    KLOGT("Sched/Co", "DelayedRm id=%u count=%u", task->task_id, g_cooperative_data.delayed_count);
 }
 
 static void cooperative_update_delayed_tasks_internal(void)
@@ -183,7 +183,7 @@ static void cooperative_update_delayed_tasks_internal(void)
 
             cooperative_add_to_ready_list_internal(task);
 
-            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
+            KLOGT("Sched/Co", "DelayExpired id=%u", task->task_id);
         }
         else
         {
@@ -214,7 +214,7 @@ static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
 
     instance->private_data = &g_cooperative_data;
 
-    KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
+    KLOGT("Sched/Co", "CoopInit");
     return RTOS_SUCCESS;
 }
 
@@ -248,7 +248,7 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
         cooperative_remove_from_ready_list_internal(completed_task);
         cooperative_add_to_ready_list_internal(completed_task);
 
-        KLOGT(KEVT_SCHED_ROTATE, completed_task->task_id, 0);
+        KLOGT("Sched/Co", "Rotate id=%u", completed_task->task_id);
     }
 }
 

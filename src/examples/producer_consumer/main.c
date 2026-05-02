@@ -481,7 +481,7 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
 
     /* Create log flush task (lowest priority) */
-    status = rtos_task_create(log_flush_task, "KLOG", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, &task_handle);
+    status = rtos_task_create(log_flush_task, "KLOG", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, &task_handle);
     if (status != RTOS_SUCCESS)
         indicate_system_failure();
 

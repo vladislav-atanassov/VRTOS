@@ -391,7 +391,7 @@ __attribute__((__noreturn__)) int main(void)
      */
     rtos_task_handle_t flush_handle;
     ulog_init(ULOG_LEVEL_INFO);
-    rtos_task_create(log_flush_task, "LogFlush", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_PRIORITY, &flush_handle);
+    rtos_task_create(log_flush_task, "LogFlush", KLOG_FLUSH_TASK_STACK_SIZE, NULL, TASK_PRIORITY, &flush_handle);
 
     log_info("Starting scheduler...");
     status = rtos_start_scheduler();

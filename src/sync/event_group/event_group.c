@@ -114,7 +114,7 @@ static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to
 {
     eg->bits |= bits_to_set;
 
-    KLOGD(KEVT_EG_SET, bits_to_set, eg->bits);
+    KLOGD("EventGrp", "EgSet bits=0x%x now=0x%x", bits_to_set, eg->bits);
 
     rtos_tcb_t *wake_list     = NULL;
     uint32_t    bits_to_clear = 0;
@@ -154,7 +154,7 @@ static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to
             current->next_waiting = wake_list;
             wake_list             = current;
 
-            KLOGD(KEVT_EG_WAKE, current->task_id, eg->bits);
+            KLOGD("EventGrp", "EgWake id=%u bits=0x%x", current->task_id, eg->bits);
             /* prev stays the same — we removed current */
         }
         else
@@ -187,7 +187,7 @@ rtos_eg_status_t rtos_event_group_init(rtos_event_group_t *eg)
 
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_EG_INIT, 0, 0);
+    KLOGD("EventGrp", "EgInit");
 
     return RTOS_EG_OK;
 }
@@ -202,7 +202,7 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
 
     rtos_port_enter_critical();
 
-    KLOGD(KEVT_EG_WAIT, bits_to_wait, eg->bits);
+    KLOGD("EventGrp", "EgWait want=0x%x have=0x%x", bits_to_wait, eg->bits);
 
     /* Fast path: condition already met */
     if (eg_condition_met(eg->bits, bits_to_wait, (uint8_t) wait_all))
@@ -229,13 +229,13 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("EventGrp", "NoCurrentTask");
         return RTOS_EG_ERR_INVALID;
     }
 
     eg_add_to_waiting_list(eg, current_task, bits_to_wait, (uint8_t) wait_all, (uint8_t) clear_on_exit);
 
-    KLOGD(KEVT_EG_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
+    KLOGD("EventGrp", "EgBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
     if (timeout_ticks == RTOS_EG_MAX_WAIT)
     {
@@ -262,7 +262,7 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
         /* Still on waiting list = timeout occurred */
         eg_remove_from_waiting_list(eg, current_task);
         rtos_port_exit_critical();
-        KLOGD(KEVT_EG_TIMEOUT, current_task->task_id, 0);
+        KLOGD("EventGrp", "EgTimeout id=%u", current_task->task_id);
         return RTOS_EG_ERR_TIMEOUT;
     }
 
@@ -337,7 +337,7 @@ rtos_eg_status_t rtos_event_group_clear_bits(rtos_event_group_t *eg, uint32_t bi
 
     eg->bits &= ~bits_to_clear;
 
-    KLOGD(KEVT_EG_CLEAR, bits_to_clear, eg->bits);
+    KLOGD("EventGrp", "EgClear bits=0x%x now=0x%x", bits_to_clear, eg->bits);
 
     rtos_port_exit_critical();
 

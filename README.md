@@ -25,7 +25,7 @@ VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrolle
 - **Cortex-M4 Optimization** - Context switching with lazy FPU stacking
 - **Memory Management** - Static bump allocator with stack overflow detection (canary values)
 - **Profiling Support** - DWT cycle counter-based profiling for WCET analysis
-- **Comprehensive Logging** - Binary kernel logger (KLog) + user-facing deferred logger (ULog)
+- **Comprehensive Logging** - Zero-allocation, ISR-safe deferred kernel logger (KLog) and user-facing string logger (ULog)
 
 ## Architecture
 
@@ -393,10 +393,9 @@ VRTOS/
 │   │       └── port.c       # Context switch, critical sections
 │   ├── logging/           # Logging subsystem
 │   │   ├── uart_tx.c/h    # UART TX driver (SPSC ring buffer + ISR)
-│   │   ├── klog.c/h       # Binary kernel logger
-│   │   ├── klog_events.h  # KLog event ID definitions
-│   │   ├── ulog.c/h       # User-facing deferred logger
-│   │   └── log_flush_task.c/h  # Flush task (drains KLog + ULog)
+│   │   ├── klog.c/h       # High-performance deferred kernel logger
+│   │   ├── ulog.c/h       # User-facing string logger
+│   │   └── log_flush_task.c/h  # Flush task (formats KLog and drains ULog)
 │   ├── profiling/         # Profiling subsystem
 │   │   ├── profiling.c    # DWT cycle counter profiling
 │   │   └── prof_trace.c/h # Profiling trace ring buffer
@@ -693,4 +692,39 @@ RTOS_USER_PROFILE_END(my_work, &my_stats);
 
 // Print system profiling report
 rtos_profiling_report_system_stats();
+```
+
+## Logging System
+
+VRTOS features a dual-tier logging architecture designed to provide extensive visibility without compromising real-time performance.
+
+### Kernel Logger (KLog)
+
+The `klog` system is designed for high-performance, internal RTOS tracing. It uses a deferred formatting approach to ensure zero allocation and ISR-safety.
+
+- **Zero-Allocation & Fast**: Captures up to 4 raw arguments and metadata pointers (like `__FILE__`, `__LINE__`, and `module`) into a fixed-size packed struct.
+- **ISR-Safe**: Uses lockless ring buffers with critical sections, allowing safe logging from any context, including interrupts.
+- **Background Formatting**: A dedicated `log_flush_task` pops packets from the ring buffer, runs the `snprintf` formatting (e.g. `00001204 [IdleTask ] [Kernel ] I kernel.c:45 | Entering low power mode`), and transmits them via UART to prevent blocking the RTOS core.
+
+**API**:
+
+```c
+// Shorthand macros automatically capture file/line context
+KLOGI("Queue", "Created queue %s with %d items", q_name, q_size);
+KLOGE("Scheduler", "Failed to start task %d", task_id);
+```
+
+### User Logger (ULog)
+
+The `ulog` system provides a standard, `printf`-style deferred logger for user applications.
+
+- **String-based**: Formats strings immediately into a character buffer.
+- **Deferred Output**: The `log_flush_task` drains the buffer asynchronously.
+- **Not ISR-Safe**: Intended only for application task use.
+
+**API**:
+
+```c
+ulog_info("Connection established to %s", ip_addr);
+ulog_error("Failed to read sensor: %d", error_code);
 ```

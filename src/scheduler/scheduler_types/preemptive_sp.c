@@ -41,7 +41,7 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
         task->prev    = current;
     }
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
+    KLOGT("Sched/SP", "Ready id=%u prio=%u", task->task_id, priority);
 }
 
 static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t task)
@@ -77,7 +77,7 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
     task->next = NULL;
     task->prev = NULL;
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, priority);
+    KLOGT("Sched/SP", "ReadyRm id=%u prio=%u", task->task_id, priority);
 }
 
 static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
@@ -125,7 +125,7 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
         current->prev = task;
     }
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
+    KLOGT("Sched/SP", "Delayed id=%u until=%u", task->task_id, (uint32_t) task->delay_until);
 }
 
 static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t task)
@@ -154,7 +154,7 @@ static void preemptive_sp_remove_from_delayed_list_internal(rtos_task_handle_t t
     task->next = NULL;
     task->prev = NULL;
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, 0);
+    KLOGT("Sched/SP", "DelayedRm id=%u", task->task_id);
 }
 
 static void preemptive_sp_update_delayed_tasks_internal(void)
@@ -181,7 +181,7 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
 
             preemptive_sp_add_to_ready_list_internal(task);
 
-            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
+            KLOGT("Sched/SP", "DelayExpired id=%u", task->task_id);
         }
         else
         {
@@ -225,7 +225,7 @@ static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
 
     instance->private_data = &g_preemptive_sp_data;
 
-    KLOGT(KEVT_SCHEDULER_INIT, 0, 0);
+    KLOGT("Sched/SP", "PreemptInit");
     return RTOS_SUCCESS;
 }
 

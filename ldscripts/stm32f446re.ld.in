@@ -139,6 +139,16 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
+  /* Not initialised by startup code — survives NVIC_SystemReset() */
+  . = ALIGN(4);
+  .noinit (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.noinit)
+    *(.noinit*)
+    . = ALIGN(4);
+  } >RAM
+
   /* Heap + stack reservation — linker errors here mean RAM is exhausted */
   ._user_heap_stack :
   {

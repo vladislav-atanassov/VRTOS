@@ -1,8 +1,6 @@
 #ifndef PROF_TRACE_H
 #define PROF_TRACE_H
 
-#include "klog_events.h"
-
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -14,11 +12,24 @@ extern "C"
 #define PROF_TRACE_BUFFER_SIZE 512 /* Must be power of 2 */
 #endif
 
+/* Profiling event IDs recorded by ProfTrace */
+typedef enum
+{
+    PEVT_CTX_SWITCH = 0x1001,
+    PEVT_TICK,
+    PEVT_TASK_ENTER,
+    PEVT_MUTEX_ACQUIRE,
+    PEVT_MUTEX_RELEASE,
+    PEVT_USER_MARK,
+    PEVT_ISR_ENTER,
+    PEVT_ISR_EXIT,
+} prof_event_id_t;
+
 /* Compact trace record (8 bytes): timestamp + event + entity, no level or extra args. */
 typedef struct __attribute__((packed))
 {
     uint32_t cyccnt;    /* Raw DWT->CYCCNT */
-    uint16_t event_id;  /* PEVT_* from log_event_ids.h */
+    uint16_t event_id;  /* PEVT_* */
     uint8_t  entity_id; /* Task ID or ISR number */
     uint8_t  _pad;      /* Alignment padding */
 } prof_record_t;

@@ -109,7 +109,7 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         /* If target has lower priority than current boost priority, boost it */
         if (target_task->priority < boost_prio)
         {
-            KLOGD(KEVT_MUTEX_PIP_BOOST, target_task->task_id, boost_prio);
+            KLOGD("Mutex", "MutexBoost id=%u prio=%u", target_task->task_id, boost_prio);
 
             /*
              * If the boosted task is currently in the READY list it is stored
@@ -158,7 +158,7 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
 
     if (safety_ctr >= max_depth)
     {
-        KLOGE(KEVT_MUTEX_DEADLOCK, safety_ctr, max_depth);
+        KLOGE("Mutex", "MutexDeadlock depth=%u max=%u", safety_ctr, max_depth);
     }
 }
 
@@ -202,7 +202,7 @@ static void mutex_restore_priority(rtos_tcb_t *task)
 
     if (task->priority != max_prio)
     {
-        KLOGD(KEVT_MUTEX_PIP_RESTORE, task->task_id, max_prio);
+        KLOGD("Mutex", "MutexRestore id=%u prio=%u", task->task_id, max_prio);
         task->priority = max_prio;
     }
 }
@@ -226,7 +226,7 @@ rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
 
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_MUTEX_INIT, 0, 0);
+    KLOGD("Mutex", "MutexInit");
     return RTOS_MUTEX_OK;
 }
 
@@ -246,7 +246,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("Mutex", "NoCurrentTask");
         return RTOS_MUTEX_ERR_INVALID;
     }
 
@@ -258,7 +258,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         m->next_held  = current_task->held_mutex_list;
         current_task->held_mutex_list = m;
         rtos_port_exit_critical();
-        KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 0);
+        KLOGD("Mutex", "MutexLock id=%u", current_task->task_id);
         return RTOS_MUTEX_OK;
     }
 
@@ -268,13 +268,13 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         {
             m->lock_count++;
             rtos_port_exit_critical();
-            KLOGD(KEVT_MUTEX_RECURSIVE, current_task->task_id, m->lock_count);
+            KLOGD("Mutex", "MutexRecursive id=%u count=%u", current_task->task_id, m->lock_count);
             return RTOS_MUTEX_OK;
         }
         else
         {
             rtos_port_exit_critical();
-            KLOGE(KEVT_MUTEX_MAX_RECURSION, current_task->task_id, 0);
+            KLOGE("Mutex", "MutexMaxRecursion id=%u", current_task->task_id);
             return RTOS_MUTEX_ERR_GENERAL;
         }
     }
@@ -288,7 +288,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     mutex_apply_priority_inheritance(m, current_task);
     mutex_add_to_waiting_list(m, current_task);
 
-    KLOGD(KEVT_MUTEX_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
+    KLOGD("Mutex", "MutexBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
     if (timeout_ticks == RTOS_MAX_WAIT)
     {
@@ -315,12 +315,12 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         /* Still on waiting list = timeout occurred */
         mutex_remove_from_waiting_list(m, current_task);
         rtos_port_exit_critical();
-        KLOGD(KEVT_MUTEX_TIMEOUT, current_task->task_id, 0);
+        KLOGD("Mutex", "MutexTimeout id=%u", current_task->task_id);
         return RTOS_MUTEX_ERR_TIMEOUT;
     }
 
     rtos_port_exit_critical();
-    KLOGD(KEVT_MUTEX_LOCK, current_task->task_id, 1);
+    KLOGD("Mutex", "MutexLock id=%u", current_task->task_id);
     return RTOS_MUTEX_OK;
 }
 
@@ -347,7 +347,9 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     if (m->owner != current_task)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_MUTEX_UNLOCK, m->owner ? m->owner->task_id : 0xFF, current_task ? current_task->task_id : 0xFF);
+        KLOGE("Mutex", "MutexUnlockErr owner=%u caller=%u",
+              m->owner ? m->owner->task_id : 0xFF,
+              current_task ? current_task->task_id : 0xFF);
         return RTOS_MUTEX_ERR_INVALID;
     }
 
@@ -355,7 +357,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     {
         m->lock_count--;
         rtos_port_exit_critical();
-        KLOGD(KEVT_MUTEX_RECURSIVE, current_task->task_id, m->lock_count);
+        KLOGD("Mutex", "MutexRecursive id=%u count=%u", current_task->task_id, m->lock_count);
         return RTOS_MUTEX_OK;
     }
 
@@ -382,7 +384,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
         m->next_held  = waiter->held_mutex_list;
         waiter->held_mutex_list = m;
 
-        KLOGD(KEVT_MUTEX_UNLOCK, waiter->task_id, 0);
+        KLOGD("Mutex", "MutexUnlock->id=%u", waiter->task_id);
 
         rtos_kernel_task_unblock(waiter);
         rtos_port_exit_critical();
@@ -394,6 +396,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_MUTEX_UNLOCK, current_task->task_id, 0);
+    KLOGD("Mutex", "MutexUnlock id=%u", current_task->task_id);
     return RTOS_MUTEX_OK;
 }

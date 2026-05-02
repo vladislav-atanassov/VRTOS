@@ -86,6 +86,18 @@ void rtos_port_yield(void);
  */
 void rtos_port_systick_handler(void);
 
+/**
+ * @brief Get monotonic uptime in microseconds
+ *
+ * Combines the kernel tick count (ms resolution) with the SysTick countdown
+ * register to derive sub-tick precision. Wraps every ~71 minutes.
+ *
+ * Safe to call from ISR or task context.
+ *
+ * @return Microseconds since boot (uint32_t, wraps at ~71min 35s)
+ */
+uint32_t rtos_port_get_uptime_us(void);
+
 #ifdef __cplusplus
 }
 #endif

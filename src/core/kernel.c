@@ -128,7 +128,7 @@ void rtos_delay_ticks(rtos_tick_t ticks)
 
     if (g_kernel.current_task == NULL)
     {
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("Kernel", "NoCurrentTask");
         rtos_port_exit_critical();
         return;
     }
@@ -174,7 +174,7 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
 
         if (g_kernel.current_task == NULL)
         {
-            KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+            KLOGE("Kernel", "NoCurrentTask");
         }
         else
         {
@@ -199,6 +199,7 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
  */
 void rtos_yield(void)
 {
+    KLOGT("Kernel", "Yield from=%s", (uint32_t) rtos_get_current_task_name());
     rtos_port_yield();
 }
 
@@ -221,6 +222,8 @@ void rtos_kernel_tick_handler(void)
 
         if (rtos_scheduler_should_preempt(next_task))
         {
+            KLOGT("Kernel", "TickPreempt next=%s tick=%u",
+                  (uint32_t) (next_task ? next_task->name : "none"), g_kernel.tick_count);
             rtos_port_exit_critical();
             RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
             rtos_yield();
@@ -245,6 +248,8 @@ void rtos_kernel_switch_context(void)
     RTOS_SYS_PROFILE_START(ctx_switch);
 
     rtos_port_enter_critical();
+
+    const char *from_name = rtos_get_current_task_name();
 
     if (g_kernel.current_task != NULL)
     {
@@ -293,13 +298,16 @@ void rtos_kernel_switch_context(void)
         }
         else
         {
-            KLOGE(KEVT_ERROR_GENERIC, 0, 0);
+            KLOGE("Kernel", "NoIdleTask");
             while (1)
             {
                 __asm volatile("wfi");
             }
         }
     }
+
+    KLOGT("Kernel", "CtxSwitch from=%s to=%s", (uint32_t) from_name,
+          (uint32_t) rtos_get_current_task_name());
 
     rtos_port_exit_critical();
 
@@ -366,7 +374,7 @@ bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t 
 
     if (!valid)
     {
-        KLOGE(KEVT_INVALID_TRANSITION, (uint32_t) old_state, (uint32_t) new_state);
+        KLOGE("Kernel", "InvalidTransition from=%u to=%u", (uint32_t) old_state, (uint32_t) new_state);
     }
 
     return valid;
@@ -403,6 +411,8 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
 #endif
 
     rtos_scheduler_add_to_ready_list(task);
+
+    KLOGT("Kernel", "TaskReady name=%s prio=%u", (uint32_t) task->name, task->priority);
 
     if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING)
     {
@@ -450,6 +460,8 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
         rtos_scheduler_add_to_delayed_list(task, delay_ticks);
     }
 
+    KLOGT("Kernel", "TaskBlock name=%s delay=%u", (uint32_t) task->name, (uint32_t) delay_ticks);
+
     if (task == g_kernel.current_task)
     {
         rtos_port_exit_critical();
@@ -469,6 +481,8 @@ void rtos_kernel_task_unblock(rtos_task_handle_t task)
     {
         return;
     }
+
+    KLOGT("Kernel", "TaskUnblock name=%s", (uint32_t) task->name);
 
     /* rtos_kernel_task_ready() enters/exits its own critical section and may
      * call rtos_yield() on the preemption path.  Wrapping an additional

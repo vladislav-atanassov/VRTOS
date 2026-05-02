@@ -28,7 +28,7 @@ rtos_status_t rtos_task_init_system(void)
 {
     memset(g_task_pool, 0, sizeof(g_task_pool));
     g_task_count = 0;
-    KLOGD(KEVT_TASK_CREATE, RTOS_MAX_TASKS, RTOS_TOTAL_HEAP_SIZE);
+    KLOGD("Task", "TaskSysInit tasks=%u heap=%u", RTOS_MAX_TASKS, RTOS_TOTAL_HEAP_SIZE);
 
     return RTOS_SUCCESS;
 }
@@ -41,19 +41,19 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
 {
     if (task_function == NULL || task_handle == NULL)
     {
-        KLOGE(KEVT_INVALID_PARAM, (uint32_t) task_function, (uint32_t) task_handle);
+        KLOGE("Task", "InvalidParam fn=%u hdl=%u", (uint32_t) task_function, (uint32_t) task_handle);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
     if (priority >= RTOS_MAX_TASK_PRIORITIES)
     {
-        KLOGE(KEVT_INVALID_PARAM, priority, RTOS_MAX_TASK_PRIORITIES - 1);
+        KLOGE("Task", "InvalidParam prio=%u max=%u", priority, RTOS_MAX_TASK_PRIORITIES - 1);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
     if (g_task_count >= RTOS_MAX_TASKS)
     {
-        KLOGE(KEVT_ALLOC_FAIL, RTOS_MAX_TASKS, g_task_count);
+        KLOGE("Task", "AllocFail max=%u count=%u", RTOS_MAX_TASKS, g_task_count);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -75,7 +75,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     if (new_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_ALLOC_FAIL, 0, 0);
+        KLOGE("Task", "AllocFail");
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -84,7 +84,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     {
         new_task->task_function = NULL;
         rtos_port_exit_critical();
-        KLOGE(KEVT_STACK_ALLOC_FAIL, stack_size, 0);
+        KLOGE("Task", "StackAllocFail size=%u", stack_size);
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -121,7 +121,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
 
     rtos_port_exit_critical();
 
-    KLOGI(KEVT_TASK_CREATE, new_task->task_id, priority);
+    KLOGI("Task", "TaskCreate id=%u prio=%u", new_task->task_id, priority);
 
     return RTOS_SUCCESS;
 }
@@ -178,6 +178,13 @@ const char *rtos_task_get_name(rtos_task_id_t task_id)
         return g_task_pool[task_id].name;
     }
     return "?";
+}
+
+const char *rtos_get_current_task_name(void)
+{
+    return (g_kernel.current_task != NULL && g_kernel.current_task->name != NULL)
+               ? g_kernel.current_task->name
+               : "none";
 }
 
 /**
@@ -261,14 +268,14 @@ uint8_t rtos_task_get_count(void)
  */
 void rtos_task_debug_print_all(void)
 {
-    KLOGD(KEVT_TASK_CREATE, g_task_count, RTOS_MAX_TASKS);
+    KLOGD("Task", "TaskDebug count=%u max=%u", g_task_count, RTOS_MAX_TASKS);
 
     for (uint8_t i = 0; i < RTOS_MAX_TASKS; i++)
     {
         rtos_tcb_t *task = &g_task_pool[i];
         if (task->task_function != NULL)
         {
-            KLOGD(KEVT_TASK_CREATE, task->task_id, (uint32_t) task->state);
+            KLOGD("Task", "TaskDebug id=%u state=%u", task->task_id, (uint32_t) task->state);
         }
     }
 }
@@ -280,7 +287,7 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
 {
     (void) param; /* Unused parameter */
 
-    KLOGD(KEVT_TASK_IDLE_START, 0, 0);
+    KLOGD("Task", "IdleStart");
 
     while (1)
     {
@@ -306,7 +313,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         {
             if (*task_handle->stack_base != PORT_STACK_CANARY_VALUE)
             {
-                KLOGE(KEVT_STACK_OVERFLOW, task_handle->task_id, 0);
+                KLOGE("Task", "StackOverflow id=%u", task_handle->task_id);
                 return true;
             }
         }
@@ -321,7 +328,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
         {
             if (*task->stack_base != PORT_STACK_CANARY_VALUE)
             {
-                KLOGE(KEVT_STACK_OVERFLOW, task->task_id, 0);
+                KLOGE("Task", "StackOverflow id=%u", task->task_id);
                 overflow_found = true;
             }
         }
@@ -368,7 +375,7 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
 
     task->state = RTOS_TASK_STATE_SUSPENDED;
 
-    KLOGD(KEVT_TASK_SUSPEND, task->task_id, 0);
+    KLOGD("Task", "TaskSuspend id=%u", task->task_id);
 
     if (task == g_kernel.current_task)
     {
@@ -401,7 +408,7 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    KLOGD(KEVT_TASK_RESUME, task_handle->task_id, 0);
+    KLOGD("Task", "TaskResume id=%u", task_handle->task_id);
 
     rtos_port_exit_critical();
 
@@ -513,7 +520,7 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
 
     task->state           = RTOS_TASK_STATE_DELETED;
 
-    KLOGI(KEVT_TASK_DELETE, task->task_id, 0);
+    KLOGI("Task", "TaskDelete id=%u", task->task_id);
 
     bool is_self = (task == g_kernel.current_task);
     if (is_self)
@@ -555,7 +562,7 @@ static uint32_t *rtos_task_allocate_stack(rtos_stack_size_t size)
 
     if (stack_block == NULL)
     {
-        KLOGE(KEVT_STACK_ALLOC_FAIL, size, 0);
+        KLOGE("Task", "StackAllocFail size=%u", size);
         return NULL;
     }
 

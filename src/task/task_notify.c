@@ -39,7 +39,7 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 
     task->notification_pending = 1;
 
-    KLOGD(KEVT_NOTIFY_SEND, task->task_id, (uint32_t) action);
+    KLOGD("Notify", "NotifySend id=%u act=%u", task->task_id, (uint32_t) action);
 
     /* If target task is blocked waiting for a notification, wake it */
     if (task->state == RTOS_TASK_STATE_BLOCKED && task->blocked_on_type == RTOS_SYNC_TYPE_NOTIFICATION)
@@ -48,7 +48,7 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
         task->blocked_on      = NULL;
         task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
-        KLOGD(KEVT_NOTIFY_WAKE, task->task_id, task->notification_value);
+        KLOGD("Notify", "NotifyWake id=%u val=%u", task->task_id, task->notification_value);
 
         rtos_port_exit_critical();
         rtos_kernel_task_unblock(task);
@@ -73,14 +73,14 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("Notify", "NoCurrentTask");
         return RTOS_NOTIFY_ERR_INVALID;
     }
 
     /* Clear entry bits before checking pending state */
     current_task->notification_value &= ~entry_clear_bits;
 
-    KLOGD(KEVT_NOTIFY_WAIT, current_task->task_id, current_task->notification_value);
+    KLOGD("Notify", "NotifyWait id=%u val=%u", current_task->task_id, current_task->notification_value);
 
     /* Fast path: notification already pending */
     if (current_task->notification_pending)
@@ -110,7 +110,7 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
     current_task->blocked_on      = current_task;
     current_task->blocked_on_type = RTOS_SYNC_TYPE_NOTIFICATION;
 
-    KLOGD(KEVT_NOTIFY_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
+    KLOGD("Notify", "NotifyBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
@@ -138,7 +138,7 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
         current_task->blocked_on      = NULL;
         current_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
         rtos_port_exit_critical();
-        KLOGD(KEVT_NOTIFY_TIMEOUT, current_task->task_id, 0);
+        KLOGD("Notify", "NotifyTimeout id=%u", current_task->task_id);
         return RTOS_NOTIFY_ERR_TIMEOUT;
     }
 
@@ -162,7 +162,7 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("Notify", "NoCurrentTask");
         return RTOS_NOTIFY_ERR_INVALID;
     }
 
@@ -193,7 +193,7 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
     current_task->blocked_on      = current_task;
     current_task->blocked_on_type = RTOS_SYNC_TYPE_NOTIFICATION;
 
-    KLOGD(KEVT_NOTIFY_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
+    KLOGD("Notify", "NotifyBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
@@ -217,7 +217,7 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
         current_task->blocked_on      = NULL;
         current_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
         rtos_port_exit_critical();
-        KLOGD(KEVT_NOTIFY_TIMEOUT, current_task->task_id, 0);
+        KLOGD("Notify", "NotifyTimeout id=%u", current_task->task_id);
         return RTOS_NOTIFY_ERR_TIMEOUT;
     }
 

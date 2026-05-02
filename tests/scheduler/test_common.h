@@ -176,7 +176,7 @@ static inline rtos_status_t test_create_startup_timer(void (*callback)(void *, v
 static inline rtos_status_t test_create_log_flush_task(rtos_task_handle_t *p_handle)
 {
     ulog_init(ULOG_LEVEL_INFO);
-    return rtos_task_create(log_flush_task, "LogFlush", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 0, p_handle);
+    return rtos_task_create(log_flush_task, "LogFlush", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, p_handle);
 }
 
 #endif /* TEST_COMMON_H */

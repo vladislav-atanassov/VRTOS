@@ -1,8 +1,6 @@
 #ifndef KLOG_H
 #define KLOG_H
 
-#include "klog_events.h"
-
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -11,12 +9,14 @@ extern "C"
 #endif
 
 #ifndef KLOG_BUFFER_SIZE
-#define KLOG_BUFFER_SIZE 2048 /* Must be power of 2 */
+#define KLOG_BUFFER_SIZE 4096 /* Must be power of 2 */
 #endif
 
 #ifndef KLOG_MIN_LEVEL
-#define KLOG_MIN_LEVEL KLOG_LEVEL_INFO
+#define KLOG_MIN_LEVEL KLOG_LEVEL_TRACE
 #endif
+
+#define KLOG_MAX_ARGS 4
 
 typedef enum
 {
@@ -29,47 +29,60 @@ typedef enum
 } klog_level_t;
 
 /**
- * @brief Fixed-size binary log record (16 bytes)
+ * @brief Fixed-size log packet.
  *
- * No strings, no formatting — just data. A host-side decoder maps event_id
- * to human-readable descriptions using log_event_ids.h.
+ * All string pointers reference Flash (.rodata) — safe to store without copying.
+ * Args pre-extracted from the call site to keep klog_write ISR-safe with no
+ * formatting in the hot path.
  */
 typedef struct __attribute__((packed))
 {
-    uint32_t timestamp_cycles; /* Raw DWT->CYCCNT */
-    uint16_t event_id;         /* log_event_id_t */
-    uint8_t  level;            /* klog_level_t */
-    uint8_t  cpu_context;      /* Current task ID or ISR number */
-    uint32_t arg0;
-    uint32_t arg1;
-} klog_record_t;
+    uint32_t    timestamp_us; /* Microseconds since boot (wraps ~71 min) */
+    uint16_t    line;         /* __LINE__ */
+    uint8_t     level;        /* klog_level_t */
+    uint8_t     cpu_context;  /* task ID or ISR number */
+    const char *module;       /* Subsystem tag, e.g. "Kernel", "Queue" */
+    const char *file;         /* __FILE__ */
+    const char *fmt;          /* Format string in Flash */
+    uint32_t    args[KLOG_MAX_ARGS];
+} log_packet_t;
+
+/* Runtime verbosity — lives in .noinit, survives NVIC_SystemReset() */
+extern volatile uint8_t klog_verbosity;
 
 /* Safe to call before the scheduler is running. */
 void klog_init(void);
 
-/* ISR-safe. Disables interrupts ~10 cycles to write atomically.
- * Never blocks, never allocates. Drops silently on full buffer. */
-void klog_write(klog_level_t level, uint16_t event_id, uint32_t arg0, uint32_t arg1);
+/* Change/query runtime verbosity. */
+void    klog_set_verbosity(uint8_t level);
+uint8_t klog_get_verbosity(void);
 
-uint32_t klog_drain(klog_record_t *out, uint32_t max_records);
+/* ISR-safe. Never blocks, never allocates. Drops silently on full buffer. */
+void klog_write(klog_level_t level, const char *module, const char *file, uint16_t line,
+                const char *fmt, uint32_t a0, uint32_t a1, uint32_t a2, uint32_t a3);
 
-/* Records with level > KLOG_MIN_LEVEL produce zero code at compile time. */
-#define KLOG(level, event_id, a0, a1)                                                                                  \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if ((level) <= KLOG_MIN_LEVEL)                                                                                 \
-        {                                                                                                              \
-            klog_write((level), (event_id), (a0), (a1));                                                               \
-        }                                                                                                              \
+uint32_t klog_drain(log_packet_t *out, uint32_t max_records);
+
+/* Internal: absorbs a dummy sentinel then picks the first 4 real args, padding with 0. */
+#define KLOG_PAD(_d, a0, a1, a2, a3, ...) \
+    (uint32_t)(a0), (uint32_t)(a1), (uint32_t)(a2), (uint32_t)(a3)
+
+/* Runtime level check — module is the subsystem tag string. */
+#define KLOG(level, module, fmt, ...)                                   \
+    do                                                                  \
+    {                                                                   \
+        if ((level) <= klog_verbosity)                                  \
+            klog_write((level), (module), __FILE__, __LINE__, (fmt),    \
+                       KLOG_PAD(_, ##__VA_ARGS__, 0, 0, 0, 0));        \
     } while (0)
 
-/* Shorthand wrappers — avoid repeating the level on every call */
-#define KLOGF(evt, a0, a1) KLOG(KLOG_LEVEL_FAULT, (evt), (a0), (a1))
-#define KLOGE(evt, a0, a1) KLOG(KLOG_LEVEL_ERROR, (evt), (a0), (a1))
-#define KLOGW(evt, a0, a1) KLOG(KLOG_LEVEL_WARN, (evt), (a0), (a1))
-#define KLOGI(evt, a0, a1) KLOG(KLOG_LEVEL_INFO, (evt), (a0), (a1))
-#define KLOGD(evt, a0, a1) KLOG(KLOG_LEVEL_DEBUG, (evt), (a0), (a1))
-#define KLOGT(evt, a0, a1) KLOG(KLOG_LEVEL_TRACE, (evt), (a0), (a1))
+/* Shorthand wrappers — first arg is the module/subsystem tag */
+#define KLOGF(module, fmt, ...) KLOG(KLOG_LEVEL_FAULT, (module), (fmt), ##__VA_ARGS__)
+#define KLOGE(module, fmt, ...) KLOG(KLOG_LEVEL_ERROR, (module), (fmt), ##__VA_ARGS__)
+#define KLOGW(module, fmt, ...) KLOG(KLOG_LEVEL_WARN,  (module), (fmt), ##__VA_ARGS__)
+#define KLOGI(module, fmt, ...) KLOG(KLOG_LEVEL_INFO,  (module), (fmt), ##__VA_ARGS__)
+#define KLOGD(module, fmt, ...) KLOG(KLOG_LEVEL_DEBUG, (module), (fmt), ##__VA_ARGS__)
+#define KLOGT(module, fmt, ...) KLOG(KLOG_LEVEL_TRACE, (module), (fmt), ##__VA_ARGS__)
 
 #ifdef __cplusplus
 }

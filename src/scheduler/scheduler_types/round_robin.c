@@ -41,7 +41,7 @@ static void round_robin_add_to_ready_list_internal(rtos_task_handle_t task)
 
     g_round_robin_data.ready_count++;
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_round_robin_data.ready_count);
+    KLOGT("Sched/RR", "Ready id=%u count=%u", task->task_id, g_round_robin_data.ready_count);
 }
 
 static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
@@ -79,7 +79,7 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
         g_round_robin_data.ready_count--;
     }
 
-    KLOGT(KEVT_SCHED_TASK_READY, task->task_id, g_round_robin_data.ready_count);
+    KLOGT("Sched/RR", "ReadyRm id=%u count=%u", task->task_id, g_round_robin_data.ready_count);
 }
 
 static void round_robin_add_to_delayed_list_internal(rtos_task_handle_t task, rtos_tick_t delay_ticks)
@@ -132,7 +132,7 @@ static void round_robin_add_to_delayed_list_internal(rtos_task_handle_t task, rt
 
     g_round_robin_data.delayed_count++;
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, (uint32_t) task->delay_until);
+    KLOGT("Sched/RR", "Delayed id=%u until=%u", task->task_id, (uint32_t) task->delay_until);
 }
 
 static void round_robin_remove_from_delayed_list_internal(rtos_task_handle_t task)
@@ -167,7 +167,7 @@ static void round_robin_remove_from_delayed_list_internal(rtos_task_handle_t tas
         g_round_robin_data.delayed_count--;
     }
 
-    KLOGT(KEVT_SCHED_TASK_DELAYED, task->task_id, g_round_robin_data.delayed_count);
+    KLOGT("Sched/RR", "DelayedRm id=%u count=%u", task->task_id, g_round_robin_data.delayed_count);
 }
 
 static void round_robin_update_delayed_tasks_internal(void)
@@ -194,7 +194,7 @@ static void round_robin_update_delayed_tasks_internal(void)
 
             round_robin_add_to_ready_list_internal(task);
 
-            KLOGT(KEVT_SCHED_TASK_DELAY_EXPIRED, task->task_id, 0);
+            KLOGT("Sched/RR", "DelayExpired id=%u", task->task_id);
         }
         else
         {
@@ -228,7 +228,7 @@ static rtos_status_t round_robin_init(rtos_scheduler_instance_t *instance)
 
     instance->private_data = &g_round_robin_data;
 
-    KLOGT(KEVT_SCHEDULER_INIT, RTOS_TIME_SLICE_TICKS, 0);
+    KLOGT("Sched/RR", "RRInit slice=%u", RTOS_TIME_SLICE_TICKS);
     return RTOS_SUCCESS;
 }
 
@@ -273,7 +273,7 @@ static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos
 
         if (g_round_robin_data.slice_remaining == 0 && g_round_robin_data.ready_count > 1)
         {
-            KLOGT(KEVT_SCHED_TIME_SLICE, 0, 0);
+            KLOGT("Sched/RR", "TimeSlice");
             return true;
         }
     }
@@ -302,7 +302,7 @@ static void round_robin_task_completed(rtos_scheduler_instance_t *instance, rtos
         g_round_robin_data.slice_remaining = RTOS_TIME_SLICE_TICKS;
         g_round_robin_data.current_task    = NULL;
 
-        KLOGT(KEVT_SCHED_ROTATE, completed_task->task_id, 0);
+        KLOGT("Sched/RR", "Rotate id=%u", completed_task->task_id);
     }
 }
 

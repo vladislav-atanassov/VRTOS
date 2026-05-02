@@ -113,7 +113,7 @@ rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_co
 
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_SEM_INIT, initial_count, max_count);
+    KLOGD("Semaphore", "SemInit count=%u max=%u", initial_count, max_count);
 
     return RTOS_SEM_OK;
 }
@@ -132,7 +132,7 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     {
         sem->count--;
         rtos_port_exit_critical();
-        KLOGD(KEVT_SEM_ACQUIRE, sem->count, 0);
+        KLOGD("Semaphore", "SemAcquire count=%u", sem->count);
         return RTOS_SEM_OK;
     }
 
@@ -146,13 +146,13 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     if (current_task == NULL)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_NO_CURRENT_TASK, 0, 0);
+        KLOGE("Semaphore", "NoCurrentTask");
         return RTOS_SEM_ERR_INVALID;
     }
 
     sem_add_to_waiting_list(sem, current_task);
 
-    KLOGD(KEVT_SEM_BLOCK, current_task->task_id, (uint32_t) timeout_ticks);
+    KLOGD("Semaphore", "SemBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
     if (timeout_ticks == RTOS_SEM_MAX_WAIT)
     {
@@ -179,12 +179,12 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
         /* Still on waiting list = timeout occurred */
         sem_remove_from_waiting_list(sem, current_task);
         rtos_port_exit_critical();
-        KLOGD(KEVT_SEM_TIMEOUT, current_task->task_id, 0);
+        KLOGD("Semaphore", "SemTimeout id=%u", current_task->task_id);
         return RTOS_SEM_ERR_TIMEOUT;
     }
 
     rtos_port_exit_critical();
-    KLOGD(KEVT_SEM_ACQUIRE, current_task->task_id, 1);
+    KLOGD("Semaphore", "SemAcquire id=%u", current_task->task_id);
     return RTOS_SEM_OK;
 }
 
@@ -202,7 +202,7 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     if (waiter != NULL)
     {
         /* Wake the highest priority waiter instead of incrementing count */
-        KLOGD(KEVT_SEM_WAKE, waiter->task_id, 0);
+        KLOGD("Semaphore", "SemWake id=%u", waiter->task_id);
 
         rtos_kernel_task_unblock(waiter);
         rtos_port_exit_critical();
@@ -213,14 +213,14 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     if (sem->max_count != 0 && sem->count >= sem->max_count)
     {
         rtos_port_exit_critical();
-        KLOGE(KEVT_SEM_OVERFLOW, sem->count, sem->max_count);
+        KLOGE("Semaphore", "SemOverflow count=%u max=%u", sem->count, sem->max_count);
         return RTOS_SEM_ERR_OVERFLOW;
     }
 
     sem->count++;
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_SEM_SIGNAL, sem->count, 0);
+    KLOGD("Semaphore", "SemSignal count=%u", sem->count);
     return RTOS_SEM_OK;
 }
 

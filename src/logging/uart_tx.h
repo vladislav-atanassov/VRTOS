@@ -18,6 +18,10 @@ extern log_level_t g_log_level;
 
 void log_uart_init(log_level_t level);
 void uart_tx_flush(void);
+void uart_rx_process_commands(void);
+
+/* vsnprintf + direct _write — bypasses newlib's broken stdio buffering. */
+void uart_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
 /* Internal macro */
 #define log_printf(level, tag, msg, ...)                                                                               \
@@ -25,7 +29,7 @@ void uart_tx_flush(void);
     {                                                                                                                  \
         if (g_log_level >= level)                                                                                      \
         {                                                                                                              \
-            printf("[" tag "] %s:%d:%s(): " msg "\r\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__);                  \
+            uart_printf("[" tag "] %s:%d:%s(): " msg "\r\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__);             \
         }                                                                                                              \
     } while (0)
 
@@ -33,7 +37,7 @@ void uart_tx_flush(void);
 #define log_print(msg, ...)                                                                                            \
     do                                                                                                                 \
     {                                                                                                                  \
-        printf("[PRINT] " msg "\r\n", ##__VA_ARGS__);                                                                  \
+        uart_printf("[PRINT] " msg "\r\n", ##__VA_ARGS__);                                                             \
     } while (0)
 
 #define log_profile(msg, ...) log_printf(LOG_LEVEL_PROFILE, "PROFILE", msg, ##__VA_ARGS__)

@@ -5,6 +5,7 @@
 #include "preemptive_sp.h"
 #include "profiling.h"
 #include "round_robin.h"
+#include "task_priv.h"
 
 #include <string.h>
 
@@ -31,14 +32,14 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
 {
     if (g_scheduler_instance.initialized)
     {
-        KLOGI(KEVT_SCHEDULER_INIT, (uint32_t) scheduler_type, 0);
+        KLOGI("Scheduler", "SchedAlreadyInit type=%u", (uint32_t) scheduler_type);
         return RTOS_ERROR_INVALID_STATE;
     }
 
     const rtos_scheduler_t *interface = rtos_scheduler_find_interface(scheduler_type);
     if (interface == NULL)
     {
-        KLOGE(KEVT_INVALID_PARAM, (uint32_t) scheduler_type, 0);
+        KLOGE("Scheduler", "SchedInvalidType type=%u", (uint32_t) scheduler_type);
         return RTOS_ERROR_INVALID_PARAM;
     }
 
@@ -52,13 +53,13 @@ rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type)
     if (status == RTOS_SUCCESS)
     {
         g_scheduler_instance.initialized = true;
-        KLOGI(KEVT_SCHEDULER_INIT, (uint32_t) scheduler_type, 0);
+        KLOGI("Scheduler", "SchedInit type=%u", (uint32_t) scheduler_type);
     }
     else
     {
         g_scheduler_instance.vtable       = NULL;
         g_scheduler_instance.private_data = NULL;
-        KLOGE(KEVT_SCHEDULER_INIT, (uint32_t) status, 0);
+        KLOGE("Scheduler", "SchedInitFail status=%u", (uint32_t) status);
     }
 
     return status;
@@ -79,13 +80,15 @@ rtos_task_handle_t rtos_scheduler_get_next_task(void)
 {
     if (!g_scheduler_instance.initialized || g_scheduler_instance.vtable == NULL)
     {
-        KLOGE(KEVT_SCHEDULER_NOT_INIT, 0, 0);
+        KLOGE("Scheduler", "SchedNotInit");
         return NULL;
     }
 
     RTOS_SYS_PROFILE_START(scheduler);
     rtos_task_handle_t next = g_scheduler_instance.vtable->get_next_task(&g_scheduler_instance);
     RTOS_SYS_PROFILE_END(scheduler, &g_prof_scheduler);
+
+    KLOGT("Scheduler", "GetNext picked=%s", (uint32_t) (next ? next->name : "none"));
 
     return next;
 }
@@ -100,7 +103,10 @@ bool rtos_scheduler_should_preempt(rtos_task_handle_t new_task)
         return false;
     }
 
-    return g_scheduler_instance.vtable->should_preempt(&g_scheduler_instance, new_task);
+    bool preempt = g_scheduler_instance.vtable->should_preempt(&g_scheduler_instance, new_task);
+    KLOGT("Scheduler", "ShouldPreempt new=%s result=%u",
+          (uint32_t) (new_task ? new_task->name : "none"), (uint32_t) preempt);
+    return preempt;
 }
 
 /**
@@ -207,32 +213,19 @@ void rtos_scheduler_debug_print(void)
 {
     if (!g_scheduler_instance.initialized)
     {
-        KLOGI(KEVT_SCHEDULER_NOT_INIT, 0, 0);
+        KLOGI("Scheduler", "SchedNotInit");
         return;
     }
 
-    KLOGD(KEVT_SCHEDULER_INIT, (uint32_t) g_scheduler_instance.type, 0);
+    KLOGD("Scheduler", "SchedDebug type=%u", (uint32_t) g_scheduler_instance.type);
 
     uint8_t stats_buffer[128];
     size_t  stats_size = rtos_scheduler_get_statistics(stats_buffer, sizeof(stats_buffer));
 
     if (stats_size > 0)
     {
-        KLOGD(KEVT_SCHEDULER_INIT, stats_size, 0);
-        for (size_t i = 0; i < stats_size; i += 16)
-        {
-            char  hex_line[64] = {0};
-            char *ptr          = hex_line;
-
-            for (size_t j = 0; j < 16 && (i + j) < stats_size; j++)
-            {
-                ptr += sprintf(ptr, "%02X ", stats_buffer[i + j]);
-            }
-            KLOGD(KEVT_SCHEDULER_INIT, i, 0);
-        }
+        KLOGD("Scheduler", "SchedStats size=%u", (uint32_t) stats_size);
     }
-
-    KLOGD(KEVT_SCHEDULER_INIT, 0, 0);
 }
 
 /**

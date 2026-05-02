@@ -70,6 +70,12 @@ rtos_priority_t rtos_task_get_priority(rtos_task_handle_t task_handle);
  */
 const char *rtos_task_get_name(rtos_task_id_t task_id);
 
+/**
+ * @brief Get the current running task's name
+ * @return Task name string, or "none" if no task is running
+ */
+const char *rtos_get_current_task_name(void);
+
 
 /**
  * @brief Suspend a task

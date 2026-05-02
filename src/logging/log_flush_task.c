@@ -2,326 +2,25 @@
 
 #include "VRTOS.h"
 #include "klog.h"
-#include "klog_events.h"
 #include "task.h"
 #include "uart_tx.h"
 #include "ulog.h"
 
-/* Output: [K/I] TaskCreate    id=1 prio=2  (T00)
- *         [K/D] IdleStart                  (T00)
- *         [K/T] SchedDelayed  id=3 wake=0x0042  (T03)
- *         [K/F] HardFault     lr=0x08001234 psr=0x010000  (ISR) */
-static void klog_format_record(const klog_record_t *r)
+#include <stdio.h>
+#include <string.h>
+
+static char level_char(uint8_t lvl)
 {
-    const char *lvl;
+    static const char t[] = {'F', 'E', 'W', 'I', 'D', 'T'};
+    return (lvl < 6) ? t[lvl] : '?';
+}
 
-    switch (r->level)
-    {
-        case KLOG_LEVEL_FAULT:
-            lvl = "F";
-            break;
-        case KLOG_LEVEL_ERROR:
-            lvl = "E";
-            break;
-        case KLOG_LEVEL_WARN:
-            lvl = "W";
-            break;
-        case KLOG_LEVEL_INFO:
-            lvl = "I";
-            break;
-        case KLOG_LEVEL_DEBUG:
-            lvl = "D";
-            break;
-        case KLOG_LEVEL_TRACE:
-            lvl = "T";
-            break;
-        default:
-            lvl = "?";
-            break;
-    }
-
-    /* Context string: "ISR" or task name like "WORKER" */
-    const char *ctx;
-    if (r->cpu_context >= 0xF0)
-    {
-        ctx = "ISR";
-    }
-    else
-    {
-        ctx = rtos_task_get_name(r->cpu_context);
-    }
-
-    /* Event-specific human-readable formatting */
-    switch ((log_event_id_t) r->event_id)
-    {
-        /* ---- Task lifecycle ---- */
-        case KEVT_TASK_CREATE:
-            log_print("[K/%s] %-14s %-6s stk=%lu (%s)", lvl, "TaskCreate", rtos_task_get_name((uint8_t) r->arg0),
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_TASK_SWITCH:
-            log_print("[K/%s] %-14s %s -> %s (%s)", lvl, "TaskSwitch", rtos_task_get_name((uint8_t) r->arg0),
-                      rtos_task_get_name((uint8_t) r->arg1), ctx);
-            break;
-        case KEVT_TASK_SUSPEND:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskSuspend", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_RESUME:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskResume", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_READY:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskReady", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_BLOCK:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskBlock", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_UNBLOCK:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskUnblock", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_DELETE:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "TaskDelete", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_TASK_IDLE_START:
-            log_print("[K/%s] %-14s (%s)", lvl, "IdleStart", ctx);
-            break;
-
-        /* ---- Scheduler ---- */
-        case KEVT_SCHEDULER_INIT:
-            log_print("[K/%s] %-14s (%s)", lvl, "SchedInit", ctx);
-            break;
-        case KEVT_SCHEDULER_NOT_INIT:
-            log_print("[K/%s] %-14s (%s)", lvl, "SchedNotInit", ctx);
-            break;
-
-        /* ---- Scheduler internals ---- */
-        case KEVT_SCHED_TASK_READY:
-            log_print("[K/%s] %-14s %s cnt=%lu (%s)", lvl, "SchedReady", rtos_task_get_name((uint8_t) r->arg0),
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_SCHED_TASK_DELAYED:
-            log_print("[K/%s] %-14s %s wake=%lu (%s)", lvl, "SchedDelayed", rtos_task_get_name((uint8_t) r->arg0),
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_SCHED_TASK_DELAY_EXPIRED:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "SchedDelayExp", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_SCHED_TIME_SLICE:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "SchedSlice", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_SCHED_ROTATE:
-            log_print("[K/%s] %-14s (%s)", lvl, "SchedRotate", ctx);
-            break;
-
-        /* ---- Mutex ---- */
-        case KEVT_MUTEX_INIT:
-            log_print("[K/%s] %-14s (%s)", lvl, "MtxInit", ctx);
-            break;
-        case KEVT_MUTEX_LOCK:
-            log_print("[K/%s] %-14s owner=%lu (%s)", lvl, "MtxLock", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_MUTEX_UNLOCK:
-            log_print("[K/%s] %-14s owner=%lu (%s)", lvl, "MtxUnlock", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_MUTEX_PIP_BOOST:
-            log_print("[K/%s] %-14s old=%lu new=%lu (%s)", lvl, "MtxPIPBoost", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_MUTEX_PIP_RESTORE:
-            log_print("[K/%s] %-14s prio=%lu (%s)", lvl, "MtxPIPRestore", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_MUTEX_RECURSIVE:
-            log_print("[K/%s] %-14s depth=%lu (%s)", lvl, "MtxRecursive", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_MUTEX_MAX_RECURSION:
-            log_print("[K/%s] %-14s (%s)", lvl, "MtxMaxRecur", ctx);
-            break;
-        case KEVT_MUTEX_DEADLOCK:
-            log_print("[K/%s] %-14s (%s)", lvl, "MtxDeadlock!", ctx);
-            break;
-        case KEVT_MUTEX_BLOCK:
-            log_print("[K/%s] %-14s owner=%lu (%s)", lvl, "MtxBlock", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_MUTEX_TIMEOUT:
-            log_print("[K/%s] %-14s (%s)", lvl, "MtxTimeout", ctx);
-            break;
-
-        /* ---- Semaphore ---- */
-        case KEVT_SEM_INIT:
-            log_print("[K/%s] %-14s init=%lu max=%lu (%s)", lvl, "SemInit", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_SEM_ACQUIRE:
-            log_print("[K/%s] %-14s cnt=%lu (%s)", lvl, "SemAcquire", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_SEM_SIGNAL:
-            log_print("[K/%s] %-14s cnt=%lu (%s)", lvl, "SemSignal", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_SEM_BLOCK:
-            log_print("[K/%s] %-14s (%s)", lvl, "SemBlock", ctx);
-            break;
-        case KEVT_SEM_TIMEOUT:
-            log_print("[K/%s] %-14s (%s)", lvl, "SemTimeout", ctx);
-            break;
-        case KEVT_SEM_OVERFLOW:
-            log_print("[K/%s] %-14s max=%lu (%s)", lvl, "SemOverflow", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_SEM_WAKE:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "SemWake", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-
-        /* ---- Timer ---- */
-        case KEVT_TIMER_CREATE:
-            log_print("[K/%s] %-14s period=%lu (%s)", lvl, "TimerCreate", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_TIMER_START:
-            log_print("[K/%s] %-14s (%s)", lvl, "TimerStart", ctx);
-            break;
-        case KEVT_TIMER_STOP:
-            log_print("[K/%s] %-14s (%s)", lvl, "TimerStop", ctx);
-            break;
-        case KEVT_TIMER_PERIOD_CHANGE:
-            log_print("[K/%s] %-14s old=%lu new=%lu (%s)", lvl, "TimerPeriod", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-
-        /* ---- Port ---- */
-        case KEVT_PORT_INIT:
-            log_print("[K/%s] %-14s systick=%luHz (%s)", lvl, "PortInit", (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_SYSTICK_FAIL:
-            log_print("[K/%s] %-14s (%s)", lvl, "SysTickFail!", ctx);
-            break;
-
-        /* ---- Errors ---- */
-        case KEVT_HARD_FAULT:
-            log_print("[K/%s] %-14s lr=0x%08lX psr=0x%08lX (%s)", lvl, "HARDFAULT!", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_HARD_FAULT_REGS:
-            log_print("[K/%s] %-14s r0=0x%08lX r1=0x%08lX (%s)", lvl, "HFault-Regs", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_HARD_FAULT_SCB:
-            log_print("[K/%s] %-14s cfsr=0x%08lX hfsr=0x%08lX (%s)", lvl, "HFault-SCB", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_HARD_FAULT_SP:
-            log_print("[K/%s] %-14s sp=0x%08lX (%s)", lvl, "HFault-SP", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_STACK_OVERFLOW:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "StackOverflow!", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_INVALID_TRANSITION:
-            log_print("[K/%s] %-14s from=%lu to=%lu (%s)", lvl, "InvalidTrans!", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_ASSERT_FAIL:
-            log_print("[K/%s] %-14s (%s)", lvl, "AssertFail!", ctx);
-            break;
-        case KEVT_ERROR_GENERIC:
-            log_print("[K/%s] %-14s code=%lu (%s)", lvl, "Error", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_ALLOC_FAIL:
-            log_print("[K/%s] %-14s size=%lu (%s)", lvl, "AllocFail!", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_INVALID_PARAM:
-            log_print("[K/%s] %-14s (%s)", lvl, "InvalidParam", ctx);
-            break;
-        case KEVT_NO_CURRENT_TASK:
-            log_print("[K/%s] %-14s (%s)", lvl, "NoCurrentTask", ctx);
-            break;
-
-        /* ---- Queue ---- */
-        case KEVT_QUEUE_INIT:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueInit", ctx);
-            break;
-        case KEVT_QUEUE_CREATE:
-            log_print("[K/%s] %-14s cap=%lu item=%lu (%s)", lvl, "QueueCreate", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_QUEUE_SEND:
-            log_print("[K/%s] %-14s cnt=%lu (%s)", lvl, "QueueSend", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_QUEUE_SEND_BLOCK:
-            log_print("[K/%s] %-14s tmo=%lu (%s)", lvl, "QueueSendBlk", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_QUEUE_SEND_TIMEOUT:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueSendTmo", ctx);
-            break;
-        case KEVT_QUEUE_SEND_FULL:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueFull", ctx);
-            break;
-        case KEVT_QUEUE_RECV:
-            log_print("[K/%s] %-14s cnt=%lu (%s)", lvl, "QueueRecv", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_QUEUE_RECV_BLOCK:
-            log_print("[K/%s] %-14s tmo=%lu (%s)", lvl, "QueueRecvBlk", (unsigned long) r->arg0, ctx);
-            break;
-        case KEVT_QUEUE_RECV_TIMEOUT:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueRecvTmo", ctx);
-            break;
-        case KEVT_QUEUE_RECV_EMPTY:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueEmpty", ctx);
-            break;
-        case KEVT_QUEUE_WAKE_RECV:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "QueueWakeRecv", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_QUEUE_WAKE_SEND:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "QueueWakeSend", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_QUEUE_RESET:
-            log_print("[K/%s] %-14s (%s)", lvl, "QueueReset", ctx);
-            break;
-
-        /* ---- Event Group ---- */
-        case KEVT_EG_INIT:
-            log_print("[K/%s] %-14s (%s)", lvl, "EGInit", ctx);
-            break;
-        case KEVT_EG_SET:
-            log_print("[K/%s] %-14s set=0x%08lX cur=0x%08lX (%s)", lvl, "EGSet", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_EG_CLEAR:
-            log_print("[K/%s] %-14s clr=0x%08lX cur=0x%08lX (%s)", lvl, "EGClear", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_EG_WAIT:
-            log_print("[K/%s] %-14s bits=0x%08lX cur=0x%08lX (%s)", lvl, "EGWait", (unsigned long) r->arg0,
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_EG_BLOCK:
-            log_print("[K/%s] %-14s %s tmo=%lu (%s)", lvl, "EGBlock", rtos_task_get_name((uint8_t) r->arg0),
-                      (unsigned long) r->arg1, ctx);
-            break;
-        case KEVT_EG_TIMEOUT:
-            log_print("[K/%s] %-14s %s (%s)", lvl, "EGTimeout", rtos_task_get_name((uint8_t) r->arg0), ctx);
-            break;
-        case KEVT_EG_WAKE:
-            log_print("[K/%s] %-14s %s bits=0x%08lX (%s)", lvl, "EGWake", rtos_task_get_name((uint8_t) r->arg0),
-                      (unsigned long) r->arg1, ctx);
-            break;
-
-        /* ---- Memory ---- */
-        case KEVT_STACK_ALLOC_FAIL:
-            log_print("[K/%s] %-14s size=%lu (%s)", lvl, "StackAllocFail!", (unsigned long) r->arg0, ctx);
-            break;
-
-        /* ---- Profiling events (shouldn't appear in KLog, but handle gracefully) ---- */
-        case PEVT_CTX_SWITCH:
-        case PEVT_TICK:
-        case PEVT_TASK_ENTER:
-        case PEVT_MUTEX_ACQUIRE:
-        case PEVT_MUTEX_RELEASE:
-        case PEVT_USER_MARK:
-        case PEVT_ISR_ENTER:
-        case PEVT_ISR_EXIT:
-            break;
-
-        default:
-            log_print("[K/%s] %-14s evt=0x%04X 0x%08lX 0x%08lX (%s)", lvl, "Unknown", r->event_id,
-                      (unsigned long) r->arg0, (unsigned long) r->arg1, ctx);
-            break;
-    }
+static const char *strip_path(const char *filepath)
+{
+    const char *p = strrchr(filepath, '/');
+    if (!p)
+        p = strrchr(filepath, '\\');
+    return p ? p + 1 : filepath;
 }
 
 /* Drain batch size — how many records to pull per iteration */
@@ -337,16 +36,58 @@ void log_flush_task(void *param)
 {
     (void) param;
 
-    klog_record_t batch[KLOG_FLUSH_BATCH];
+    log_packet_t batch[KLOG_FLUSH_BATCH];
 
     while (1)
     {
-        /* 1. Drain KLog — binary kernel records, decode to human-readable */
+        /* 0. Process any incoming UART commands (e.g. LOG_MASK N) */
+        uart_rx_process_commands();
+
+        /* 1. Drain KLog — format and transmit each packet */
         uint32_t n = klog_drain(batch, KLOG_FLUSH_BATCH);
 
         for (uint32_t i = 0; i < n; i++)
         {
-            klog_format_record(&batch[i]);
+            const log_packet_t *p         = &batch[i];
+            const char         *task_name = (p->cpu_context & 0x80)
+                                                ? "ISR"
+                                                : rtos_task_get_name(p->cpu_context);
+            const char         *filename  = strip_path(p->file);
+            char                buf[160];
+
+            /* Decompose us into seconds.ms.us for human-readable timestamp.
+             * Wraps every ~71 minutes (uint32_t us). */
+            uint32_t us_total = p->timestamp_us;
+            uint32_t s        = us_total / 1000000U;
+            uint32_t ms       = (us_total / 1000U) % 1000U;
+            uint32_t us       = us_total % 1000U;
+
+            /* Format: "0123.456.789 [IdleTask    ] [Kernel   ] I kernel.c:45 | message"
+             *   %04lu.%03lu.%03lu — seconds.ms.us (12 chars)
+             *   %-12s             — task name, left-aligned in 12-char field
+             *   %-9s              — module tag, left-aligned in 9-char field
+             *   %c                — single level character
+             *   %s                — filename (stripped)
+             *   %-4u              — line number, left-aligned in 4-char field */
+            int hlen = snprintf(buf, sizeof(buf),
+                                "%04lu.%03lu.%03lu [%-12s] [%-9s] %c %s:%-4u | ",
+                                (unsigned long) s,
+                                (unsigned long) ms,
+                                (unsigned long) us,
+                                task_name,
+                                p->module,
+                                level_char(p->level),
+                                filename,
+                                (unsigned) p->line);
+
+            if (hlen > 0 && hlen < (int) sizeof(buf))
+            {
+                snprintf(buf + hlen, sizeof(buf) - (size_t) hlen,
+                         p->fmt, p->args[0], p->args[1], p->args[2], p->args[3]);
+            }
+
+            strncat(buf, "\r\n", sizeof(buf) - strlen(buf) - 1);
+            uart_printf("%s", buf);
         }
 
         /* 2. Drain ULog — pre-formatted strings, write directly to UART */

@@ -1,3 +1,4 @@
+#include "VRTOS.h"
 #include "config.h"
 #include "kernel_priv.h"
 #include "klog.h"
@@ -35,7 +36,7 @@ rtos_status_t rtos_port_init(void)
     g_critical_nesting = 0;
     g_critical_basepri = 0;
 
-    KLOGI(KEVT_PORT_INIT, PORT_IRQ_PRIORITY_CRITICAL, PORT_IRQ_PRIORITY_PENDSV);
+    KLOGI("Port", "PortInit crit=0x%x pendsv=0x%x", PORT_IRQ_PRIORITY_CRITICAL, PORT_IRQ_PRIORITY_PENDSV);
 
     return RTOS_SUCCESS;
 }
@@ -47,7 +48,7 @@ void rtos_port_start_systick(void)
 
     if (SysTick_Config(reload_value) != 0)
     {
-        KLOGE(KEVT_SYSTICK_FAIL, reload_value, 0);
+        KLOGE("Port", "SystickFail reload=%u", reload_value);
         return;
     }
 
@@ -143,8 +144,50 @@ void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
     __ISB();
 }
 
+/**
+ * Combine the millisecond-granularity kernel tick with the SysTick countdown
+ * register to produce a microsecond uptime.
+ *
+ * Race: tick_count and SysTick->VAL are read separately; if SysTick wraps
+ * (and the handler increments tick_count) between the two reads, we'd combine
+ * an old ms with a fresh ~LOAD value. Detect by re-reading tick_count: if it
+ * changed, the snapshot is stale — re-read.
+ *
+ * SysTick counts down from LOAD to 0; LOAD = (SystemCoreClock / TICK_HZ) - 1.
+ * Cycles into the current tick = LOAD - VAL + 1 (the +1 accounts for VAL=LOAD
+ * being one cycle into the period).
+ */
+uint32_t rtos_port_get_uptime_us(void)
+{
+    const uint32_t load          = SysTick->LOAD;
+    const uint32_t cycles_per_us = (SystemCoreClock + 500000U) / 1000000U;
+
+    rtos_tick_t ms1, ms2;
+    uint32_t    val;
+
+    do
+    {
+        ms1 = rtos_get_tick_count();
+        val = SysTick->VAL;
+        ms2 = rtos_get_tick_count();
+    } while (ms1 != ms2);
+
+    uint32_t cycles_into_tick = (load + 1U) - val;
+    uint32_t us_into_tick     = cycles_into_tick / cycles_per_us;
+
+    /* Clamp in case of slight overrun (should be < 1000) */
+    if (us_into_tick >= 1000U)
+    {
+        us_into_tick = 999U;
+    }
+
+    return (uint32_t) ms1 * 1000U + us_into_tick;
+}
+
 void rtos_port_yield(void)
 {
+    KLOGT("Port", "PendSVSet");
+
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 
     /* Memory barrier to ensure write completes */
@@ -180,7 +223,7 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 
     __asm volatile("svc 0");
 
-    KLOGE(KEVT_ERROR_GENERIC, 0, 0);
+    KLOGE("Port", "StartFail");
 
     /* Should never reach here */
     while (1)

@@ -19,7 +19,7 @@ rtos_status_t rtos_timer_create(const char *name, rtos_tick_t period_ticks, rtos
     rtos_timer_t *timer = (rtos_timer_t *) rtos_malloc(sizeof(rtos_timer_t));
     if (timer == NULL)
     {
-        KLOGE(KEVT_ALLOC_FAIL, 0, 0);
+        KLOGE("Timer", "AllocFail");
         return RTOS_ERROR_NO_MEMORY;
     }
 
@@ -33,7 +33,7 @@ rtos_status_t rtos_timer_create(const char *name, rtos_tick_t period_ticks, rtos
     timer->next        = NULL;
 
     *timer_handle = timer;
-    KLOGI(KEVT_TIMER_CREATE, (uint32_t) period_ticks, 0);
+    KLOGI("Timer", "TimerCreate period=%u", (uint32_t) period_ticks);
 
     return RTOS_SUCCESS;
 }
@@ -73,7 +73,7 @@ rtos_status_t rtos_timer_start(rtos_timer_handle_t timer_handle)
 
     rtos_port_exit_critical();
 
-    KLOGD(KEVT_TIMER_START, (uint32_t) expiry_for_log, 0);
+    KLOGD("Timer", "TimerStart expiry=%u", (uint32_t) expiry_for_log);
     return RTOS_SUCCESS;
 }
 
@@ -95,7 +95,7 @@ rtos_status_t rtos_timer_stop(rtos_timer_handle_t timer_handle)
     }
 
     rtos_port_exit_critical();
-    KLOGD(KEVT_TIMER_STOP, 0, 0);
+    KLOGD("Timer", "TimerStop");
     return RTOS_SUCCESS;
 }
 
@@ -126,7 +126,7 @@ rtos_status_t rtos_timer_change_period(rtos_timer_handle_t timer_handle, rtos_ti
     }
 
     rtos_port_exit_critical();
-    KLOGD(KEVT_TIMER_PERIOD_CHANGE, (uint32_t) new_period_ticks, 0);
+    KLOGD("Timer", "TimerPeriodChange period=%u", (uint32_t) new_period_ticks);
     return RTOS_SUCCESS;
 }
 
