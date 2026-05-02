@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VRTOS Test Runner
+KARTOS Test Runner
 
 Single command to run a complete test: upload, capture, parse, and analyze.
 
@@ -249,7 +249,7 @@ def capture_serial(pio_path: str, project_dir: str, environment: str,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="VRTOS Test Runner - Single command to run complete test",
+        description="KARTOS Test Runner - Single command to run complete test",
         epilog="Example: python test_runner.py test_scheduler_rr"
     )
     parser.add_argument("test_name", help="Test environment name (e.g., test_scheduler_rr)")
@@ -281,7 +281,7 @@ def main():
 
     
     print("=" * 50)
-    print(f"VRTOS TEST: {args.test_name}")
+    print(f"KARTOS TEST: {args.test_name}")
     print("=" * 50)
     
     # Step 1: Upload

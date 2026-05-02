@@ -1,6 +1,6 @@
 #include "queue.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "kernel_priv.h"
 #include "klog.h"
 #include "memory.h"

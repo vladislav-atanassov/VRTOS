@@ -1,4 +1,4 @@
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "kernel_priv.h"
 #include "klog.h"
@@ -7,10 +7,9 @@
 #define PORT_VERIFY_CONTRACT
 #include "port_common.h" /* contract checks + common types */
 #include "rtos_port.h"
+#include "stm32f4xx.h" // IWYU pragma: keep
 #include "task_priv.h"
 #include "utils.h"
-
-#include "stm32f4xx.h" // IWYU pragma: keep
 
 static volatile uint32_t g_critical_nesting = 0;
 static volatile uint32_t g_critical_basepri = 0;
@@ -370,7 +369,7 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
 
     /* The Cortex-M SysTick is 24-bit */
     uint32_t max_sleep_ticks = 0x00FFFFFFUL / cycles_per_tick;
-    
+
     sleep_ticks = expected_idle_ticks;
     if (sleep_ticks > max_sleep_ticks)
     {
@@ -378,9 +377,9 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     }
 
     /* Set SysTick LOAD to new sleep duration */
-    reload_value = (sleep_ticks * cycles_per_tick) - 1;
+    reload_value  = (sleep_ticks * cycles_per_tick) - 1;
     SysTick->LOAD = reload_value;
-    SysTick->VAL = 0;
+    SysTick->VAL  = 0;
 
     /* Restart SysTick */
     SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
@@ -389,7 +388,7 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     __asm volatile("wfi");
 
     /* Wake Up */
-    
+
     /* Stop SysTick to read VAL safely. Reading CTRL clears COUNTFLAG, so save it. */
     uint32_t ctrl = SysTick->CTRL;
     SysTick->CTRL = ctrl & ~SysTick_CTRL_ENABLE_Msk;
@@ -417,7 +416,7 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
 
     /* Restore standard 1ms tick rate */
     SysTick->LOAD = cycles_per_tick - 1;
-    SysTick->VAL = 0;
+    SysTick->VAL  = 0;
     SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
 
     __enable_irq();

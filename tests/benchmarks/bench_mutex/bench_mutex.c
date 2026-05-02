@@ -45,7 +45,7 @@
  *   pio run -e bench_mutex -t upload
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "bench_common.h"
 #include "hardware_env.h"
 #include "mutex.h"
@@ -57,25 +57,25 @@
 
 /* ========================= SHARED STATE =================================== */
 
-static rtos_mutex_t          g_mutex;
-static volatile uint32_t     g_test_started = 0;
+static rtos_mutex_t      g_mutex;
+static volatile uint32_t g_test_started = 0;
 
 /**
  * Set to 1 by BenchTask when Phase 1 is complete.
  * Only polled by MutexLow (priority 2 < BenchTask priority 3).
  * MutexHigh never reads this — it blocks on g_low_acquired instead.
  */
-static volatile uint32_t     g_phase2_start = 0;
+static volatile uint32_t g_phase2_start = 0;
 
 /**
  * Binary semaphore: MutexLow signals after it holds the mutex each iteration.
  * MutexHigh blocks on this from startup onward, ensuring it is always blocked
  * (not polling) during Phase 1 so it cannot starve BenchTask.
  */
-static rtos_semaphore_t      g_low_acquired;
+static rtos_semaphore_t g_low_acquired;
 
 /** Counting semaphore (max 2): BenchTask (Phase 1) and MutexHigh (Phase 2) each signal once. */
-static rtos_semaphore_t      g_all_done_sem;
+static rtos_semaphore_t g_all_done_sem;
 
 /* ========================= PROFILING STATS ================================ */
 
@@ -96,7 +96,7 @@ static volatile uint32_t g_release_cycles = 0;
  */
 void BenchTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
     /* Warmup: discarded */
@@ -135,7 +135,7 @@ void BenchTask(void *param)
  */
 void MutexLow(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
     /* Poll flag — safe because priority 2 < BenchTask priority 3. */
@@ -181,7 +181,7 @@ void MutexLow(void *param)
  */
 void MutexHigh(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
     /*
@@ -218,7 +218,7 @@ void MutexHigh(void *param)
  */
 void ResultTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -240,8 +240,8 @@ void ResultTask(void *param)
 
 static void startup_cb(void *timer_handle, void *param)
 {
-    (void)timer_handle;
-    (void)param;
+    (void) timer_handle;
+    (void) param;
     g_test_started = 1;
     ulog_info("[BENCH] Startup hold complete — starting mutex benchmark");
 }
@@ -275,16 +275,18 @@ int main(void)
      *   ResultTask (1) — prints results
      *   LogFlush   (0) — drains ulog to UART
      */
-    rtos_task_create(MutexHigh,  "MtxHigh",  RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 4, &handle);
-    rtos_task_create(BenchTask,  "Bench",    RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
-    rtos_task_create(MutexLow,   "MtxLow",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
-    rtos_task_create(ResultTask, "Result",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
+    rtos_task_create(MutexHigh, "MtxHigh", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 4, &handle);
+    rtos_task_create(BenchTask, "Bench", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
+    rtos_task_create(MutexLow, "MtxLow", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
+    rtos_task_create(ResultTask, "Result", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
 
     test_create_log_flush_task(&handle);
     test_create_startup_timer(startup_cb, NULL, &startup_timer);
 
     rtos_start_scheduler();
 
-    while (1) {}
+    while (1)
+    {
+    }
     return 0;
 }

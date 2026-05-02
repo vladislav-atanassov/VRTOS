@@ -1,4 +1,4 @@
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
 #include "log_flush_task.h"
@@ -9,7 +9,6 @@
 #include "ulog.h"
 
 #include <stdio.h>
-
 
 /* =================== Task Priorities =================== */
 

@@ -3,7 +3,7 @@
  * Description: Cooperative Scheduler - State & Non-Preemption Invariant Test
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep

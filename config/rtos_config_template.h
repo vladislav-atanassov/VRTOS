@@ -2,7 +2,7 @@
 #define RTOS_CONFIG_BOARD_H
 
 /* Copy to config/<your_board>/rtos_config.h and uncomment values to override.
- * Defaults are in include/VRTOS/config.h. */
+ * Defaults are in include/KARTOS/config.h. */
 
 /* Board-specific headers (create these for your board) */
 // #include "memory_map.h"

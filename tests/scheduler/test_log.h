@@ -14,7 +14,7 @@
 
 #include <stdint.h>
 
-/* Forward declaration (defined in rtos_types.h, available via VRTOS.h) */
+/* Forward declaration (defined in rtos_types.h, available via KARTOS.h) */
 uint32_t rtos_get_tick_count(void);
 
 /* ---- Override the printf-based macros from uart_tx.h ---- */

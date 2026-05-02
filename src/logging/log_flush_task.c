@@ -1,6 +1,6 @@
 #include "log_flush_task.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "klog.h"
 #include "task.h"
 #include "uart_tx.h"
@@ -49,9 +49,7 @@ void log_flush_task(void *param)
         for (uint32_t i = 0; i < n; i++)
         {
             const log_packet_t *p         = &batch[i];
-            const char         *task_name = (p->cpu_context & 0x80)
-                                                ? "ISR"
-                                                : rtos_task_get_name(p->cpu_context);
+            const char         *task_name = (p->cpu_context & 0x80) ? "ISR" : rtos_task_get_name(p->cpu_context);
             const char         *filename  = strip_path(p->file);
             char                buf[160];
 
@@ -69,21 +67,14 @@ void log_flush_task(void *param)
              *   %c                — single level character
              *   %s                — filename (stripped)
              *   %-4u              — line number, left-aligned in 4-char field */
-            int hlen = snprintf(buf, sizeof(buf),
-                                "%04lu.%03lu.%03lu [%-12s] [%-9s] %c %s:%-4u | ",
-                                (unsigned long) s,
-                                (unsigned long) ms,
-                                (unsigned long) us,
-                                task_name,
-                                p->module,
-                                level_char(p->level),
-                                filename,
-                                (unsigned) p->line);
+            int hlen = snprintf(buf, sizeof(buf), "%04lu.%03lu.%03lu [%-12s] [%-9s] %c %s:%-4u | ", (unsigned long) s,
+                                (unsigned long) ms, (unsigned long) us, task_name, p->module, level_char(p->level),
+                                filename, (unsigned) p->line);
 
             if (hlen > 0 && hlen < (int) sizeof(buf))
             {
-                snprintf(buf + hlen, sizeof(buf) - (size_t) hlen,
-                         p->fmt, p->args[0], p->args[1], p->args[2], p->args[3]);
+                snprintf(buf + hlen, sizeof(buf) - (size_t) hlen, p->fmt, p->args[0], p->args[1], p->args[2],
+                         p->args[3]);
             }
 
             strncat(buf, "\r\n", sizeof(buf) - strlen(buf) - 1);

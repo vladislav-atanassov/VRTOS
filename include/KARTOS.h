@@ -1,10 +1,10 @@
-#ifndef VRTOS_H
-#define VRTOS_H
+#ifndef KARTOS_H
+#define KARTOS_H
 
 #include "rtos_types.h"
 
 /**
- * @file VRTOS.h
+ * @file KARTOS.h
  * @brief Main RTOS API Header
  *
  * This is the main header file that applications should include to use the RTOS.
@@ -77,4 +77,4 @@ void rtos_yield(void);
 }
 #endif
 
-#endif /* VRTOS_H */
+#endif /* KARTOS_H */

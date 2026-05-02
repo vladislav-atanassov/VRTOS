@@ -1,10 +1,10 @@
-# VRTOS - Educational Real-Time Operating System
+# KARTOS — Kernel for ARM Real-Time Operating System
 
 A modular, educational Real-Time Operating System (RTOS) implementation for the STM32F446RE Nucleo board, built from scratch with pluggable scheduler architecture and comprehensive synchronization primitives.
 
 ## Project Overview
 
-VRTOS is an educational RTOS built from scratch for ARM Cortex-M4 microcontrollers. It features a modular architecture with interchangeable scheduling policies, priority inheritance, and comprehensive profiling capabilities.
+**KARTOS** (**K**ernel for **ARM** **R**eal-**T**ime **O**perating **S**ystem) is an educational RTOS built from scratch for ARM Cortex-M4 microcontrollers. It features a modular architecture with interchangeable scheduling policies, priority inheritance, and comprehensive profiling capabilities.
 
 ### Key Features
 
@@ -249,7 +249,7 @@ rtos_timer_stop(timer);
 
 ## Tickless Idle
 
-When the only runnable task is the idle task, VRTOS can suppress the periodic SysTick interrupt and put the CPU into `WFI` until either the next scheduled task wake-up or an external interrupt. On wake, the kernel reads the SysTick counter, computes how long the CPU actually slept, and fast-forwards `rtos_tick_count` so timing services remain correct. Without this feature the SysTick would keep firing every 1 ms, waking the CPU thousands of times per second just to decrement counters.
+When the only runnable task is the idle task, KARTOS can suppress the periodic SysTick interrupt and put the CPU into `WFI` until either the next scheduled task wake-up or an external interrupt. On wake, the kernel reads the SysTick counter, computes how long the CPU actually slept, and fast-forwards `rtos_tick_count` so timing services remain correct. Without this feature the SysTick would keep firing every 1 ms, waking the CPU thousands of times per second just to decrement counters.
 
 **How it works** (Cortex-M4, [src/port/cortex_m4/port.c:352](src/port/cortex_m4/port.c#L352)):
 
@@ -382,9 +382,9 @@ rtos_profiling_print_stat(&my_stats);
 ## Directory Structure
 
 ```md
-VRTOS/
+KARTOS/
 ├── include/               # Public API headers
-│   ├── VRTOS.h            # Main RTOS header
+│   ├── KARTOS.h            # Main RTOS header
 │   ├── config.h           # Configuration defaults
 │   ├── task.h             # Task management API
 │   ├── scheduler.h        # Scheduler interface
@@ -742,7 +742,7 @@ rtos_profiling_report_system_stats();
 
 ## Logging System
 
-VRTOS features a dual-tier logging architecture designed to provide extensive visibility without compromising real-time performance.
+KARTOS features a dual-tier logging architecture designed to provide extensive visibility without compromising real-time performance.
 
 ### Kernel Logger (KLog)
 

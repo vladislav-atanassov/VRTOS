@@ -1,4 +1,4 @@
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "hardware_env.h"
 #include "log_flush_task.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
@@ -6,7 +6,6 @@
 #include "task_priv.h"
 #include "uart_tx.h"
 #include "ulog.h"
-
 
 /* Task priorities */
 #define BLINK_TASK_PRIORITY (2U)
@@ -89,7 +88,7 @@ static void memory_mang_task(void *param)
 }
 
 /**
- * What you should see with the different scheduling policies is the following outputs (change RTOS_SCHEDULER_TYPE in /VRTOS/config.h)
+ * What you should see with the different scheduling policies is the following outputs (change RTOS_SCHEDULER_TYPE in /KARTOS/config.h)
  * 
  * +-------------------------------------------+------------------------------------------+------------------------------------------+
  * | Preemptive (RTOS_SCHEDULER_PREEMPTIVE_SP) | Cooperative (RTOS_SCHEDULER_COOPERATIVE) | Round Round (RTOS_SCHEDULER_ROUND_ROBIN) |

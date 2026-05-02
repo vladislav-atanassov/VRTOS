@@ -5,7 +5,7 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "event_group.h"
 #include "hardware_env.h"
@@ -43,10 +43,10 @@
 
 /* =================== Test Parameters =================== */
 
-#define TASK_SET_PRIORITY  (2U)
-#define TASK_ANY_PRIORITY  (3U)
-#define TASK_ALL_PRIORITY  (4U)
-#define TASK_MON_PRIORITY  (1U)
+#define TASK_SET_PRIORITY (2U)
+#define TASK_ANY_PRIORITY (3U)
+#define TASK_ALL_PRIORITY (4U)
+#define TASK_MON_PRIORITY (1U)
 
 #define SCENARIO_CYCLES  (10U)
 #define SETTLE_MS        (50U)
@@ -68,9 +68,9 @@ static rtos_task_handle_t g_handle_set = NULL;
 static rtos_task_handle_t g_handle_any = NULL;
 static rtos_task_handle_t g_handle_all = NULL;
 
-static volatile uint32_t g_cycle_signal  = 0;
-static volatile uint32_t g_any_done      = 0;
-static volatile uint32_t g_all_done      = 0;
+static volatile uint32_t g_cycle_signal   = 0;
+static volatile uint32_t g_any_done       = 0;
+static volatile uint32_t g_all_done       = 0;
 static volatile uint32_t g_any_woke_count = 0;
 static volatile uint32_t g_all_woke_count = 0;
 
@@ -193,8 +193,8 @@ static void waiter_any_func(void *param)
 
         test_log_task("WAIT", "WaiterAny");
         uint32_t         bits_out = 0;
-        rtos_eg_status_t s = rtos_event_group_wait_bits(&g_eg, EG_BIT_0 | EG_BIT_1, false, false, &bits_out,
-                                                        RTOS_EG_MAX_WAIT);
+        rtos_eg_status_t s =
+            rtos_event_group_wait_bits(&g_eg, EG_BIT_0 | EG_BIT_1, false, false, &bits_out, RTOS_EG_MAX_WAIT);
 
         TEST_ASSERT(s == RTOS_EG_OK, "WaiterAny:WokeOK");
         TEST_ASSERT((bits_out & (EG_BIT_0 | EG_BIT_1)) != 0, "WaiterAny:BitsOutValid");
@@ -234,8 +234,8 @@ static void waiter_all_func(void *param)
 
         test_log_task("WAIT", "WaiterAll");
         uint32_t         bits_out = 0;
-        rtos_eg_status_t s = rtos_event_group_wait_bits(&g_eg, EG_BIT_0 | EG_BIT_1, true, true, &bits_out,
-                                                        RTOS_EG_MAX_WAIT);
+        rtos_eg_status_t s =
+            rtos_event_group_wait_bits(&g_eg, EG_BIT_0 | EG_BIT_1, true, true, &bits_out, RTOS_EG_MAX_WAIT);
 
         TEST_ASSERT(s == RTOS_EG_OK, "WaiterAll:WokeOK");
         TEST_ASSERT((bits_out & (EG_BIT_0 | EG_BIT_1)) == (EG_BIT_0 | EG_BIT_1), "WaiterAll:AllBitsPresent");
@@ -344,22 +344,22 @@ __attribute__((__noreturn__)) int main(void)
     }
 
     /* Create tasks */
-    status = rtos_task_create(setter_task_func, "Set", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_SET_PRIORITY,
-                              &g_handle_set);
+    status =
+        rtos_task_create(setter_task_func, "Set", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_SET_PRIORITY, &g_handle_set);
     if (status != RTOS_SUCCESS)
     {
         indicate_system_failure();
     }
 
-    status = rtos_task_create(waiter_any_func, "WAny", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_ANY_PRIORITY,
-                              &g_handle_any);
+    status =
+        rtos_task_create(waiter_any_func, "WAny", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_ANY_PRIORITY, &g_handle_any);
     if (status != RTOS_SUCCESS)
     {
         indicate_system_failure();
     }
 
-    status = rtos_task_create(waiter_all_func, "WAll", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_ALL_PRIORITY,
-                              &g_handle_all);
+    status =
+        rtos_task_create(waiter_all_func, "WAll", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, TASK_ALL_PRIORITY, &g_handle_all);
     if (status != RTOS_SUCCESS)
     {
         indicate_system_failure();

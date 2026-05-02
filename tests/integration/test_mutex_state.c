@@ -5,7 +5,7 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
 #include "mutex.h"

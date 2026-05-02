@@ -56,7 +56,7 @@
  *   queue_delivery_latency | count=1000 | min=83cy(0us) max=127cy(1us) avg=91cy(1us)
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "bench_common.h"
 #include "hardware_env.h"
 #include "profiling.h"
@@ -95,7 +95,7 @@ static rtos_profile_stat_t g_stat_queue_latency = BENCH_STAT_INIT("queue_deliver
  */
 void ProducerTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -135,7 +135,7 @@ void ProducerTask(void *param)
  */
 void ConsumerTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -172,7 +172,7 @@ void ConsumerTask(void *param)
  */
 void ResultTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -190,8 +190,8 @@ void ResultTask(void *param)
 
 static void startup_cb(void *timer_handle, void *param)
 {
-    (void)timer_handle;
-    (void)param;
+    (void) timer_handle;
+    (void) param;
     g_test_started = 1;
     ulog_info("[BENCH] Startup hold complete — starting queue benchmark");
 }
@@ -213,7 +213,7 @@ int main(void)
     rtos_queue_create(&g_queue, 4, sizeof(uint32_t));
     rtos_semaphore_init(&g_done_sem, 0, 1);
 
-    rtos_task_handle_t handle;
+    rtos_task_handle_t  handle;
     rtos_timer_handle_t startup_timer;
 
     /*
@@ -225,13 +225,15 @@ int main(void)
      */
     rtos_task_create(ConsumerTask, "Consumer", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
     rtos_task_create(ProducerTask, "Producer", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
-    rtos_task_create(ResultTask,   "Result",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
+    rtos_task_create(ResultTask, "Result", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
 
     test_create_log_flush_task(&handle);
     test_create_startup_timer(startup_cb, NULL, &startup_timer);
 
     rtos_start_scheduler();
 
-    while (1) {}
+    while (1)
+    {
+    }
     return 0;
 }

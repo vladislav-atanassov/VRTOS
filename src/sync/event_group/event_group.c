@@ -5,7 +5,7 @@
 
 #include "event_group.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "klog.h"
 #include "rtos_port.h"
 #include "task.h"
@@ -34,11 +34,11 @@ static bool eg_condition_met(uint32_t current_bits, uint32_t wait_bits, uint8_t 
 static void eg_add_to_waiting_list(rtos_event_group_t *eg, rtos_tcb_t *task, uint32_t bits_to_wait, uint8_t wait_all,
                                    uint8_t clear_on_exit)
 {
-    task->next_waiting      = NULL;
-    task->blocked_on        = eg;
-    task->blocked_on_type   = RTOS_SYNC_TYPE_EVENT_GROUP;
-    task->event_wait_bits   = bits_to_wait;
-    task->event_wait_all    = wait_all;
+    task->next_waiting        = NULL;
+    task->blocked_on          = eg;
+    task->blocked_on_type     = RTOS_SYNC_TYPE_EVENT_GROUP;
+    task->event_wait_bits     = bits_to_wait;
+    task->event_wait_all      = wait_all;
     task->event_clear_on_exit = clear_on_exit;
 
     if (eg->waiting_list == NULL)
@@ -292,8 +292,8 @@ rtos_eg_status_t rtos_event_group_set_bits(rtos_event_group_t *eg, uint32_t bits
     /* Unblock all woken tasks outside critical section */
     while (wake_list != NULL)
     {
-        rtos_tcb_t *task = wake_list;
-        wake_list        = task->next_waiting;
+        rtos_tcb_t *task   = wake_list;
+        wake_list          = task->next_waiting;
         task->next_waiting = NULL;
         rtos_kernel_task_unblock(task);
     }
@@ -317,8 +317,8 @@ rtos_eg_status_t rtos_event_group_set_bits_from_isr(rtos_event_group_t *eg, uint
     /* Unblock all woken tasks outside ISR critical section */
     while (wake_list != NULL)
     {
-        rtos_tcb_t *task = wake_list;
-        wake_list        = task->next_waiting;
+        rtos_tcb_t *task   = wake_list;
+        wake_list          = task->next_waiting;
         task->next_waiting = NULL;
         rtos_kernel_task_unblock(task);
     }

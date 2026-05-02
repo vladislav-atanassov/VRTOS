@@ -1,7 +1,7 @@
 #ifndef TEST_COMMON_H
 #define TEST_COMMON_H
 
-#include "VRTOS.h"          // IWYU pragma: keep (rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE)
+#include "KARTOS.h"         // IWYU pragma: keep (rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE)
 #include "log_flush_task.h" // log_flush_task
 #include "task.h"           // rtos_task_create
 #include "timer.h"          // rtos_timer_handle_t, rtos_timer_create, rtos_timer_start

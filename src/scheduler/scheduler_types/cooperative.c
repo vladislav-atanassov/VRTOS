@@ -1,6 +1,6 @@
 #include "cooperative.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "klog.h"
 #include "scheduler.h"
 #include "task_priv.h"
@@ -97,7 +97,7 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
-    while (current != NULL && (int32_t)(current->delay_until - task->delay_until) <= 0)
+    while (current != NULL && (int32_t) (current->delay_until - task->delay_until) <= 0)
     {
         prev    = current;
         current = current->next;
@@ -169,7 +169,7 @@ static void cooperative_update_delayed_tasks_internal(void)
     {
         rtos_tcb_t *next_task = task->next;
 
-        if ((int32_t)(current_tick - task->delay_until) >= 0)
+        if ((int32_t) (current_tick - task->delay_until) >= 0)
         {
             cooperative_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
@@ -314,13 +314,13 @@ static uint32_t cooperative_get_expected_idle_ticks(rtos_scheduler_instance_t *i
     }
 
     rtos_tick_t current_tick = rtos_get_tick_count();
-    rtos_tick_t next_wake = g_cooperative_data.delayed_list->delay_until;
+    rtos_tick_t next_wake    = g_cooperative_data.delayed_list->delay_until;
 
-    if ((int32_t)(next_wake - current_tick) <= 0)
+    if ((int32_t) (next_wake - current_tick) <= 0)
     {
         return 0;
     }
-    return (uint32_t)(next_wake - current_tick);
+    return (uint32_t) (next_wake - current_tick);
 }
 
 static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)
@@ -354,20 +354,19 @@ static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, vo
     return sizeof(cooperative_stats_t);
 }
 
-const rtos_scheduler_t cooperative_scheduler = {
-    .init           = cooperative_init,
-    .get_next_task  = cooperative_get_next_task,
-    .should_preempt = cooperative_should_preempt,
-    .task_completed = cooperative_task_completed,
+const rtos_scheduler_t cooperative_scheduler = {.init           = cooperative_init,
+                                                .get_next_task  = cooperative_get_next_task,
+                                                .should_preempt = cooperative_should_preempt,
+                                                .task_completed = cooperative_task_completed,
 
-    .add_to_ready_list        = cooperative_add_to_ready_list,
-    .remove_from_ready_list   = cooperative_remove_from_ready_list,
-    .add_to_delayed_list      = cooperative_add_to_delayed_list,
-    .remove_from_delayed_list = cooperative_remove_from_delayed_list,
-    .update_delayed_tasks     = cooperative_update_delayed_tasks,
-    .get_expected_idle_ticks  = cooperative_get_expected_idle_ticks,
+                                                .add_to_ready_list        = cooperative_add_to_ready_list,
+                                                .remove_from_ready_list   = cooperative_remove_from_ready_list,
+                                                .add_to_delayed_list      = cooperative_add_to_delayed_list,
+                                                .remove_from_delayed_list = cooperative_remove_from_delayed_list,
+                                                .update_delayed_tasks     = cooperative_update_delayed_tasks,
+                                                .get_expected_idle_ticks  = cooperative_get_expected_idle_ticks,
 
-    .get_statistics = cooperative_get_statistics};
+                                                .get_statistics = cooperative_get_statistics};
 
 /* =================== Public Helper Functions =================== */
 

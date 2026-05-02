@@ -1,4 +1,4 @@
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
 #include "rtos_port.h"
@@ -17,8 +17,7 @@
  * granularity (+-1 tick) plus UART/log jitter.
  */
 static const uint32_t k_sleep_durations_ms[] = {
-    1U,    2U,    5U,    10U,   25U,   50U,   100U, 200U,
-    250U,  333U,  500U,  750U,  1000U, 1500U, 2000U,
+    1U, 2U, 5U, 10U, 25U, 50U, 100U, 200U, 250U, 333U, 500U, 750U, 1000U, 1500U, 2000U,
 };
 #define SLEEP_DURATION_COUNT (sizeof(k_sleep_durations_ms) / sizeof(k_sleep_durations_ms[0]))
 
@@ -57,26 +56,23 @@ static void task_func(void *param)
         uint32_t tick_tol = TICK_TOLERANCE(requested_ms);
         uint32_t us_tol   = US_TOLERANCE(requested_ms);
 
-        snprintf(ctx, sizeof(ctx), "req=%lums elapsed_us=%lu elapsed_ticks=%lu tol=+-%lu",
-                 (unsigned long) requested_ms, (unsigned long) elapsed_us,
-                 (unsigned long) elapsed_ticks, (unsigned long) tick_tol);
+        snprintf(ctx, sizeof(ctx), "req=%lums elapsed_us=%lu elapsed_ticks=%lu tol=+-%lu", (unsigned long) requested_ms,
+                 (unsigned long) elapsed_us, (unsigned long) elapsed_ticks, (unsigned long) tick_tol);
         test_log_task("TICKLESS", ctx);
 
         /* Tick count must advance by requested_ms +- tick_tol */
-        TEST_ASSERT(elapsed_ticks + tick_tol >= requested_ms &&
-                        elapsed_ticks <= requested_ms + tick_tol,
+        TEST_ASSERT(elapsed_ticks + tick_tol >= requested_ms && elapsed_ticks <= requested_ms + tick_tol,
                     "Ticks advanced correctly");
 
         /* Wall-clock uptime must match requested duration within us_tol */
         uint32_t requested_us = requested_ms * 1000U;
-        TEST_ASSERT(elapsed_us + us_tol >= requested_us &&
-                        elapsed_us <= requested_us + us_tol,
+        TEST_ASSERT(elapsed_us + us_tol >= requested_us && elapsed_us <= requested_us + us_tol,
                     "Uptime advanced correctly");
 
         /* Tick-derived and uptime-derived elapsed must agree within 2 ticks. */
         uint32_t ticks_from_us = elapsed_us / 1000U;
-        uint32_t diff = (ticks_from_us > elapsed_ticks) ? (ticks_from_us - elapsed_ticks)
-                                                        : (elapsed_ticks - ticks_from_us);
+        uint32_t diff =
+            (ticks_from_us > elapsed_ticks) ? (ticks_from_us - elapsed_ticks) : (elapsed_ticks - ticks_from_us);
         TEST_ASSERT(diff <= 2U, "Tick and uptime sources agree");
     }
 
@@ -120,5 +116,7 @@ int main(void)
     test_create_log_flush_task(&flush_handle);
 
     rtos_start_scheduler();
-    while(1){}
+    while (1)
+    {
+    }
 }

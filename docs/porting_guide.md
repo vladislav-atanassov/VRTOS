@@ -1,4 +1,4 @@
-# VRTOS Porting Guide
+# KARTOS Porting Guide
 
 How to add support for a new chip / architecture.
 
@@ -57,7 +57,7 @@ Interrupt priority constants should also be defined in `port_priv.h`:
 
 ### 3. Implement `rtos_port.h` functions in `port.c`
 
-Every port must implement these functions (declared in `include/VRTOS/rtos_port.h`):
+Every port must implement these functions (declared in `include/KARTOS/rtos_port.h`):
 
 | Function | Purpose |
 |---|---|

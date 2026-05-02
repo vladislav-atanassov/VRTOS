@@ -1,6 +1,6 @@
 #include "task.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "kernel_priv.h"
 #include "klog.h"
 #include "memory.h"
@@ -93,7 +93,7 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     *stack_memory = PORT_STACK_CANARY_VALUE;
 #endif
 
-    new_task->task_id              = (uint8_t)(new_task - g_task_pool);
+    new_task->task_id              = (uint8_t) (new_task - g_task_pool);
     new_task->name                 = name;
     new_task->task_function        = task_function;
     new_task->parameter            = parameter;
@@ -106,12 +106,12 @@ rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *n
     new_task->delay_until          = 0;
     new_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
 
-    new_task->next             = NULL;
-    new_task->prev             = NULL;
-    new_task->next_waiting     = NULL;
-    new_task->blocked_on       = NULL;
-    new_task->blocked_on_type  = RTOS_SYNC_TYPE_NONE;
-    new_task->held_mutex_list  = NULL;
+    new_task->next            = NULL;
+    new_task->prev            = NULL;
+    new_task->next_waiting    = NULL;
+    new_task->blocked_on      = NULL;
+    new_task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+    new_task->held_mutex_list = NULL;
 
     new_task->stack_pointer = rtos_port_init_task_stack(new_task->stack_top, task_function, parameter);
     rtos_scheduler_add_to_ready_list(new_task);
@@ -182,9 +182,8 @@ const char *rtos_task_get_name(rtos_task_id_t task_id)
 
 const char *rtos_get_current_task_name(void)
 {
-    return (g_kernel.current_task != NULL && g_kernel.current_task->name != NULL)
-               ? g_kernel.current_task->name
-               : "none";
+    return (g_kernel.current_task != NULL && g_kernel.current_task->name != NULL) ? g_kernel.current_task->name
+                                                                                  : "none";
 }
 
 /**
@@ -505,7 +504,7 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
      * waiter (if any) or mark it free. */
     while (task->held_mutex_list != NULL)
     {
-        rtos_mutex_t *m   = task->held_mutex_list;
+        rtos_mutex_t *m       = task->held_mutex_list;
         task->held_mutex_list = m->next_held;
         m->next_held          = NULL;
 
@@ -514,14 +513,14 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
         if (waiter != NULL)
         {
             /* Pop head (highest priority due to ordered insertion) */
-            m->waiting_list       = waiter->next_waiting;
-            waiter->next_waiting  = NULL;
-            waiter->blocked_on    = NULL;
+            m->waiting_list         = waiter->next_waiting;
+            waiter->next_waiting    = NULL;
+            waiter->blocked_on      = NULL;
             waiter->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
-            m->owner      = waiter;
-            m->lock_count = 1;
-            m->next_held  = waiter->held_mutex_list;
+            m->owner                = waiter;
+            m->lock_count           = 1;
+            m->next_held            = waiter->held_mutex_list;
             waiter->held_mutex_list = m;
 
             /* Unblock the new owner (will be made READY) */
@@ -536,7 +535,7 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
         }
     }
 
-    task->state           = RTOS_TASK_STATE_DELETED;
+    task->state = RTOS_TASK_STATE_DELETED;
 
     KLOGI("Task", "TaskDelete id=%u", task->task_id);
 

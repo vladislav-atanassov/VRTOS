@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VRTOS Log Parser
+KARTOS Log Parser
 
 Parses tab-delimited test logs and converts to structured CSV format.
 
@@ -104,7 +104,7 @@ def print_summary(entries: list[dict]):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VRTOS Log Parser")
+    parser = argparse.ArgumentParser(description="KARTOS Log Parser")
     parser.add_argument("input", help="Input log file")
     parser.add_argument("-o", "--output", help="Output CSV file (default: <input>_parsed.csv)")
     parser.add_argument("--tasks-only", action="store_true", help="Output only TASK events")

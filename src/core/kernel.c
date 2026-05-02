@@ -1,4 +1,4 @@
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "assert.h"
 #include "kernel_priv.h"
 #include "klog.h"
@@ -165,12 +165,12 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
 
     rtos_tick_t current_time = g_kernel.tick_count;
     /* Use signed comparison for tick wraparound safety */
-    int32_t     elapsed      = (int32_t)(current_time - *prev_wake_time);
-    bool        should_delay = false;
+    int32_t elapsed      = (int32_t) (current_time - *prev_wake_time);
+    bool    should_delay = false;
 
-    if (elapsed >= 0 && (uint32_t)elapsed < time_increment)
+    if (elapsed >= 0 && (uint32_t) elapsed < time_increment)
     {
-        rtos_tick_t ticks_to_delay = time_increment - (uint32_t)elapsed;
+        rtos_tick_t ticks_to_delay = time_increment - (uint32_t) elapsed;
 
         if (g_kernel.current_task == NULL)
         {
@@ -222,8 +222,8 @@ void rtos_kernel_tick_handler(void)
 
         if (rtos_scheduler_should_preempt(next_task))
         {
-            KLOGT("Kernel", "TickPreempt next=%s tick=%u",
-                  (uint32_t) (next_task ? next_task->name : "none"), g_kernel.tick_count);
+            KLOGT("Kernel", "TickPreempt next=%s tick=%u", (uint32_t) (next_task ? next_task->name : "none"),
+                  g_kernel.tick_count);
             rtos_port_exit_critical();
             RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
             rtos_yield();
@@ -256,10 +256,10 @@ void rtos_kernel_step_tick(uint32_t ticks_slept)
     if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING && g_scheduler_instance.initialized)
     {
         rtos_port_enter_critical();
-        
+
         /* Move newly expired tasks to ready list */
         rtos_scheduler_update_delayed_tasks();
-        
+
         rtos_task_handle_t next_task = rtos_scheduler_get_next_task();
         if (rtos_scheduler_should_preempt(next_task))
         {
@@ -343,8 +343,7 @@ void rtos_kernel_switch_context(void)
         }
     }
 
-    KLOGT("Kernel", "CtxSwitch from=%s to=%s", (uint32_t) from_name,
-          (uint32_t) rtos_get_current_task_name());
+    KLOGT("Kernel", "CtxSwitch from=%s to=%s", (uint32_t) from_name, (uint32_t) rtos_get_current_task_name());
 
     rtos_port_exit_critical();
 
@@ -377,27 +376,22 @@ bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t 
     switch (old_state)
     {
         case RTOS_TASK_STATE_READY:
-            valid = (new_state == RTOS_TASK_STATE_RUNNING  ||
-                     new_state == RTOS_TASK_STATE_SUSPENDED ||
+            valid = (new_state == RTOS_TASK_STATE_RUNNING || new_state == RTOS_TASK_STATE_SUSPENDED ||
                      new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_RUNNING:
-            valid = (new_state == RTOS_TASK_STATE_READY     ||
-                     new_state == RTOS_TASK_STATE_BLOCKED   ||
-                     new_state == RTOS_TASK_STATE_SUSPENDED ||
-                     new_state == RTOS_TASK_STATE_DELETED);
+            valid = (new_state == RTOS_TASK_STATE_READY || new_state == RTOS_TASK_STATE_BLOCKED ||
+                     new_state == RTOS_TASK_STATE_SUSPENDED || new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_BLOCKED:
-            valid = (new_state == RTOS_TASK_STATE_READY     ||
-                     new_state == RTOS_TASK_STATE_SUSPENDED ||
+            valid = (new_state == RTOS_TASK_STATE_READY || new_state == RTOS_TASK_STATE_SUSPENDED ||
                      new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_SUSPENDED:
-            valid = (new_state == RTOS_TASK_STATE_READY   ||
-                     new_state == RTOS_TASK_STATE_DELETED);
+            valid = (new_state == RTOS_TASK_STATE_READY || new_state == RTOS_TASK_STATE_DELETED);
             break;
 
         case RTOS_TASK_STATE_DELETED:

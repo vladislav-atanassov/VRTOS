@@ -52,7 +52,7 @@
  *   semaphore_wake_latency | count=1000 | min=53cy(0us) max=71cy(0us) avg=58cy(0us)
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "bench_common.h"
 #include "hardware_env.h"
 #include "profiling.h"
@@ -96,7 +96,7 @@ static volatile uint32_t g_signal_cycles = 0;
  */
 void BenchTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -111,7 +111,7 @@ void BenchTask(void *param)
     for (uint32_t i = 0; i < BENCH_ITERATIONS; i++)
     {
         RTOS_USER_PROFILE_START(sem);
-        rtos_semaphore_signal(&g_sem);          /* count: 0 → 1 */
+        rtos_semaphore_signal(&g_sem);                 /* count: 0 → 1 */
         rtos_semaphore_wait(&g_sem, RTOS_SEM_NO_WAIT); /* count: 1 → 0 (no block) */
         RTOS_USER_PROFILE_END(sem, &g_stat_uncontended);
     }
@@ -134,7 +134,7 @@ void BenchTask(void *param)
  */
 void SemLow(void *param)
 {
-    (void)param;
+    (void) param;
 
     rtos_semaphore_wait(&g_phase2_sem, RTOS_SEM_MAX_WAIT);
 
@@ -165,7 +165,7 @@ void SemLow(void *param)
  */
 void SemHigh(void *param)
 {
-    (void)param;
+    (void) param;
 
     rtos_semaphore_wait(&g_phase2_sem, RTOS_SEM_MAX_WAIT);
 
@@ -192,7 +192,7 @@ void SemHigh(void *param)
  */
 void ResultTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -215,8 +215,8 @@ void ResultTask(void *param)
 
 static void startup_cb(void *timer_handle, void *param)
 {
-    (void)timer_handle;
-    (void)param;
+    (void) timer_handle;
+    (void) param;
     g_test_started = 1;
     ulog_info("[BENCH] Startup hold complete — starting semaphore benchmark");
 }
@@ -235,11 +235,11 @@ int main(void)
     ulog_info("[BENCH] Semaphore Benchmark — " __DATE__ " " __TIME__);
     ulog_info("[BENCH] Iterations: %u  Warmup: %u", BENCH_ITERATIONS, BENCH_WARMUP);
 
-    rtos_semaphore_init(&g_sem,          0, 1); /* binary semaphore, starts empty */
-    rtos_semaphore_init(&g_phase2_sem,   0, 2);
+    rtos_semaphore_init(&g_sem, 0, 1); /* binary semaphore, starts empty */
+    rtos_semaphore_init(&g_phase2_sem, 0, 2);
     rtos_semaphore_init(&g_all_done_sem, 0, 2);
 
-    rtos_task_handle_t handle;
+    rtos_task_handle_t  handle;
     rtos_timer_handle_t startup_timer;
 
     /*
@@ -250,10 +250,10 @@ int main(void)
      *   ResultTask (1) — prints results
      *   LogFlush   (0) — drains ulog to UART
      */
-    rtos_task_create(SemHigh,    "SemHigh",  RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 4, &handle);
-    rtos_task_create(BenchTask,  "Bench",    RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
-    rtos_task_create(SemLow,     "SemLow",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
-    rtos_task_create(ResultTask, "Result",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
+    rtos_task_create(SemHigh, "SemHigh", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 4, &handle);
+    rtos_task_create(BenchTask, "Bench", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
+    rtos_task_create(SemLow, "SemLow", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
+    rtos_task_create(ResultTask, "Result", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
 
     test_create_log_flush_task(&handle);
     test_create_startup_timer(startup_cb, NULL, &startup_timer);
@@ -262,6 +262,8 @@ int main(void)
 
     rtos_start_scheduler();
 
-    while (1) {}
+    while (1)
+    {
+    }
     return 0;
 }

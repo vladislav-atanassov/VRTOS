@@ -47,7 +47,7 @@
  *   context_switch | count=2000 | min=47cy(0us) max=63cy(0us) avg=52cy(0us)
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "bench_common.h"
 #include "hardware_env.h"
 #include "profiling.h"
@@ -86,7 +86,7 @@ static volatile uint32_t g_warmup_done = 0;
  */
 void BenchA(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -124,7 +124,7 @@ void BenchA(void *param)
  */
 void BenchB(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -152,7 +152,7 @@ void BenchB(void *param)
  */
 void ResultTask(void *param)
 {
-    (void)param;
+    (void) param;
 
     TEST_WAIT_FOR_START(g_test_started);
 
@@ -169,8 +169,7 @@ void ResultTask(void *param)
      */
     bench_report(&g_prof_context_switch);
 
-    ulog_info("[BENCH] Done. Total measured switches: %lu",
-              (unsigned long)g_prof_context_switch.count);
+    ulog_info("[BENCH] Done. Total measured switches: %lu", (unsigned long) g_prof_context_switch.count);
 
     rtos_task_suspend(NULL);
 }
@@ -180,8 +179,8 @@ void ResultTask(void *param)
 /** One-shot timer callback: opens the gate for all benchmark tasks. */
 static void startup_cb(void *timer_handle, void *param)
 {
-    (void)timer_handle;
-    (void)param;
+    (void) timer_handle;
+    (void) param;
     g_test_started = 1;
     ulog_info("[BENCH] Startup hold complete — starting context switch benchmark");
 }
@@ -203,7 +202,7 @@ int main(void)
     /* Binary semaphore used as a 2-count release gate. */
     rtos_semaphore_init(&g_done_sem, 0, 2);
 
-    rtos_task_handle_t handle;
+    rtos_task_handle_t  handle;
     rtos_timer_handle_t startup_timer;
 
     /*
@@ -212,9 +211,9 @@ int main(void)
      *   ResultTask       (1) — prints results after bench tasks suspend
      *   LogFlush         (0) — drains ulog ring buffer to UART
      */
-    rtos_task_create(BenchA,      "BenchA",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
-    rtos_task_create(BenchB,      "BenchB",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
-    rtos_task_create(ResultTask,  "Result",   RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
+    rtos_task_create(BenchA, "BenchA", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
+    rtos_task_create(BenchB, "BenchB", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &handle);
+    rtos_task_create(ResultTask, "Result", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
 
     test_create_log_flush_task(&handle);
     test_create_startup_timer(startup_cb, NULL, &startup_timer);
@@ -222,6 +221,8 @@ int main(void)
     rtos_start_scheduler();
 
     /* Should not reach here */
-    while (1) {}
+    while (1)
+    {
+    }
     return 0;
 }

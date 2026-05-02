@@ -1,6 +1,6 @@
 #include "preemptive_sp.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "kernel_priv.h"
 #include "klog.h"
 #include "scheduler.h"
@@ -102,7 +102,7 @@ static void preemptive_sp_add_to_delayed_list_internal(rtos_task_handle_t task, 
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
-    while (current != NULL && (int32_t)(current->delay_until - task->delay_until) <= 0)
+    while (current != NULL && (int32_t) (current->delay_until - task->delay_until) <= 0)
     {
         prev    = current;
         current = current->next;
@@ -167,7 +167,7 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
     {
         rtos_tcb_t *next_task = task->next;
 
-        if ((int32_t)(current_tick - task->delay_until) >= 0)
+        if ((int32_t) (current_tick - task->delay_until) >= 0)
         {
             preemptive_sp_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
@@ -320,13 +320,13 @@ static uint32_t preemptive_sp_get_expected_idle_ticks(rtos_scheduler_instance_t 
     }
 
     rtos_tick_t current_tick = rtos_get_tick_count();
-    rtos_tick_t next_wake = g_preemptive_sp_data.delayed_list->delay_until;
+    rtos_tick_t next_wake    = g_preemptive_sp_data.delayed_list->delay_until;
 
-    if ((int32_t)(next_wake - current_tick) <= 0)
+    if ((int32_t) (next_wake - current_tick) <= 0)
     {
         return 0;
     }
-    return (uint32_t)(next_wake - current_tick);
+    return (uint32_t) (next_wake - current_tick);
 }
 
 static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size)

@@ -5,7 +5,7 @@
  * Date: 2025
  ******************************************************************************/
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
@@ -156,7 +156,7 @@ static void controller_task_func(void *param)
         /* Wait for Subject to enter its delay (INV-T2) */
         while (g_subject_delaying < cycle + 1 && !g_test_complete)
         {
-            rtos_delay_ms(1);
+            rtos_delay_ms(5);
         }
 
         /* Give 1 tick for the delay to take effect */

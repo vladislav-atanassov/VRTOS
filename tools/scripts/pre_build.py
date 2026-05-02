@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pre-build script for VRTOS.
+Pre-build script for KARTOS.
 
 Runs as a PlatformIO extra_script (pre: phase). Two actions:
   1. Preprocess ldscripts/stm32f446re.ld.in → ldscripts/stm32f446re.ld

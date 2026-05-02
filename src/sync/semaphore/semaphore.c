@@ -1,6 +1,6 @@
 #include "semaphore.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "klog.h"
 #include "rtos_port.h"
 #include "task.h"
@@ -208,7 +208,6 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
         rtos_port_exit_critical();
         return RTOS_SEM_OK;
     }
-
 
     if (sem->max_count != 0 && sem->count >= sem->max_count)
     {

@@ -1,6 +1,6 @@
 #include "mutex.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "kernel_priv.h"
 #include "klog.h"
 #include "rtos_port.h"
@@ -253,9 +253,9 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     /* Fast path: mutex is free */
     if (m->owner == NULL)
     {
-        m->owner      = current_task;
-        m->lock_count = 1;
-        m->next_held  = current_task->held_mutex_list;
+        m->owner                      = current_task;
+        m->lock_count                 = 1;
+        m->next_held                  = current_task->held_mutex_list;
         current_task->held_mutex_list = m;
         rtos_port_exit_critical();
         KLOGD("Mutex", "MutexLock id=%u", current_task->task_id);
@@ -347,8 +347,7 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     if (m->owner != current_task)
     {
         rtos_port_exit_critical();
-        KLOGE("Mutex", "MutexUnlockErr owner=%u caller=%u",
-              m->owner ? m->owner->task_id : 0xFF,
+        KLOGE("Mutex", "MutexUnlockErr owner=%u caller=%u", m->owner ? m->owner->task_id : 0xFF,
               current_task ? current_task->task_id : 0xFF);
         return RTOS_MUTEX_ERR_INVALID;
     }
@@ -379,9 +378,9 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     rtos_tcb_t *waiter = mutex_pop_highest_priority_waiter(m);
     if (waiter != NULL)
     {
-        m->owner      = waiter;
-        m->lock_count = 1;
-        m->next_held  = waiter->held_mutex_list;
+        m->owner                = waiter;
+        m->lock_count           = 1;
+        m->next_held            = waiter->held_mutex_list;
         waiter->held_mutex_list = m;
 
         KLOGD("Mutex", "MutexUnlock->id=%u", waiter->task_id);

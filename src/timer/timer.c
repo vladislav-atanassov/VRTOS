@@ -1,6 +1,6 @@
 #include "timer.h"
 
-#include "VRTOS.h"
+#include "KARTOS.h"
 #include "klog.h"
 #include "memory.h"
 #include "rtos_port.h"
