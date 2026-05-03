@@ -27,7 +27,7 @@ DEFAULT_PIO_PATH = os.path.expanduser(r"~\.platformio\penv\Scripts\platformio.ex
 
 # Test configuration
 DEFAULT_TEST_DURATION_SEC = 20
-DEFAULT_OUTPUT_DIR = os.path.join("logs", "tests")
+DEFAULT_OUTPUT_DIR = os.path.join("tests", "artifacts")
 
 
 # =================== Log Parsing ===================

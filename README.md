@@ -466,13 +466,9 @@ KARTOS/
 │       └── clock_config.h # Clock aliases
 ├── ldscripts/             # Linker scripts
 │   └── stm32f446re.ld.in  # Preprocessable template (generates stm32f446re.ld at build time)
-├── logs/                  # Captured output
-│   ├── klogs/             # KLog decoder captures
-│   └── tests/             # Test runner logs
 ├── docs/                  # Documentation
 │   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/                 # Development tools
-│   ├── klog_decoder.py    # Host-side KLog serial capture
 │   ├── scripts/           # Build scripts
 │   │   ├── pre_build.py
 │   │   └── post_build.py
