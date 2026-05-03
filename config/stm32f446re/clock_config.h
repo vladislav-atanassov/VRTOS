@@ -9,7 +9,10 @@
  * that depend on it are defined here.
  */
 
-#define RTOS_SYSTICK_CLOCK_HZ RTOS_SYSTEM_CLOCK_HZ
-#define RTOS_CPU_CLOCK_HZ     RTOS_SYSTEM_CLOCK_HZ
+#define RTOS_SYSTICK_CLOCK_HZ  RTOS_SYSTEM_CLOCK_HZ
+#define RTOS_CPU_CLOCK_HZ      RTOS_SYSTEM_CLOCK_HZ
+
+/** Number of SysTick counter cycles in one OS tick period. */
+#define RTOS_CYCLES_PER_TICK   (RTOS_SYSTICK_CLOCK_HZ / RTOS_TICK_RATE_HZ)
 
 #endif /* CLOCK_CONFIG_H */

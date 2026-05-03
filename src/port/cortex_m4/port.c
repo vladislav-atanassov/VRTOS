@@ -43,7 +43,7 @@ rtos_status_t rtos_port_init(void)
 void rtos_port_start_systick(void)
 {
     /* Calculate reload value for desired tick rate */
-    uint32_t reload_value = (SystemCoreClock / RTOS_TICK_RATE_HZ) - 1;
+    uint32_t reload_value = RTOS_CYCLES_PER_TICK - 1;
 
     if (SysTick_Config(reload_value) != 0)
     {
@@ -152,14 +152,14 @@ void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
  * an old ms with a fresh ~LOAD value. Detect by re-reading tick_count: if it
  * changed, the snapshot is stale — re-read.
  *
- * SysTick counts down from LOAD to 0; LOAD = (SystemCoreClock / TICK_HZ) - 1.
+ * SysTick counts down from LOAD to 0; LOAD = RTOS_CYCLES_PER_TICK - 1.
  * Cycles into the current tick = LOAD - VAL + 1 (the +1 accounts for VAL=LOAD
  * being one cycle into the period).
  */
 uint32_t rtos_port_get_uptime_us(void)
 {
     const uint32_t load          = SysTick->LOAD;
-    const uint32_t cycles_per_us = (SystemCoreClock + 500000U) / 1000000U;
+    const uint32_t cycles_per_us = (RTOS_SYSTICK_CLOCK_HZ + 500000U) / 1000000U;
 
     rtos_tick_t ms1, ms2;
     uint32_t    val;
@@ -243,7 +243,7 @@ void rtos_port_systick_handler(void)
 
     if (last_tick_cycle != 0)
     {
-        uint32_t expected   = SystemCoreClock / RTOS_TICK_RATE_HZ;
+        uint32_t expected   = RTOS_CYCLES_PER_TICK;
         uint32_t actual     = now - last_tick_cycle;
         int32_t  jitter     = (int32_t) (actual - expected);
         uint32_t abs_jitter = (jitter < 0) ? (uint32_t) (-jitter) : (uint32_t) jitter;
@@ -353,7 +353,7 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     uint32_t reload_value;
     uint32_t sleep_ticks;
     uint32_t complete_tick_periods;
-    uint32_t cycles_per_tick = SystemCoreClock / RTOS_TICK_RATE_HZ;
+    const uint32_t cycles_per_tick = RTOS_CYCLES_PER_TICK;
 
     __disable_irq();
 

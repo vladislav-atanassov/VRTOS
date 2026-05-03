@@ -1,5 +1,6 @@
 #include "hardware_env.h"
 
+#include "config.h" // IWYU pragma: keep
 #include "klog.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 
@@ -34,7 +35,7 @@ void led_set(bool on)
 
 __attribute__((__noreturn__)) void indicate_system_failure(void)
 {
-    const uint32_t    delay_cycles = SystemCoreClock / 50;
+    const uint32_t    delay_cycles = RTOS_SYSTEM_CLOCK_HZ / 50;
     volatile uint32_t counter;
 
     while (1)
