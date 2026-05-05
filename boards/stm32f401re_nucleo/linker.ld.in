@@ -1,37 +1,31 @@
 /*
- * Linker script template for STM32F446RE.
+ * Linker script template for STM32F401RE Nucleo.
  *
- * This file is preprocessed by arm-none-eabi-gcc during pre-build to produce
- * ldscripts/stm32f446re.ld. Memory layout constants are sourced from
- * config/stm32f446re/memory_map.h — edit that file to retarget.
+ * Preprocessed by cmake/kartos_linker_script.cmake into
+ * ${CMAKE_BINARY_DIR}/linker.ld. Memory layout comes from memory_map.h in
+ * this directory. Do NOT edit the generated linker.ld directly.
  *
- * Do NOT edit ldscripts/stm32f446re.ld directly; it is a generated artifact.
+ * LINKER_SCRIPT is defined by the preprocessor command (-DLINKER_SCRIPT),
+ * not here, so that memory_map.h strips the UL suffixes the GNU linker
+ * cannot parse.
  */
-
-#define LINKER_SCRIPT
 #include "memory_map.h"
 
-/* Entry Point */
 ENTRY(Reset_Handler)
 
-/* Initial stack pointer — top of SRAM */
 _estack = MAIN_STACK_START;
 
-/* Minimum reserved stack and heap regions (linker-enforced RAM check) */
 _Min_Heap_Size  = RTOS_MIN_HEAP_SIZE;
 _Min_Stack_Size = MAIN_STACK_SIZE;
 
-/* Memory regions */
 MEMORY
 {
   FLASH (rx)  : ORIGIN = FLASH_BASE_ADDR, LENGTH = FLASH_SIZE
   RAM   (xrw) : ORIGIN = SRAM_BASE_ADDR,  LENGTH = SRAM_SIZE
 }
 
-/* Output sections */
 SECTIONS
 {
-  /* Interrupt vector table — must be first in FLASH */
   .isr_vector :
   {
     . = ALIGN(4);
@@ -39,7 +33,6 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  /* Program code and read-only data */
   .text :
   {
     . = ALIGN(4);
@@ -48,10 +41,8 @@ SECTIONS
     *(.glue_7)
     *(.glue_7t)
     *(.eh_frame)
-
     KEEP (*(.init))
     KEEP (*(.fini))
-
     . = ALIGN(4);
     _etext = .;
   } >FLASH
@@ -109,10 +100,8 @@ SECTIONS
     . = ALIGN(4);
   } >FLASH
 
-  /* Load address of .data in FLASH, copied to RAM by startup code */
   _sidata = LOADADDR(.data);
 
-  /* Initialised data — loaded from FLASH, executed from RAM */
   .data :
   {
     . = ALIGN(4);
@@ -125,7 +114,6 @@ SECTIONS
     _edata = .;
   } >RAM AT> FLASH
 
-  /* Uninitialised data — zeroed by startup code */
   . = ALIGN(4);
   .bss :
   {
@@ -139,7 +127,6 @@ SECTIONS
     __bss_end__ = _ebss;
   } >RAM
 
-  /* Not initialised by startup code — survives NVIC_SystemReset() */
   . = ALIGN(4);
   .noinit (NOLOAD) :
   {
@@ -149,7 +136,6 @@ SECTIONS
     . = ALIGN(4);
   } >RAM
 
-  /* Heap + stack reservation — linker errors here mean RAM is exhausted */
   ._user_heap_stack :
   {
     . = ALIGN(8);

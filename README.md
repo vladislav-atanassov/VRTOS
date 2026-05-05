@@ -251,7 +251,7 @@ rtos_timer_stop(timer);
 
 When the only runnable task is the idle task, KARTOS can suppress the periodic SysTick interrupt and put the CPU into `WFI` until either the next scheduled task wake-up or an external interrupt. On wake, the kernel reads the SysTick counter, computes how long the CPU actually slept, and fast-forwards `rtos_tick_count` so timing services remain correct. Without this feature the SysTick would keep firing every 1 ms, waking the CPU thousands of times per second just to decrement counters.
 
-**How it works** (Cortex-M4, [src/port/cortex_m4/port.c:352](src/port/cortex_m4/port.c#L352)):
+**How it works** (Cortex-M4, [arch/cortex_m4/port.c](arch/cortex_m4/port.c)):
 
 1. **Idle task** asks the scheduler how many ticks until the next ready/delay expiry — `rtos_scheduler_get_expected_idle_ticks()`.
 2. If the result is below `RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP`, do nothing — the reprogramming overhead would exceed the savings. Otherwise call `rtos_port_suppress_ticks_and_sleep()`.
@@ -269,7 +269,7 @@ When the only runnable task is the idle task, KARTOS can suppress the periodic S
 #define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
 ```
 
-The STM32F446RE board config enables tickless idle by default ([config/stm32f446re/rtos_config.h](config/stm32f446re/rtos_config.h)).
+The STM32F446RE board config enables tickless idle by default ([boards/stm32f446re_nucleo/rtos_config.h](boards/stm32f446re_nucleo/rtos_config.h)).
 
 **Caveats**:
 
@@ -384,7 +384,7 @@ rtos_profiling_print_stat(&my_stats);
 ```md
 KARTOS/
 ├── include/               # Public API headers
-│   ├── KARTOS.h            # Main RTOS header
+│   ├── KARTOS.h           # Main RTOS header
 │   ├── config.h           # Configuration defaults
 │   ├── task.h             # Task management API
 │   ├── scheduler.h        # Scheduler interface
@@ -397,6 +397,34 @@ KARTOS/
 │   ├── profiling.h        # Profiling API
 │   ├── rtos_types.h       # Type definitions
 │   └── rtos_port.h        # Porting layer interface
+├── arch/                  # Architecture porting layer
+│   ├── common/            # Shared port contract (port_common.h)
+│   └── cortex_m4/         # ARM Cortex-M4F port
+│       ├── port_priv.h    # Arch constants + interrupt priorities
+│       └── port.c         # Context switch, critical sections
+├── boards/                # Board-specific configuration
+│   ├── stm32f446re_nucleo/  # STM32F446RE Nucleo
+│   │   ├── board.cmake    # CMake toolchain/target settings
+│   │   ├── rtos_config.h  # Board RTOS overrides
+│   │   ├── memory_map.h   # Flash/SRAM layout (shared with linker)
+│   │   ├── clock_config.h # Clock aliases
+│   │   ├── linker.ld.in   # Preprocessable linker script template
+│   │   └── openocd.cfg    # OpenOCD flash/debug configuration
+│   ├── stm32f401re_nucleo/  # STM32F401RE Nucleo (portability target)
+│   │   └── ...            # Same layout as above
+│   └── templates/         # Skeleton files for porting to a new board
+│       ├── rtos_config_template.h
+│       ├── clock_config_template.h
+│       └── memory_map_template.h
+├── cmake/                 # CMake helper modules
+│   ├── arm-none-eabi-gcc.cmake    # Cross-compilation toolchain file
+│   ├── kartos_add_variant.cmake   # kartos_add_variant() function
+│   ├── kartos_build_info.cmake    # Build-info generation
+│   ├── kartos_linker_script.cmake # Linker script preprocessing
+│   └── variants.cmake             # All build variant definitions
+├── mcus/                  # MCU-family CMake configuration
+│   └── stm32f4/
+│       └── family.cmake   # Compiler flags, startup file, HAL sources
 ├── src/
 │   ├── core/              # Kernel core
 │   │   ├── kernel.c       # Kernel initialization and tick
@@ -405,8 +433,8 @@ KARTOS/
 │   │   ├── scheduler.c    # Scheduler manager
 │   │   └── scheduler_types/
 │   │       ├── preemptive_sp.c  # Preemptive priority
-│   │       ├── cooperative.c     # Cooperative
-│   │       └── round_robin.c     # Round-robin
+│   │       ├── cooperative.c    # Cooperative
+│   │       └── round_robin.c    # Round-robin
 │   ├── task/              # Task management
 │   │   ├── task.c         # Task creation and state management
 │   │   ├── task_notify.c  # Task notification mechanism
@@ -419,11 +447,6 @@ KARTOS/
 │   ├── timer/             # Software timers
 │   │   ├── timer.c        # Timer API
 │   │   └── timer_list.c   # Active timer list management
-│   ├── port/              # Architecture porting layer
-│   │   ├── common/        # Shared port contract (port_common.h)
-│   │   └── cortex_m4/     # ARM Cortex-M4F port
-│   │       ├── port_priv.h  # Arch constants + interrupt priorities
-│   │       └── port.c       # Context switch, critical sections
 │   ├── logging/           # Logging subsystem
 │   │   ├── uart_tx.c/h    # UART TX driver (SPSC ring buffer + ISR)
 │   │   ├── klog.c/h       # High-performance deferred kernel logger
@@ -433,8 +456,8 @@ KARTOS/
 │   │   ├── profiling.c    # DWT cycle counter profiling
 │   │   └── prof_trace.c/h # Profiling trace ring buffer
 │   ├── utils/             # Shared utilities
-│   │   ├── ring_buffer.c/h # General-purpose ring buffer
-│   │   ├── rtos_assert.c/h # Assertions
+│   │   ├── ring_buffer.c/h  # General-purpose ring buffer
+│   │   ├── rtos_assert.c/h  # Assertions
 │   │   └── hardware_env.c/h # Hardware initialization
 │   └── examples/          # Example applications
 │       ├── basic_blinky/
@@ -443,11 +466,11 @@ KARTOS/
 │       └── fpu_context_test/
 ├── tests/                 # Test suite
 │   ├── integration/       # Sync primitive invariant tests
-│   │   ├── test_mutex_state.c       # PIP + ownership invariants
-│   │   ├── test_semaphore_state.c   # Counting semaphore invariants
-│   │   ├── test_queue_state.c       # Queue blocking invariants
-│   │   ├── test_event_group_state.c # Event group bit-wait tests
-│   │   ├── test_notification_state.c # Task notification tests
+│   │   ├── test_mutex_state.c          # PIP + ownership invariants
+│   │   ├── test_semaphore_state.c      # Counting semaphore invariants
+│   │   ├── test_queue_state.c          # Queue blocking invariants
+│   │   ├── test_event_group_state.c    # Event group bit-wait tests
+│   │   ├── test_notification_state.c   # Task notification tests
 │   │   └── test_task_state_transitions.c # Task lifecycle tests
 │   ├── scheduler/         # Scheduler tests (one dir per policy)
 │   │   ├── round_robin/
@@ -458,24 +481,17 @@ KARTOS/
 │       ├── bench_mutex/
 │       ├── bench_queue/
 │       └── bench_semaphore/
-├── config/                # Board-specific configuration
-│   ├── rtos_config_template.h  # Skeleton for new boards
-│   └── stm32f446re/       # STM32F446RE board config
-│       ├── rtos_config.h  # Board overrides
-│       ├── memory_map.h   # Flash/SRAM layout (shared with linker)
-│       └── clock_config.h # Clock aliases
-├── ldscripts/             # Linker scripts
-│   └── stm32f446re.ld.in  # Preprocessable template (generates stm32f446re.ld at build time)
+├── vendor/
+│   └── stm32cubef4/       # STM32CubeF4 HAL/CMSIS (git submodule)
 ├── docs/                  # Documentation
 │   └── porting_guide.md   # How to add a new chip/architecture
-├── tools/                 # Development tools
-│   ├── scripts/           # Build scripts
-│   │   ├── pre_build.py
-│   │   └── post_build.py
+├── tools/
 │   └── test/              # Test automation
-│       ├── test_runner.py  # Automated upload, capture, and verdict analysis
+│       ├── test_runner.py  # Automated flash, capture, and verdict analysis
 │       └── log_parser.py   # Parse serial logs to CSV
-└── platformio.ini         # PlatformIO configuration
+├── CMakeLists.txt         # Root build file
+├── CMakePresets.json      # Configure + build presets for all boards/variants
+└── .clangd                # clangd cross-compilation settings
 ```
 
 ## Configuration
@@ -483,15 +499,15 @@ KARTOS/
 Configuration uses a hierarchical override system:
 
 ```
-config/<board>/rtos_config.h   ← board-specific overrides (included first)
+boards/<board>/rtos_config.h   ← board-specific overrides (included first)
     ├── memory_map.h           ← flash/SRAM layout
     └── clock_config.h         ← clock aliases
-include/config.h         ← generic defaults (wrapped in #ifndef guards)
+include/config.h               ← generic defaults (wrapped in #ifndef guards)
 ```
 
 Board overrides are applied by defining macros **before** the defaults in `config.h`.
-To add a new board, copy `config/rtos_config_template.h` to `config/<board>/rtos_config.h`
-and uncomment the values you need to override.
+To add a new board, copy `boards/templates/rtos_config_template.h` to `boards/<board>/rtos_config.h`
+and uncomment the values you need to override. See [docs/porting_guide.md](docs/porting_guide.md) for the full walkthrough.
 
 ### Generic Defaults (`config.h`)
 
@@ -523,10 +539,7 @@ and uncomment the values you need to override.
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 ```
 
-> **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only.
-> `monitor_speed` in [platformio.ini](platformio.ini) is **not** derived from
-> it — if you change the baud rate, update both. Mismatched values produce
-> garbled serial output.
+> **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only. If you change it, pass the same baud rate to `test_runner.py --baud` or your serial monitor. Mismatched values produce garbled serial output.
 
 ### Port-Layer Constants (`port_priv.h`)
 
@@ -534,7 +547,7 @@ Interrupt priorities are architecture-specific and live in the port layer,
 not in `config.h`:
 
 ```c
-/* Cortex-M4 interrupt priorities (src/port/cortex_m4/port_priv.h) */
+/* Cortex-M4 interrupt priorities (arch/cortex_m4/port_priv.h) */
 #define PORT_IRQ_PRIORITY_CRITICAL (0x00)  // Never masked
 #define PORT_IRQ_PRIORITY_HIGH     (0x40)  // Can preempt RTOS
 #define PORT_IRQ_PRIORITY_KERNEL   (0x80)  // SysTick level
@@ -545,24 +558,26 @@ not in `config.h`:
 
 ### Prerequisites
 
-- **PlatformIO** (with STM32 platform support)
-- **STM32F446RE Nucleo board**
-- **ST-Link** programmer (on-board)
-- **Python 3.x** (for test automation)
+- **arm-none-eabi-gcc** toolchain (≥ 10.x)
+- **CMake** ≥ 3.21
+- **Ninja** build system
+- **OpenOCD** (for flashing; PlatformIO's bundled copy is auto-detected)
+- **Python 3.x** with `pyserial` (for test automation: `pip install pyserial`)
+- **STM32F446RE Nucleo board** with on-board ST-Link
 
 ### Quick Start
 
 ```bash
-# Build and upload basic blinky example
-pio run -e basic_blinky --target upload
+# Configure for the STM32F446RE Nucleo board
+cmake --preset stm32f446re_nucleo
 
-# Build and upload producer-consumer example
-pio run -e producer_consumer --target upload
+# Build the basic blinky example
+cmake --build --preset basic_blinky
 
-# Monitor serial output (baud rate must match RTOS_UART_BAUD_RATE — default 921600)
-pio device monitor -e basic_blinky
+# Flash to the board
+cmake --build --preset flash-basic_blinky
 
-# Run automated scheduler test
+# Run automated scheduler test (flash + capture + verdict)
 python tools/test/test_runner.py test_scheduler_rr_state --duration 10
 ```
 

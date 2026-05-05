@@ -3,6 +3,7 @@
 
 #include "KARTOS.h"         // IWYU pragma: keep (rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE)
 #include "log_flush_task.h" // log_flush_task
+#include "rtos_port.h"      // rtos_port_enter_critical, rtos_port_exit_critical
 #include "task.h"           // rtos_task_create
 #include "timer.h"          // rtos_timer_handle_t, rtos_timer_create, rtos_timer_start
 #include "ulog.h"           // ulog_init

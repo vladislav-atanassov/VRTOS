@@ -1,6 +1,6 @@
 #include "uart_tx.h"
 
-#include "config.h"
+#include "config.h" // IWYU pragma: keep
 #include "klog.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 

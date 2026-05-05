@@ -1,0 +1,87 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "_base",
+      "hidden": true,
+      "generator": "Ninja",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi-gcc.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "stm32f446re_nucleo",
+      "displayName": "STM32F446RE Nucleo",
+      "description": "Configure for the STM32F446RE Nucleo board",
+      "inherits": "_base",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "KARTOS_BOARD": "stm32f446re_nucleo"
+      }
+    },
+    {
+      "name": "stm32f401re_nucleo",
+      "displayName": "STM32F401RE Nucleo",
+      "description": "Configure for the STM32F401RE Nucleo board",
+      "inherits": "_base",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "KARTOS_BOARD": "stm32f401re_nucleo"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "all",
+      "displayName": "Build all variants",
+      "configurePreset": "stm32f446re_nucleo"
+    },
+
+    { "name": "basic_blinky",                  "configurePreset": "stm32f446re_nucleo", "targets": ["basic_blinky"] },
+    { "name": "stm32f401re_nucleo-basic_blinky", "displayName": "Build basic_blinky (F401RE)", "configurePreset": "stm32f401re_nucleo", "targets": ["basic_blinky"] },
+    { "name": "producer_consumer",             "configurePreset": "stm32f446re_nucleo", "targets": ["producer_consumer"] },
+    { "name": "profiling_demo",                "configurePreset": "stm32f446re_nucleo", "targets": ["profiling_demo"] },
+    { "name": "fpu_context_test",              "configurePreset": "stm32f446re_nucleo", "targets": ["fpu_context_test"] },
+
+    { "name": "test_scheduler_rr_state",       "configurePreset": "stm32f446re_nucleo", "targets": ["test_scheduler_rr_state"] },
+    { "name": "test_scheduler_cooperative_state", "configurePreset": "stm32f446re_nucleo", "targets": ["test_scheduler_cooperative_state"] },
+    { "name": "test_scheduler_preemptive_state",  "configurePreset": "stm32f446re_nucleo", "targets": ["test_scheduler_preemptive_state"] },
+
+    { "name": "test_mutex_state",              "configurePreset": "stm32f446re_nucleo", "targets": ["test_mutex_state"] },
+    { "name": "test_semaphore_state",          "configurePreset": "stm32f446re_nucleo", "targets": ["test_semaphore_state"] },
+    { "name": "test_queue_state",              "configurePreset": "stm32f446re_nucleo", "targets": ["test_queue_state"] },
+    { "name": "test_notification_state",       "configurePreset": "stm32f446re_nucleo", "targets": ["test_notification_state"] },
+    { "name": "test_event_group_state",        "configurePreset": "stm32f446re_nucleo", "targets": ["test_event_group_state"] },
+    { "name": "test_task_state_transitions",   "configurePreset": "stm32f446re_nucleo", "targets": ["test_task_state_transitions"] },
+    { "name": "test_tickless_idle",            "configurePreset": "stm32f446re_nucleo", "targets": ["test_tickless_idle"] },
+
+    { "name": "bench_context_switch",          "configurePreset": "stm32f446re_nucleo", "targets": ["bench_context_switch"] },
+    { "name": "bench_mutex",                   "configurePreset": "stm32f446re_nucleo", "targets": ["bench_mutex"] },
+    { "name": "bench_queue",                   "configurePreset": "stm32f446re_nucleo", "targets": ["bench_queue"] },
+    { "name": "bench_semaphore",               "configurePreset": "stm32f446re_nucleo", "targets": ["bench_semaphore"] },
+
+    { "name": "flash-basic_blinky",            "configurePreset": "stm32f446re_nucleo", "targets": ["flash-basic_blinky"] },
+    { "name": "flash-producer_consumer",       "configurePreset": "stm32f446re_nucleo", "targets": ["flash-producer_consumer"] },
+    { "name": "flash-profiling_demo",          "configurePreset": "stm32f446re_nucleo", "targets": ["flash-profiling_demo"] },
+    { "name": "flash-fpu_context_test",        "configurePreset": "stm32f446re_nucleo", "targets": ["flash-fpu_context_test"] },
+
+    { "name": "flash-test_scheduler_rr_state",          "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_scheduler_rr_state"] },
+    { "name": "flash-test_scheduler_cooperative_state", "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_scheduler_cooperative_state"] },
+    { "name": "flash-test_scheduler_preemptive_state",  "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_scheduler_preemptive_state"] },
+
+    { "name": "flash-test_mutex_state",              "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_mutex_state"] },
+    { "name": "flash-test_semaphore_state",          "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_semaphore_state"] },
+    { "name": "flash-test_queue_state",              "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_queue_state"] },
+    { "name": "flash-test_notification_state",       "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_notification_state"] },
+    { "name": "flash-test_event_group_state",        "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_event_group_state"] },
+    { "name": "flash-test_task_state_transitions",   "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_task_state_transitions"] },
+    { "name": "flash-test_tickless_idle",            "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_tickless_idle"] },
+
+    { "name": "flash-bench_context_switch",    "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_context_switch"] },
+    { "name": "flash-bench_mutex",             "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_mutex"] },
+    { "name": "flash-bench_queue",             "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_queue"] },
+    { "name": "flash-bench_semaphore",         "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_semaphore"] }
+  ]
+}

@@ -1,0 +1,3 @@
+[submodule "vendor/stm32cubef4"]
+	path = vendor/stm32cubef4
+	url = https://github.com/STMicroelectronics/STM32CubeF4.git

@@ -1,0 +1,25 @@
+#ifndef RTOS_CONFIG_STM32F401RE_H
+#define RTOS_CONFIG_STM32F401RE_H
+
+#include "clock_config.h"
+#include "memory_map.h"
+
+/* STM32F401RE Nucleo runs at 84 MHz */
+#define RTOS_SYSTEM_CLOCK_HZ (84000000U)
+
+#define RTOS_UART_BAUD_RATE (921600U)
+
+#define RTOS_CONFIG_USE_TICKLESS_IDLE               (1U)
+#define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
+
+/* Task limits — tighter than F446 due to 96 KB RAM */
+#define RTOS_MAX_TASKS               (10U)
+#define RTOS_DEFAULT_TASK_STACK_SIZE (768U)
+#define RTOS_MINIMUM_TASK_STACK_SIZE (256U)
+#define KLOG_FLUSH_TASK_STACK_SIZE   (2048U)
+
+#define RTOS_TOTAL_HEAP_SIZE (12288U)
+
+#define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
+
+#endif /* RTOS_CONFIG_STM32F401RE_H */

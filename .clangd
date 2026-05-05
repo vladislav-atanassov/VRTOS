@@ -1,0 +1,6 @@
+CompileFlags:
+  CompilationDatabase: build/stm32f446re_nucleo
+
+Diagnostics:
+  Suppress:
+    - drv_unsupported_opt_for_target

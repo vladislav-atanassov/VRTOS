@@ -5,22 +5,27 @@ How to add support for a new chip / architecture.
 ## Directory Structure
 
 ```
-src/port/
+arch/
 ├── common/
-│   ├── port_common.h       ← required-macro contract (shared)
-│   └── port_utils.c        ← optional helpers (shared)
+│   └── port_common.h       ← required-macro contract (shared)
 └── <arch>/                  ← one directory per architecture
     ├── port_priv.h          ← chip-specific constants
     └── port.c               ← rtos_port.h implementation
 ```
 
 ```
-config/
-├── rtos_config_template.h   ← skeleton for new boards
+boards/
+├── templates/               ← skeleton files for new boards
+│   ├── rtos_config_template.h
+│   ├── clock_config_template.h
+│   └── memory_map_template.h
 └── <board>/
-    ├── rtos_config.h         ← board-specific RTOS overrides
-    ├── memory_map.h          ← flash / RAM layout
-    └── clock_config.h        ← clock frequencies
+    ├── board.cmake          ← CMake target/toolchain settings
+    ├── rtos_config.h        ← board-specific RTOS overrides
+    ├── memory_map.h         ← flash / RAM layout
+    ├── clock_config.h       ← clock frequencies
+    ├── linker.ld.in         ← preprocessable linker script template
+    └── openocd.cfg          ← OpenOCD flash/debug configuration
 ```
 
 ## Step-by-Step
@@ -28,14 +33,14 @@ config/
 ### 1. Create the port directory
 
 ```
-src/port/<arch>/
+arch/<arch>/
 ├── port_priv.h
 └── port.c
 ```
 
 ### 2. Define required macros in `port_priv.h`
 
-`port_common.h` enforces these at compile time — a missing macro triggers `#error`:
+`arch/common/port_common.h` enforces these at compile time — a missing macro triggers `#error`:
 
 | Macro | Description | Example (Cortex-M4F) |
 |---|---|---|
@@ -57,7 +62,7 @@ Interrupt priority constants should also be defined in `port_priv.h`:
 
 ### 3. Implement `rtos_port.h` functions in `port.c`
 
-Every port must implement these functions (declared in `include/KARTOS/rtos_port.h`):
+Every port must implement these functions (declared in `include/rtos_port.h`):
 
 | Function | Purpose |
 |---|---|
@@ -76,14 +81,14 @@ Your `port.c` must also provide the ISR entry points for context switching (e.g.
 
 ### 4. Create board config
 
-Copy `config/rtos_config_template.h` to `config/<board>/rtos_config.h` and uncomment the values you need to override. `config.h` wraps every default in `#ifndef` guards, so your overrides take priority:
+Copy `boards/templates/rtos_config_template.h` to `boards/<board>/rtos_config.h` and uncomment the values you need to override. `config.h` wraps every default in `#ifndef` guards, so your overrides take priority:
 
 ```c
 #ifndef RTOS_CONFIG_BOARD_H
 #define RTOS_CONFIG_BOARD_H
 
-#include "memory_map.h"
 #include "clock_config.h"
+#include "memory_map.h"
 
 #define RTOS_SYSTEM_CLOCK_HZ (84000000U)
 #define RTOS_MAX_TASKS       (10U)
@@ -92,53 +97,65 @@ Copy `config/rtos_config_template.h` to `config/<board>/rtos_config.h` and uncom
 #endif /* RTOS_CONFIG_BOARD_H */
 ```
 
-Add `memory_map.h` (flash/SRAM bounds) and `clock_config.h` (clock aliases) as needed.
+Also copy `boards/templates/clock_config_template.h` → `boards/<board>/clock_config.h` and `boards/templates/memory_map_template.h` → `boards/<board>/memory_map.h`, filling in your MCU's clock and memory sizes.
 
-`memory_map.h` must wrap integer literals in the `_UL(x)` macro so the same file can be consumed by both C source and the linker preprocessor. See `config/stm32f446re/memory_map.h` for the reference pattern.
+`memory_map.h` must wrap integer literals in the `_UL(x)` macro so the same file can be consumed by both C source and the linker preprocessor. See `boards/stm32f446re_nucleo/memory_map.h` for the reference pattern.
 
 ### 4a. Create the linker script template
 
-Copy `ldscripts/stm32f446re.ld.in` to `ldscripts/<board>.ld.in` and update the `#include` path and MEMORY region names if needed. The template is preprocessed by `arm-none-eabi-gcc -E -P -x c-header -D LINKER_SCRIPT -I config/<board>/` during pre-build to produce `ldscripts/<board>.ld`. Update `tools/scripts/pre_build.py` and `platformio.ini` (`board_build.ldscript`) to point at the new files.
+Copy `boards/stm32f446re_nucleo/linker.ld.in` to `boards/<board>/linker.ld.in` and update the `#include` path and MEMORY region sizes to match your MCU. The template is preprocessed by `arm-none-eabi-gcc -E -P -x c-header -D LINKER_SCRIPT -I boards/<board>/` at configure time via `cmake/kartos_linker_script.cmake`.
 
-### 5. Update `platformio.ini`
+### 5. Create the CMake board file and register a preset
 
-Add a new port section with `build_flags` and `port_src_filter`, then create a board environment:
+**`boards/<board>/board.cmake`** — set the five required variables:
 
-```ini
-; --- Port Layer ---
-[<arch>]
-build_flags =
-    -I src/port/<arch>/
-    ; add arch-specific compiler flags (e.g. -mfpu, -mfloat-abi)
-port_src_filter =
-    -<port/>
-    +<port/common/>
-    +<port/<arch>/>
-
-; --- Board Environment ---
-[env:<board>]
-platform = ...
-board = ...
-framework = ...
-build_src_filter = +<*> -<examples/> +<examples/basic_blinky/> ${<arch>.port_src_filter}
-build_flags =
-    ${<arch>.build_flags}
-    -I config/<board>/
-    -D <BOARD_DEFINE>
-    ; ...remaining flags...
+```cmake
+set(KARTOS_ARCH        cortex_m4)
+set(KARTOS_MCU_FAMILY  stm32f4)
+set(KARTOS_MCU_PART    STM32F4xxYY)       # e.g. STM32F446xE
+set(KARTOS_BOARD_NAME  <board>)
+set(KARTOS_STARTUP_FILE "${CMAKE_SOURCE_DIR}/vendor/stm32cubef4/Drivers/CMSIS/Device/ST/STM32F4xx/Source/Templates/gcc/startup_stm32f4xxyy.s")
 ```
 
-The `port_src_filter` ensures only the selected port's source files are compiled.
-Adding a second port directory (e.g. `src/port/cortex_m0/`) will not cause
-duplicate symbol errors, because each environment explicitly selects its port.
+**`CMakePresets.json`** — add a configure preset and at least one build preset:
+
+```json
+{
+  "name": "<board>",
+  "inherits": "base",
+  "binaryDir": "${sourceDir}/build/<board>",
+  "cacheVariables": {
+    "KARTOS_BOARD_FILE": "${sourceDir}/boards/<board>/board.cmake"
+  }
+}
+```
+
+Then add a build preset that inherits `"<board>"` (or the appropriate configure preset) in the `buildPresets` array:
+
+```json
+{
+  "name": "<board>-basic_blinky",
+  "configurePreset": "<board>",
+  "targets": ["basic_blinky"]
+}
+```
+
+Add variants for each test or example you want to expose for this board in `cmake/variants.cmake` using `kartos_add_variant()`.
 
 ### 6. Build and verify
 
 ```bash
-pio run -e <board>
+# Configure
+cmake --preset <board>
+
+# Build
+cmake --build --preset <board>-basic_blinky
+
+# Flash
+cmake --build --preset flash-<board>-basic_blinky
 ```
 
-At minimum, build the `fpu_context_test` example (if the chip has an FPU) or `basic_blinky` to confirm the port links and runs.
+At minimum, build and flash `basic_blinky` to confirm the port links and runs. If the chip has an FPU, also verify `fpu_context_test`.
 
 ## FPU Notes
 
@@ -148,4 +165,4 @@ At minimum, build the `fpu_context_test` example (if the chip has an FPU) or `ba
 
 ## Reference
 
-The Cortex-M4F port in `src/port/cortex_m4/` is the reference implementation.
+The Cortex-M4F port in `arch/cortex_m4/` is the reference implementation. The STM32F401RE Nucleo board (`boards/stm32f401re_nucleo/`) is a minimal portability example — same arch and MCU family as the F446RE but with 96 KB SRAM instead of 128 KB, demonstrating how little changes between closely related boards.

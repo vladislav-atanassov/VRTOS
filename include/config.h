@@ -85,8 +85,7 @@
 
 /* ======================== Logging Configuration ========================= */
 
-/* UART baud rate for logging output. Must match `monitor_speed` in
- * platformio.ini — the serial monitor speed is not derived automatically. */
+/* UART baud rate for logging output. Must match the serial monitor speed. */
 #ifndef RTOS_UART_BAUD_RATE
 #define RTOS_UART_BAUD_RATE (921600U) /**< UART baud rate for logging */
 #endif

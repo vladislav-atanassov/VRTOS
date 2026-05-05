@@ -1,12 +1,13 @@
 #ifndef RTOS_CONFIG_BOARD_H
 #define RTOS_CONFIG_BOARD_H
 
-/* Copy to config/<your_board>/rtos_config.h and uncomment values to override.
- * Defaults are in include/KARTOS/config.h. */
+/* Copy to boards/<your_board>/rtos_config.h and uncomment values to override.
+ * Defaults are in include/config.h.
+ * See boards/stm32f446re_nucleo/rtos_config.h for a real example. */
 
-/* Board-specific headers (create these for your board) */
-// #include "memory_map.h"
+/* Board-specific headers — REQUIRED (not optional), both must exist in boards/<your_board>/) */
 // #include "clock_config.h"
+// #include "memory_map.h"
 
 /* ======================== System ======================================== */
 // #define RTOS_SYSTEM_CLOCK_HZ        (84000000U)
@@ -17,6 +18,7 @@
 // #define RTOS_MAX_TASK_PRIORITIES    (8U)
 // #define RTOS_DEFAULT_TASK_STACK_SIZE (768U)
 // #define RTOS_MINIMUM_TASK_STACK_SIZE (256U)
+// #define KLOG_FLUSH_TASK_STACK_SIZE   (2048U)
 
 /* ======================== Scheduler ===================================== */
 // #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
@@ -34,8 +36,6 @@
 // #define RTOS_TOTAL_HEAP_SIZE        (8192U)
 
 /* ======================== Logging ======================================= */
-/* UART baud rate for log output. NOTE: `monitor_speed` in platformio.ini
- * must be set manually to the same value — it is not derived from this. */
 // #define RTOS_UART_BAUD_RATE         (921600U)
 
 /* ======================== Features ====================================== */

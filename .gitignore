@@ -10,6 +10,7 @@
 *.elf
 *.bin
 *.hex
+*.map
 compile_commands.json
-ldscripts/stm32f446re.ld
-include/rtos/build_info.h
+# CMake build trees
+build/
