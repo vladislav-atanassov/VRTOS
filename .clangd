@@ -4,3 +4,9 @@ CompileFlags:
 Diagnostics:
   Suppress:
     - drv_unsupported_opt_for_target
+
+Completion:
+  AllScopes: Yes
+
+Index:
+  Background: Build
