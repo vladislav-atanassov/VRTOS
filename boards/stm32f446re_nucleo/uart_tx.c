@@ -13,8 +13,8 @@
 
 #define UART_RX_BUF_SIZE 64 /* Must be power of 2 */
 
-UART_HandleTypeDef g_huart2;
-log_level_t        g_log_level = LOG_LEVEL_NONE;
+static UART_HandleTypeDef g_huart2;
+log_level_t               g_log_level = LOG_LEVEL_NONE;
 
 /* SPSC TX ring buffer: _write() produces, USART2_IRQHandler consumes */
 static volatile uint8_t  tx_buf[UART_TX_BUF_SIZE];

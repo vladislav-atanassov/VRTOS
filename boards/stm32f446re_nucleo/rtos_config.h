@@ -10,7 +10,7 @@
 #define RTOS_SYSTEM_CLOCK_HZ (84000000U)
 
 /* UART logging baud rate. The serial monitor must match this value
- * (see `monitor_speed` in platformio.ini). */
+ * (pass -b to `python -m kartos monitor/test` if you change it). */
 #define RTOS_UART_BAUD_RATE (921600U)
 
 /* Power Management: enable tickless idle (idle task suppresses SysTick

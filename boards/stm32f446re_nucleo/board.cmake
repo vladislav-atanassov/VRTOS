@@ -40,3 +40,22 @@ target_include_directories(kartos_board INTERFACE
 target_compile_definitions(kartos_board INTERFACE
     "${KARTOS_MCU_PART}"
     "RTOS_TARGET_${KARTOS_BOARD_NAME_UPPER}")
+
+# ── Board Support Package (BSP) ──────────────────────────────────────────────
+# Provides hardware_env (clock/LED bootstrap) and uart_tx (UART transport
+# implementation). All variants link this; pure-kernel builds can opt out.
+add_library(kartos_board_support STATIC
+    ${CMAKE_CURRENT_LIST_DIR}/hardware_env.c
+    ${CMAKE_CURRENT_LIST_DIR}/uart_tx.c)
+
+target_include_directories(kartos_board_support
+    PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
+target_link_libraries(kartos_board_support
+    PUBLIC
+        kartos::board
+        kartos::mcu_${KARTOS_MCU_FAMILY}
+    PRIVATE
+        kartos::kernel)
+
+add_library(kartos::board_support ALIAS kartos_board_support)

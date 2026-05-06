@@ -33,9 +33,14 @@ void led_set(bool on)
     }
 }
 
+uint32_t hardware_env_cpu_clock_hz(void)
+{
+    return SystemCoreClock;
+}
+
 __attribute__((__noreturn__)) void indicate_system_failure(void)
 {
-    const uint32_t    delay_cycles = RTOS_SYSTEM_CLOCK_HZ / 50;
+    const uint32_t    delay_cycles = hardware_env_cpu_clock_hz() / 50;
     volatile uint32_t counter;
 
     while (1)
@@ -56,6 +61,57 @@ __attribute__((__noreturn__)) void Error_Handler(void)
     indicate_system_failure();
 }
 
+/* Compile-time clock configuration calculations based on RTOS_SYSTEM_CLOCK_HZ */
+#if RTOS_SYSTEM_CLOCK_HZ == 16000000U
+    #define HW_USE_PLL 0
+    #define HW_FLASH_LATENCY FLASH_LATENCY_0
+    #define HW_APB1_DIV      RCC_HCLK_DIV1
+    #define HW_APB2_DIV      RCC_HCLK_DIV1
+#else
+    #define HW_USE_PLL 1
+    #define HW_PLLM    8 /* VCO input = 16MHz / 8 = 2MHz */
+
+    #if RTOS_SYSTEM_CLOCK_HZ < 50000000U
+        #define HW_PLLP RCC_PLLP_DIV4
+        #define HW_PLLN ((RTOS_SYSTEM_CLOCK_HZ * 4) / 2000000U)
+        #define HW_PLLP_VAL 4
+    #else
+        #define HW_PLLP RCC_PLLP_DIV2
+        #define HW_PLLN ((RTOS_SYSTEM_CLOCK_HZ * 2) / 2000000U)
+        #define HW_PLLP_VAL 2
+    #endif
+
+    #if RTOS_SYSTEM_CLOCK_HZ <= 30000000U
+        #define HW_FLASH_LATENCY FLASH_LATENCY_0
+    #elif RTOS_SYSTEM_CLOCK_HZ <= 60000000U
+        #define HW_FLASH_LATENCY FLASH_LATENCY_1
+    #elif RTOS_SYSTEM_CLOCK_HZ <= 90000000U
+        #define HW_FLASH_LATENCY FLASH_LATENCY_2
+    #elif RTOS_SYSTEM_CLOCK_HZ <= 120000000U
+        #define HW_FLASH_LATENCY FLASH_LATENCY_3
+    #elif RTOS_SYSTEM_CLOCK_HZ <= 150000000U
+        #define HW_FLASH_LATENCY FLASH_LATENCY_4
+    #else
+        #define HW_FLASH_LATENCY FLASH_LATENCY_5
+    #endif
+
+    #if RTOS_SYSTEM_CLOCK_HZ > 90000000U
+        #define HW_APB1_DIV RCC_HCLK_DIV4
+        #define HW_APB2_DIV RCC_HCLK_DIV2
+    #elif RTOS_SYSTEM_CLOCK_HZ > 45000000U
+        #define HW_APB1_DIV RCC_HCLK_DIV2
+        #define HW_APB2_DIV RCC_HCLK_DIV1
+    #else
+        #define HW_APB1_DIV RCC_HCLK_DIV1
+        #define HW_APB2_DIV RCC_HCLK_DIV1
+    #endif
+
+    /* Validate that the requested frequency is exactly achievable */
+    #if (((16000000U / HW_PLLM) * HW_PLLN) / HW_PLLP_VAL) != RTOS_SYSTEM_CLOCK_HZ
+        #error "RTOS_SYSTEM_CLOCK_HZ cannot be accurately generated from 16MHz HSI with this simple algorithm."
+    #endif
+#endif
+
 static void SystemClock_Config(void)
 {
     RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -63,13 +119,26 @@ static void SystemClock_Config(void)
 
     /* Configure the main internal regulator output voltage */
     __HAL_RCC_PWR_CLK_ENABLE();
-    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
+    /* SCALE1 supports up to 180MHz */
+    __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
 
     /* Initialize the RCC Oscillators */
     RCC_OscInitStruct.OscillatorType      = RCC_OSCILLATORTYPE_HSI;
     RCC_OscInitStruct.HSIState            = RCC_HSI_ON;
     RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+
+#if !HW_USE_PLL
     RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_NONE;
+#else
+    RCC_OscInitStruct.PLL.PLLState        = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource       = RCC_PLLSOURCE_HSI;
+    RCC_OscInitStruct.PLL.PLLM            = HW_PLLM;
+    RCC_OscInitStruct.PLL.PLLN            = HW_PLLN;
+    RCC_OscInitStruct.PLL.PLLP            = HW_PLLP;
+    RCC_OscInitStruct.PLL.PLLQ            = 7;
+    RCC_OscInitStruct.PLL.PLLR            = 2;
+#endif
+
     if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
     {
         Error_Handler();
@@ -77,15 +146,24 @@ static void SystemClock_Config(void)
 
     /* Initialize the CPU, AHB and APB buses clocks */
     RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_HSI;
-    RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+#if !HW_USE_PLL
+    RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_HSI;
+#else
+    RCC_ClkInitStruct.SYSCLKSource   = RCC_SYSCLKSOURCE_PLLCLK;
+#endif
+
+    RCC_ClkInitStruct.AHBCLKDivider  = RCC_SYSCLK_DIV1;
+    RCC_ClkInitStruct.APB1CLKDivider = HW_APB1_DIV;
+    RCC_ClkInitStruct.APB2CLKDivider = HW_APB2_DIV;
+
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, HW_FLASH_LATENCY) != HAL_OK)
     {
         Error_Handler();
     }
+
+    /* Update SystemCoreClock variable to match new frequency */
+    SystemCoreClockUpdate();
 }
 
 static void MX_GPIO_Init(void)

@@ -26,6 +26,7 @@ function(add_kartos_variant name)
 
     target_link_libraries(${name} PRIVATE
         kartos::kernel
+        kartos::board_support
         kartos::arch_${KARTOS_ARCH}
         kartos::mcu_${KARTOS_MCU_FAMILY}
         kartos::board)

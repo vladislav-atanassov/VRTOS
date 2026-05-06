@@ -11,7 +11,6 @@ add_library(kartos_kernel STATIC
     ${_K}/core/memory.c
     ${_K}/logging/klog.c
     ${_K}/logging/log_flush_task.c
-    ${_K}/logging/uart_tx.c
     ${_K}/logging/ulog.c
     ${_K}/profiling/prof_trace.c
     ${_K}/profiling/profiling.c
@@ -27,7 +26,6 @@ add_library(kartos_kernel STATIC
     ${_K}/task/task_notify.c
     ${_K}/timer/timer.c
     ${_K}/timer/timer_list.c
-    ${_K}/utils/hardware_env.c
     ${_K}/utils/ring_buffer.c
     ${_K}/utils/rtos_assert.c)
 add_library(kartos::kernel ALIAS kartos_kernel)

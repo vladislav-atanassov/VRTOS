@@ -5,6 +5,7 @@
 
 #include <stddef.h>
 
+#include "config.h"    // IWYU pragma: keep
 #include "stm32f4xx.h" // IWYU pragma: keep
 
 void rtos_profiling_init(void)
@@ -71,14 +72,7 @@ void rtos_profiling_record(rtos_profile_stat_t *stat, uint32_t cycles)
 
 static uint32_t cycles_to_us(uint32_t cycles)
 {
-    /* Avoid division by zero and handle potential overflow */
-    if (SystemCoreClock == 0)
-    {
-        return 0;
-    }
-    /* cycles * 1000000 / SystemCoreClock, but avoid overflow by dividing first */
-    /* For 16MHz clock: 1 cycle = 0.0625 us, so cycles / 16 = us */
-    return (cycles / (SystemCoreClock / 1000000U));
+    return cycles / (RTOS_CPU_CLOCK_HZ / 1000000U);
 }
 
 void rtos_profiling_snapshot(const rtos_profile_stat_t *stat, rtos_profile_snapshot_t *out)

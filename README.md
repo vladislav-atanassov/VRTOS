@@ -404,10 +404,13 @@ KARTOS/
 │       └── port.c         # Context switch, critical sections
 ├── boards/                # Board-specific configuration
 │   ├── stm32f446re_nucleo/  # STM32F446RE Nucleo
-│   │   ├── board.cmake    # CMake toolchain/target settings
+│   │   ├── board.cmake    # CMake board descriptor + kartos::board_support STATIC target
+│   │   ├── hardware_env.c # Clock/GPIO/LED bootstrap (BSP — not required by the kernel)
+│   │   ├── hardware_env.h # Bootstrap API + hardware_env_cpu_clock_hz()
+│   │   ├── uart_tx.c      # UART transport implementation (BSP)
 │   │   ├── rtos_config.h  # Board RTOS overrides
 │   │   ├── memory_map.h   # Flash/SRAM layout (shared with linker)
-│   │   ├── clock_config.h # Clock aliases
+│   │   ├── clock_config.h # Clock aliases (RTOS_CPU_CLOCK_HZ, RTOS_CYCLES_PER_TICK)
 │   │   ├── linker.ld.in   # Preprocessable linker script template
 │   │   └── openocd.cfg    # OpenOCD flash/debug configuration
 │   ├── stm32f401re_nucleo/  # STM32F401RE Nucleo (portability target)
@@ -448,7 +451,7 @@ KARTOS/
 │   │   ├── timer.c        # Timer API
 │   │   └── timer_list.c   # Active timer list management
 │   ├── logging/           # Logging subsystem
-│   │   ├── uart_tx.c/h    # UART TX driver (SPSC ring buffer + ISR)
+│   │   ├── uart_tx.h      # UART transport contract (HAL-free; .c implementation lives in BSP)
 │   │   ├── klog.c/h       # High-performance deferred kernel logger
 │   │   ├── ulog.c/h       # User-facing string logger
 │   │   └── log_flush_task.c/h  # Flush task (formats KLog and drains ULog)
@@ -457,8 +460,7 @@ KARTOS/
 │   │   └── prof_trace.c/h # Profiling trace ring buffer
 │   ├── utils/             # Shared utilities
 │   │   ├── ring_buffer.c/h  # General-purpose ring buffer
-│   │   ├── rtos_assert.c/h  # Assertions
-│   │   └── hardware_env.c/h # Hardware initialization
+│   │   └── rtos_assert.c/h  # Assertions
 │   └── examples/          # Example applications
 │       ├── basic_blinky/
 │       ├── producer_consumer/
