@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kartos"
+version = "0.1.0"
+description = "KARTOS build, upload, monitor, and test CLI"
+requires-python = ">=3.9"
+dependencies = ["pyserial>=3.5"]
+
+[project.scripts]
+kartos = "kartos.__main__:main"
+
+[tool.setuptools]
+package-dir = {"kartos" = "."}
+packages = ["kartos"]

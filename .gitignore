@@ -9,3 +9,9 @@
 compile_commands.json
 # CMake build trees
 build/
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/

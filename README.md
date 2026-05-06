@@ -486,8 +486,9 @@ KARTOS/
 ├── docs/                  # Documentation
 │   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/
-│   └── test/              # Test automation
-│       ├── test_runner.py  # Automated flash, capture, and verdict analysis
+│   ├── kartos/            # KARTOS CLI — invoke as: python -m kartos <subcommand>
+│   │   └── __main__.py    # build, upload, monitor, test, configure, list, clean
+│   └── test/              # Supporting utilities
 │       └── log_parser.py   # Parse serial logs to CSV
 ├── CMakeLists.txt         # Root build file
 ├── CMakePresets.json      # Configure + build presets for all boards/variants
@@ -539,7 +540,7 @@ and uncomment the values you need to override. See [docs/porting_guide.md](docs/
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 ```
 
-> **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only. If you change it, pass the same baud rate to `test_runner.py --baud` or your serial monitor. Mismatched values produce garbled serial output.
+> **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only. If you change it, pass the same baud rate to `python -m kartos test -b <baud>` or your serial monitor. Mismatched values produce garbled serial output.
 
 ### Port-Layer Constants (`port_priv.h`)
 
@@ -578,7 +579,7 @@ cmake --build --preset basic_blinky
 cmake --build --preset flash-basic_blinky
 
 # Run automated scheduler test (flash + capture + verdict)
-python tools/test/test_runner.py test_scheduler_rr_state --duration 10
+python -m kartos test -e test_scheduler_rr_state --duration 10
 ```
 
 ### Available Environments
@@ -613,24 +614,48 @@ python tools/test/test_runner.py test_scheduler_rr_state --duration 10
 - `bench_queue` - Queue send/receive latency
 - `bench_semaphore` - Semaphore signal/wait latency
 
-## Test Automation
+## KARTOS CLI
 
-The test suite includes automated validation of scheduler behavior:
+`tools/kartos/` is the project CLI. Run it from the repo root with:
+
+```bash
+python -m kartos <subcommand> [options]
+```
+
+The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc` file) selects the target board; defaults to `stm32f446re_nucleo`.
+
+### Subcommands
+
+| Subcommand | Key options | Description |
+| --- | --- | --- |
+| `build` | `-e VARIANT` | CMake build for a named variant |
+| `upload` | `-e VARIANT` | Build + OpenOCD flash |
+| `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
+| `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
+| `configure` | | Re-run `cmake --preset <board>` |
+| `list` | | Print available boards and variant names |
+| `clean` | | Delete the board's build directory |
 
 ### Test Workflow
 
 1. **Upload firmware** to STM32 board
 2. **Capture serial logs** (tab-delimited format)
-3. **Parse logs** to CSV format
-4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL:N` line that the runner detects and returns as the exit code
+3. **Parse logs** to CSV format (`tools/test/log_parser.py`)
+4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL` line that `test` detects and returns as the exit code
 
-### Running Tests
+### Usage
 
 ```bash
 # Automated end-to-end test (upload, capture, verdict)
-python tools/test/test_runner.py test_scheduler_rr_state --duration 10
+python -m kartos test -e test_scheduler_rr_state --duration 10
 
-# Parse a captured log file manually
+# Capture from an already-running board without reflashing
+python -m kartos test -e basic_blinky --skip-upload --skip-analysis --duration 8
+
+# Live serial monitor (auto-detects ST-Link COM port)
+python -m kartos monitor
+
+# Parse a captured log file to CSV
 python tools/test/log_parser.py captured_log.txt -o parsed.csv
 ```
 
