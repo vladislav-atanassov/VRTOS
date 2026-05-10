@@ -51,10 +51,10 @@ A modular, educational Real-Time Operating System (RTOS) implementation for the 
 ├─────────────┴──────────────────────────┤
 │             Kernel Core                │
 │  (Context Switch, Tick, State Mgmt)    │
-├────────────────────────────────────────┤
-│            Porting Layer               │
-│             (Cortex-M4)                │
-├────────────────────────────────────────┤
+├──────────────────┬─────────────────────┤
+│   Porting Layer  │  Board Support Pkg  │
+│    (Cortex-M4)   │  (Clock, UART, LED) │
+├──────────────────┴─────────────────────┤
 │         Hardware Abstraction           │
 │          (STM32F446RE HAL)             │
 └────────────────────────────────────────┘
@@ -92,30 +92,164 @@ struct rtos_scheduler {
 };
 ```
 
+## Building and Running
+
+### Prerequisites
+
+- **arm-none-eabi-gcc** toolchain (≥ 10.x)
+- **CMake** ≥ 3.21
+- **Ninja** build system
+- **OpenOCD** (for flashing; PlatformIO's bundled copy is auto-detected)
+- **Python 3.x** (for the `kartos` CLI)
+- **STM32F446RE Nucleo board** with on-board ST-Link
+
+### Python environment (one-time)
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate      # Windows
+# source .venv/bin/activate  # Linux/Mac
+
+pip install -e .
+```
+
+<details>
+<summary>Windows: execution policy error on activate</summary>
+
+If PowerShell blocks `.venv\Scripts\Activate.ps1` with a `SecurityError`, run this once per user account:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+`RemoteSigned` lets locally-created scripts run without a signature while still requiring downloaded scripts to be signed. No admin rights needed.
+
+</details>
+
+After activation, `kartos` is available for the lifetime of the venv:
+
+```bash
+kartos list
+kartos test -e basic_blinky --duration 8
+kartos monitor
+```
+
+### Quick Start
+
+```bash
+# Configure for the STM32F446RE Nucleo board
+cmake --preset stm32f446re_nucleo
+
+# Build the basic blinky example
+cmake --build --preset basic_blinky
+
+# Flash to the board
+cmake --build --preset flash-basic_blinky
+
+# Run automated scheduler test (flash + capture + verdict)
+kartos test -e test_scheduler_rr_state --duration 10
+```
+
+### Available Environments
+
+**Examples**:
+
+- `basic_blinky` - Simple LED blinking demonstration
+- `producer_consumer` - Queue-based sensor data processing
+- `profiling_demo` - Cycle counter profiling example
+- `fpu_context_test` - FPU context preservation verification
+
+**Scheduler Tests**:
+
+- `test_scheduler_preemptive_state` - Preemptive priority scheduling invariants
+- `test_scheduler_cooperative_state` - Cooperative scheduling invariants
+- `test_scheduler_rr_state` - Round-robin scheduling invariants
+
+**Integration Tests**:
+
+- `test_mutex_state` - Mutex state and priority inheritance invariants
+- `test_semaphore_state` - Counting semaphore invariants
+- `test_queue_state` - Queue blocking and wake invariants
+- `test_event_group_state` - Event group bit-wait invariants
+- `test_notification_state` - Task notification invariants
+- `test_task_state_transitions` - Task lifecycle state transitions
+- `test_tickless_idle` - Tickless idle: tick/uptime advance correctly across delays from 1 ms to 2 s
+
+**Benchmarks**:
+
+- `bench_context_switch` - Context switch cycle measurement
+- `bench_mutex` - Mutex lock/unlock latency
+- `bench_queue` - Queue send/receive latency
+- `bench_semaphore` - Semaphore signal/wait latency
+
+## KARTOS CLI
+
+`tools/kartos/` is the project CLI. Run it from the repo root with:
+
+```bash
+python -m kartos <subcommand> [options]
+```
+
+The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc` file) selects the target board; defaults to `stm32f446re_nucleo`.
+
+### Subcommands
+
+| Subcommand | Key options | Description |
+| --- | --- | --- |
+| `build` | `-e VARIANT` | CMake build for a named variant |
+| `upload` | `-e VARIANT` | Build + OpenOCD flash |
+| `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
+| `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
+| `configure` | | Re-run `cmake --preset <board>` |
+| `list` | | Print available boards and variant names |
+| `clean` | | Delete the board's build directory |
+
+### Test Workflow
+
+1. **Upload firmware** to STM32 board
+2. **Capture serial logs** (tab-delimited format)
+3. **Parse logs** to CSV format (`tools/test/log_parser.py`)
+4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL` line that `test` detects and returns as the exit code
+
+### Usage
+
+```bash
+# Automated end-to-end test (upload, capture, verdict)
+python -m kartos test -e test_scheduler_rr_state --duration 10
+
+# Capture from an already-running board without reflashing
+python -m kartos test -e basic_blinky --skip-upload --skip-analysis --duration 8
+
+# Live serial monitor (auto-detects ST-Link COM port)
+python -m kartos monitor
+
+# Parse a captured log file to CSV
+python tools/test/log_parser.py captured_log.txt -o parsed.csv
+```
+
+### Log Format
+
+Tab-delimited structured logging for easy parsing:
+
+```csv
+timestamp_ms    level   file    line    func    event   context
+00000234        TASK    main.c  45      task1   START   Task1
+00000234        TASK    main.c  47      task1   RUN     Task1
+00000234        TASK    main.c  52      task1   DELAY   Task1
+```
+
 ## Performance (STM32F446RE @ 84 MHz)
 
-Captured from system profiling and the automated benchmark suite:
-
-### Kernel Core Latencies
-
-| Metric | Min | Max | Avg | Description |
-|--------|-----|-----|-----|-------------|
-| **ContextSwitch** | 451 cyc (5 µs) | 1214 cyc (14 µs) | 511 cyc (6 µs) | Task yield to restore |
-| **PendSV_Full** | 553 cyc (7 µs) | 1433 cyc (17 µs) | 706 cyc (8 µs) | Full PendSV handler |
-| **Scheduler** | 30 cyc (<1 µs) | 765 cyc (9 µs) | 65 cyc (<1 µs) | `get_next_task()` decision |
-| **TickHandler** | 350 cyc (4 µs) | 519 cyc (6 µs) | 367 cyc (4 µs) | SysTick ISR processing |
-| **TickJitter** | 0 cyc (0 µs) | 4 cyc (<1 µs) | 1 cyc (<1 µs) | SysTick timing deviation |
-| **SchedLatency** | 862 cyc (10 µs) | 880 cyc (10 µs) | 862 cyc (10 µs) | Ready → Running delay |
-
-### Synchronization & IPC Primitives
+Measured on hardware via the automated benchmark suite (`bench_*` variants):
 
 | Primitive | Operation | Min | Max | Avg | Description |
-|-----------|-----------|-----|-----|-----|-------------|
-| **Mutex** | Uncontended | 216 cyc (3 µs) | 898 cyc (11 µs) | 229 cyc (3 µs) | Fast-path lock/unlock |
-| **Mutex** | Contended Wake | 1282 cyc (15 µs) | 2690 cyc (32 µs) | 1341 cyc (16 µs) | Waking a blocked task |
-| **Semaphore** | Uncontended | 181 cyc (2 µs) | 181 cyc (2 µs) | 181 cyc (2 µs) | Fast-path take/give |
-| **Semaphore** | Wake Latency | 1247 cyc (15 µs) | 1247 cyc (15 µs) | 1247 cyc (15 µs) | Waking a blocked task |
-| **Queue** | Delivery | 1424 cyc (17 µs) | 2800 cyc (33 µs) | 1531 cyc (18 µs) | Send to blocked receiver |
+| --- | --- | --- | --- | --- | --- |
+| **Context Switch** | Yield → restore | 656 cyc (7 µs) | 810 cyc (9 µs) | 738 cyc (8 µs) | Task yield to task restore (2002 switches) |
+| **Mutex** | Uncontended | 351 cyc (4 µs) | 351 cyc (4 µs) | 351 cyc (4 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended wake | 1948 cyc (23 µs) | 2903 cyc (34 µs) | 1966 cyc (23 µs) | Unlock-to-wake latency with PIP |
+| **Semaphore** | Uncontended | 264 cyc (3 µs) | 264 cyc (3 µs) | 264 cyc (3 µs) | Fast-path take/give |
+| **Semaphore** | Wake latency | 1864 cyc (22 µs) | 1864 cyc (22 µs) | 1864 cyc (22 µs) | Signal-to-wake latency |
+| **Queue** | Delivery | 2103 cyc (25 µs) | 2365 cyc (28 µs) | 2108 cyc (25 µs) | Send to blocked receiver |
 
 ## Scheduling Policies
 
@@ -555,121 +689,6 @@ not in `config.h`:
 #define PORT_IRQ_PRIORITY_HIGH     (0x40)  // Can preempt RTOS
 #define PORT_IRQ_PRIORITY_KERNEL   (0x80)  // SysTick level
 #define PORT_IRQ_PRIORITY_PENDSV   (0xF0)  // Lowest (context switch)
-```
-
-## Building and Running
-
-### Prerequisites
-
-- **arm-none-eabi-gcc** toolchain (≥ 10.x)
-- **CMake** ≥ 3.21
-- **Ninja** build system
-- **OpenOCD** (for flashing; PlatformIO's bundled copy is auto-detected)
-- **Python 3.x** with `pyserial` (for test automation: `pip install pyserial`)
-- **STM32F446RE Nucleo board** with on-board ST-Link
-
-### Quick Start
-
-```bash
-# Configure for the STM32F446RE Nucleo board
-cmake --preset stm32f446re_nucleo
-
-# Build the basic blinky example
-cmake --build --preset basic_blinky
-
-# Flash to the board
-cmake --build --preset flash-basic_blinky
-
-# Run automated scheduler test (flash + capture + verdict)
-python -m kartos test -e test_scheduler_rr_state --duration 10
-```
-
-### Available Environments
-
-**Examples**:
-
-- `basic_blinky` - Simple LED blinking demonstration
-- `producer_consumer` - Queue-based sensor data processing
-- `profiling_demo` - Cycle counter profiling example
-- `fpu_context_test` - FPU context preservation verification
-
-**Scheduler Tests**:
-
-- `test_scheduler_preemptive_state` - Preemptive priority scheduling invariants
-- `test_scheduler_cooperative_state` - Cooperative scheduling invariants
-- `test_scheduler_rr_state` - Round-robin scheduling invariants
-
-**Integration Tests**:
-
-- `test_mutex_state` - Mutex state and priority inheritance invariants
-- `test_semaphore_state` - Counting semaphore invariants
-- `test_queue_state` - Queue blocking and wake invariants
-- `test_event_group_state` - Event group bit-wait invariants
-- `test_notification_state` - Task notification invariants
-- `test_task_state_transitions` - Task lifecycle state transitions
-- `test_tickless_idle` - Tickless idle: tick/uptime advance correctly across delays from 1 ms to 2 s
-
-**Benchmarks**:
-
-- `bench_context_switch` - Context switch cycle measurement
-- `bench_mutex` - Mutex lock/unlock latency
-- `bench_queue` - Queue send/receive latency
-- `bench_semaphore` - Semaphore signal/wait latency
-
-## KARTOS CLI
-
-`tools/kartos/` is the project CLI. Run it from the repo root with:
-
-```bash
-python -m kartos <subcommand> [options]
-```
-
-The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc` file) selects the target board; defaults to `stm32f446re_nucleo`.
-
-### Subcommands
-
-| Subcommand | Key options | Description |
-| --- | --- | --- |
-| `build` | `-e VARIANT` | CMake build for a named variant |
-| `upload` | `-e VARIANT` | Build + OpenOCD flash |
-| `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
-| `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
-| `configure` | | Re-run `cmake --preset <board>` |
-| `list` | | Print available boards and variant names |
-| `clean` | | Delete the board's build directory |
-
-### Test Workflow
-
-1. **Upload firmware** to STM32 board
-2. **Capture serial logs** (tab-delimited format)
-3. **Parse logs** to CSV format (`tools/test/log_parser.py`)
-4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL` line that `test` detects and returns as the exit code
-
-### Usage
-
-```bash
-# Automated end-to-end test (upload, capture, verdict)
-python -m kartos test -e test_scheduler_rr_state --duration 10
-
-# Capture from an already-running board without reflashing
-python -m kartos test -e basic_blinky --skip-upload --skip-analysis --duration 8
-
-# Live serial monitor (auto-detects ST-Link COM port)
-python -m kartos monitor
-
-# Parse a captured log file to CSV
-python tools/test/log_parser.py captured_log.txt -o parsed.csv
-```
-
-### Log Format
-
-Tab-delimited structured logging for easy parsing:
-
-```csv
-timestamp_ms    level   file    line    func    event   context
-00000234        TASK    main.c  45      task1   START   Task1
-00000234        TASK    main.c  47      task1   RUN     Task1
-00000234        TASK    main.c  52      task1   DELAY   Task1
 ```
 
 ## Examples
