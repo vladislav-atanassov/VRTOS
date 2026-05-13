@@ -9,8 +9,10 @@
 
 #include <string.h>
 
+/* .type is set by rtos_scheduler_init() once the variant's
+ * kernel_scheduler_choice symbol has been resolved at link time. */
 rtos_scheduler_instance_t g_scheduler_instance = {
-    .vtable = NULL, .type = RTOS_SCHEDULER_TYPE, .private_data = NULL, .initialized = false};
+    .vtable = NULL, .private_data = NULL, .initialized = false};
 
 /* Scheduler registry - add new schedulers here */
 static const struct

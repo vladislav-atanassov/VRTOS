@@ -16,6 +16,11 @@ rtos_kernel_cb_t g_kernel = {.state               = RTOS_KERNEL_STATE_INACTIVE,
                              .next_task           = NULL,
                              .scheduler_suspended = 0};
 
+/* Scheduler choice for this binary, supplied by a per-variant TU generated
+ * by add_kartos_variant() (cmake/kartos_add_variant.cmake). Each ELF gets
+ * exactly one definition; missing it is a link-time error. */
+extern const rtos_scheduler_type_t kernel_scheduler_choice;
+
 /**
  * @brief Initialize the RTOS system
  */
@@ -50,7 +55,7 @@ rtos_status_t rtos_init(void)
         return status;
     }
 
-    status = rtos_scheduler_init(RTOS_SCHEDULER_TYPE);
+    status = rtos_scheduler_init(kernel_scheduler_choice);
     if (status != RTOS_SUCCESS)
     {
         return status;

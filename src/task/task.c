@@ -295,9 +295,10 @@ static inline void handle_idle_sleep(void)
 
 static inline void handle_idle_yield(void)
 {
-#if (RTOS_SCHEDULER_TYPE == RTOS_SCHEDULER_COOPERATIVE)
-    rtos_yield();
-#endif
+    if (rtos_scheduler_get_type() == RTOS_SCHEDULER_COOPERATIVE)
+    {
+        rtos_yield();
+    }
 }
 
 /**

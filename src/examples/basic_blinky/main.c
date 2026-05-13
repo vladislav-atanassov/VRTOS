@@ -88,7 +88,8 @@ static void memory_mang_task(void *param)
 }
 
 /**
- * What you should see with the different scheduling policies is the following outputs (change RTOS_SCHEDULER_TYPE in /KARTOS/config.h)
+ * What you should see with the different scheduling policies is the following outputs
+ * (change SCHEDULER for this variant in cmake/variants.cmake)
  * 
  * +-------------------------------------------+------------------------------------------+------------------------------------------+
  * | Preemptive (RTOS_SCHEDULER_PREEMPTIVE_SP) | Cooperative (RTOS_SCHEDULER_COOPERATIVE) | Round Round (RTOS_SCHEDULER_ROUND_ROBIN) |
