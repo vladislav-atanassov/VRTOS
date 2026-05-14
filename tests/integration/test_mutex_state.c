@@ -13,7 +13,6 @@
 #include "task.h"
 #include "task_priv.h" /* rtos_tcb_t - needed to read base_priority directly */
 #include "test_common.h"
-#include "test_log.h" /* thread-safe ulog overrides for test_log_task/framework */
 #include "timer.h"
 #include "uart_tx.h"
 

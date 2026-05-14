@@ -2,32 +2,40 @@
 #define TEST_COMMON_H
 
 #include "KARTOS.h"         // IWYU pragma: keep (rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE)
+#include "log_common.h"     // LOG_BASENAME
 #include "log_flush_task.h" // log_flush_task
 #include "rtos_port.h"      // rtos_port_enter_critical, rtos_port_exit_critical
 #include "task.h"           // rtos_task_create
 #include "timer.h"          // rtos_timer_handle_t, rtos_timer_create, rtos_timer_start
-#include "ulog.h"           // ulog_init
-
-/*
- * NOTE: We deliberately do NOT include test_log.h here.
- * test_log.h must be included AFTER uart_tx.h in every .c file
- * so that its #undef / #define sequence correctly overrides the
- * printf-based macros with ulog-based ones.  Including it here
- * would process the #undefs before uart_tx.h is parsed, allowing
- * uart_tx.h to re-define the printf versions and causing
- * reentrancy hangs under preemption.
- *
- * The macros below (TEST_ASSERT, test_emit_verdict, etc.) use
- * test_log_task / test_log_framework, which are only resolved
- * at the call site in each .c file — by which point test_log.h
- * has already run.
- */
+#include "ulog.h"           // ulog_init, ulog, ULOG_LEVEL_INFO
 
 #include <stdbool.h>
 #include <stdint.h>
 
 /* Static per-TU: each test .c file gets its own copy (intentional). */
 static volatile uint32_t g_fail_count = 0;
+
+/* =================== Test Logging =================== */
+
+/**
+ * @brief Thread-safe test log — writes to the ulog ring buffer.
+ *
+ * Tab-delimited so the Python test_runner parser can read it. File path is
+ * reduced to its basename at compile time via @ref LOG_BASENAME.
+ *
+ * NOT ISR-safe — call only from task context.
+ */
+#define test_log(level, tag, event, ctx)                                                                               \
+    ulog(ULOG_LEVEL_INFO, "%08lu\t%s\t%s\t%d\t%s\t%s\t%s", (unsigned long) rtos_get_tick_count(), tag,                 \
+         LOG_BASENAME(__FILE__), __LINE__, __func__, event, ctx)
+
+/** @brief Log task lifecycle events: "START", "RUN", "DELAY", "END". */
+#define test_log_task(event, task_name) test_log(LOG_LEVEL_INFO, "TASK", event, task_name)
+
+/** @brief Log framework events: "BEGIN", "END", "TIMEOUT". */
+#define test_log_framework(event, test_name) test_log(LOG_LEVEL_INFO, "TEST", event, test_name)
+
+/* =================== Assertions =================== */
 
 /* Does NOT halt on failure — all invariants are checked. */
 #define TEST_ASSERT(condition, description)                                                                            \
@@ -81,12 +89,12 @@ static volatile uint32_t g_fail_count = 0;
         if (g_fail_count == 0)                                                                                               \
         {                                                                                                                    \
             _vlen = snprintf(_vline, sizeof(_vline), "%08lu\tTEST\t%s\t%d\t%s\tRESULT\tPASS\r\n",                            \
-                             (unsigned long) rtos_get_tick_count(), __FILE__, __LINE__, __func__);                           \
+                             (unsigned long) rtos_get_tick_count(), LOG_BASENAME(__FILE__), __LINE__, __func__);             \
         }                                                                                                                    \
         else                                                                                                                 \
         {                                                                                                                    \
             _vlen = snprintf(_vline, sizeof(_vline), "%08lu\tTEST\t%s\t%d\t%s\tRESULT\tFAIL:%lu\r\n",                        \
-                             (unsigned long) rtos_get_tick_count(), __FILE__, __LINE__, __func__,                            \
+                             (unsigned long) rtos_get_tick_count(), LOG_BASENAME(__FILE__), __LINE__, __func__,              \
                              (unsigned long) g_fail_count);                                                                  \
         }                                                                                                                    \
         if (_vlen > 0 && _vlen < (int) sizeof(_vline))                                                                       \
@@ -117,6 +125,8 @@ static volatile uint32_t g_fail_count = 0;
             rtos_port_exit_critical();                                                                                       \
         }                                                                                                                    \
     } while (0)
+
+/* =================== Test Bring-Up Helpers =================== */
 
 /**
  * @brief Startup hold time before test begins

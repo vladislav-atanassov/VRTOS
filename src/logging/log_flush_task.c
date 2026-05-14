@@ -2,6 +2,7 @@
 
 #include "KARTOS.h"
 #include "klog.h"
+#include "log_common.h"
 #include "task.h"
 #include "uart_tx.h"
 #include "ulog.h"
@@ -13,14 +14,6 @@ static char level_char(uint8_t lvl)
 {
     static const char t[] = {'F', 'E', 'W', 'I', 'D', 'T'};
     return (lvl < 6) ? t[lvl] : '?';
-}
-
-static const char *strip_path(const char *filepath)
-{
-    const char *p = strrchr(filepath, '/');
-    if (!p)
-        p = strrchr(filepath, '\\');
-    return p ? p + 1 : filepath;
 }
 
 /* Drain batch size — how many records to pull per iteration */
@@ -50,7 +43,7 @@ void log_flush_task(void *param)
         {
             const log_packet_t *p         = &batch[i];
             const char         *task_name = (p->cpu_context & 0x80) ? "ISR" : rtos_task_get_name(p->cpu_context);
-            const char         *filename  = strip_path(p->file);
+            const char         *filename  = log_basename(p->file);
             char                buf[160];
 
             /* Decompose us into seconds.ms.us for human-readable timestamp.

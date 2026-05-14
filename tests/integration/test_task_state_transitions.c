@@ -11,7 +11,6 @@
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
 #include "test_common.h"
-#include "test_log.h" /* thread-safe ulog overrides for test_log_task/framework */
 #include "timer.h"
 #include "uart_tx.h"
 

@@ -1,7 +1,5 @@
-/*
- * Include test_log.h AFTER uart_tx.h in each benchmark .c file — not here.
- * Results are printed via rtos_profiling_print_stat() after all iterations.
- */
+/* Benchmark results are printed via rtos_profiling_print_stat() after all
+ * iterations; the test_log macros from test_common.h are also available. */
 
 #ifndef BENCH_COMMON_H
 #define BENCH_COMMON_H
