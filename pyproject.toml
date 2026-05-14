@@ -13,5 +13,5 @@ dependencies = ["pyserial>=3.5"]
 kartos = "kartos.__main__:main"
 
 [tool.setuptools]
-package-dir = {"kartos" = "."}
+package-dir = {"kartos" = "tools/kartos"}
 packages = ["kartos"]
