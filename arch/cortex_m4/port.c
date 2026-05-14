@@ -350,6 +350,15 @@ __attribute__((naked)) void PendSV_Handler(void)
 
 void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
 {
+    /* Known-good CTRL value: processor clock, tick interrupt enabled, counter
+     * enabled. Used as an absolute write rather than RMW so we can't lose
+     * TICKINT/CLKSOURCE due to a transient bad state or torn write elsewhere. */
+    const uint32_t systick_ctrl_running = SysTick_CTRL_CLKSOURCE_Msk
+                                        | SysTick_CTRL_TICKINT_Msk
+                                        | SysTick_CTRL_ENABLE_Msk;
+    const uint32_t systick_ctrl_stopped = SysTick_CTRL_CLKSOURCE_Msk
+                                        | SysTick_CTRL_TICKINT_Msk;
+
     uint32_t reload_value;
     uint32_t sleep_ticks;
     uint32_t complete_tick_periods;
@@ -364,8 +373,8 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
         return;
     }
 
-    /* Stop SysTick */
-    SysTick->CTRL &= ~SysTick_CTRL_ENABLE_Msk;
+    /* Stop SysTick (absolute write — preserves TICKINT/CLKSOURCE deterministically) */
+    SysTick->CTRL = systick_ctrl_stopped;
 
     /* The Cortex-M SysTick is 24-bit */
     uint32_t max_sleep_ticks = 0x00FFFFFFUL / cycles_per_tick;
@@ -381,17 +390,17 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     SysTick->LOAD = reload_value;
     SysTick->VAL  = 0;
 
-    /* Restart SysTick */
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    /* Restart SysTick at the long reload */
+    SysTick->CTRL = systick_ctrl_running;
 
     /* Sleep */
     __asm volatile("wfi");
 
     /* Wake Up */
 
-    /* Stop SysTick to read VAL safely. Reading CTRL clears COUNTFLAG, so save it. */
+    /* Snapshot CTRL (reading clears COUNTFLAG), then stop SysTick to read VAL safely. */
     uint32_t ctrl = SysTick->CTRL;
-    SysTick->CTRL = ctrl & ~SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = systick_ctrl_stopped;
 
     uint32_t val = SysTick->VAL;
 
@@ -417,7 +426,7 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     /* Restore standard 1ms tick rate */
     SysTick->LOAD = cycles_per_tick - 1;
     SysTick->VAL  = 0;
-    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+    SysTick->CTRL = systick_ctrl_running;
 
     __enable_irq();
 }
