@@ -586,6 +586,7 @@ KARTOS/
 │   │   └── timer_list.c   # Active timer list management
 │   ├── logging/           # Logging subsystem
 │   │   ├── uart_tx.h      # UART transport contract (HAL-free; .c implementation lives in BSP)
+│   │   ├── log_common.h   # Shared path utilities: LOG_BASENAME (compile-time) and log_basename (runtime)
 │   │   ├── klog.c/h       # High-performance deferred kernel logger
 │   │   ├── ulog.c/h       # User-facing string logger
 │   │   └── log_flush_task.c/h  # Flush task (formats KLog and drains ULog)
@@ -609,6 +610,7 @@ KARTOS/
 │   │   ├── test_notification_state.c   # Task notification tests
 │   │   └── test_task_state_transitions.c # Task lifecycle tests
 │   ├── scheduler/         # Scheduler tests (one dir per policy)
+│   │   ├── test_common.h  # Shared test infrastructure: assertions, ulog-based logging macros, verdict emit
 │   │   ├── round_robin/
 │   │   ├── preemptive/
 │   │   └── cooperative/
@@ -628,6 +630,7 @@ KARTOS/
 │       └── log_parser.py   # Parse serial logs to CSV
 ├── CMakeLists.txt         # Root build file
 ├── CMakePresets.json      # Configure + build presets for all boards/variants
+├── pyproject.toml         # Python package config for the kartos CLI (pip install -e . from repo root)
 └── .clangd                # clangd cross-compilation settings
 ```
 
@@ -801,6 +804,15 @@ rtos_profiling_report_system_stats();
 
 KARTOS features a dual-tier logging architecture designed to provide extensive visibility without compromising real-time performance.
 
+### Shared Utilities (`log_common.h`)
+
+[src/logging/log_common.h](src/logging/log_common.h) provides two path-stripping helpers used by both the kernel logger and the test infrastructure:
+
+- **`LOG_BASENAME(literal)`** — compile-time macro using `__builtin_strrchr`; reduces `__FILE__` to a bare filename with zero runtime cost (GCC constant-folds it on string literals).
+- **`log_basename(path)`** — runtime inline function; walks the string and handles both `/` and `\` separators for portability.
+
+Both prevent long build-system paths from bloating log lines and overflowing fixed-size buffers.
+
 ### Kernel Logger (KLog)
 
 The `klog` system is designed for high-performance, internal RTOS tracing. It uses a deferred formatting approach to ensure zero allocation and ISR-safety.
@@ -831,3 +843,18 @@ The `ulog` system provides a standard, `printf`-style deferred logger for user a
 ulog_info("Connection established to %s", ip_addr);
 ulog_error("Failed to read sensor: %d", error_code);
 ```
+
+### Test Logger (`tests/scheduler/test_common.h`)
+
+All on-target tests use a structured, tab-delimited log format consumed by the Python test runner. The macros live in [tests/scheduler/test_common.h](tests/scheduler/test_common.h) and are built on top of `ulog` (not `printf`), making them safe under preemption:
+
+```c
+// Emits: <tick>\tTASK\t<file.c>\t<line>\t<func>\t<event>\t<context>
+test_log_task("START", "MyTask");
+test_log_task("ASSERT_PASS", "INV-EG2:AnyWoke");
+
+// Emits: <tick>\tTEST\t<file.c>\t<line>\t<func>\t<event>\t<test_name>
+test_log_framework("BEGIN", "EventGroupState");
+```
+
+`TEST_EMIT_VERDICT()` writes the final `RESULT PASS` / `RESULT FAIL:<N>` line by polling `USART2->DR` directly, bypassing the ring buffer to guarantee delivery even with interrupts disabled.
