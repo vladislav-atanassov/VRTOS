@@ -25,11 +25,13 @@ static char level_char(uint8_t lvl)
 /* ULog drain chunk size */
 #define ULOG_FLUSH_CHUNK 128
 
+static log_packet_t s_batch[KLOG_FLUSH_BATCH];
+static char         s_fmt_buf[160];
+static uint8_t      s_ulog_chunk[ULOG_FLUSH_CHUNK];
+
 void log_flush_task(void *param)
 {
     (void) param;
-
-    log_packet_t batch[KLOG_FLUSH_BATCH];
 
     while (1)
     {
@@ -37,14 +39,13 @@ void log_flush_task(void *param)
         uart_rx_process_commands();
 
         /* 1. Drain KLog — format and transmit each packet */
-        uint32_t n = klog_drain(batch, KLOG_FLUSH_BATCH);
+        uint32_t n = klog_drain(s_batch, KLOG_FLUSH_BATCH);
 
         for (uint32_t i = 0; i < n; i++)
         {
-            const log_packet_t *p         = &batch[i];
+            const log_packet_t *p         = &s_batch[i];
             const char         *task_name = (p->cpu_context & 0x80) ? "ISR" : rtos_task_get_name(p->cpu_context);
             const char         *filename  = log_basename(p->file);
-            char                buf[160];
 
             /* Decompose us into seconds.ms.us for human-readable timestamp.
              * Wraps every ~71 minutes (uint32_t us). */
@@ -60,29 +61,29 @@ void log_flush_task(void *param)
              *   %c                — single level character
              *   %s                — filename (stripped)
              *   %-4u              — line number, left-aligned in 4-char field */
-            int hlen = snprintf(buf, sizeof(buf), "%04lu.%03lu.%03lu [%-12s] [%-9s] %c %s:%-4u | ", (unsigned long) s,
+            int hlen = snprintf(s_fmt_buf, sizeof(s_fmt_buf),
+                                "%04lu.%03lu.%03lu [%-12s] [%-9s] %c %s:%-4u | ", (unsigned long) s,
                                 (unsigned long) ms, (unsigned long) us, task_name, p->module, level_char(p->level),
                                 filename, (unsigned) p->line);
 
-            if (hlen > 0 && hlen < (int) sizeof(buf))
+            if (hlen > 0 && hlen < (int) sizeof(s_fmt_buf))
             {
-                snprintf(buf + hlen, sizeof(buf) - (size_t) hlen, p->fmt, p->args[0], p->args[1], p->args[2],
-                         p->args[3]);
+                snprintf(s_fmt_buf + hlen, sizeof(s_fmt_buf) - (size_t) hlen, p->fmt, p->args[0], p->args[1],
+                         p->args[2], p->args[3]);
             }
 
-            strncat(buf, "\r\n", sizeof(buf) - strlen(buf) - 1);
-            uart_printf("%s", buf);
+            strncat(s_fmt_buf, "\r\n", sizeof(s_fmt_buf) - strlen(s_fmt_buf) - 1);
+            uart_printf("%s", s_fmt_buf);
         }
 
         /* 2. Drain ULog — pre-formatted strings, write directly to UART */
         {
-            uint8_t  ulog_chunk[ULOG_FLUSH_CHUNK];
             uint32_t ulog_bytes;
 
-            while ((ulog_bytes = ulog_drain(ulog_chunk, sizeof(ulog_chunk))) > 0)
+            while ((ulog_bytes = ulog_drain(s_ulog_chunk, sizeof(s_ulog_chunk))) > 0)
             {
                 extern int _write(int file, char *ptr, int len);
-                _write(1, (char *) ulog_chunk, (int) ulog_bytes);
+                _write(1, (char *) s_ulog_chunk, (int) ulog_bytes);
             }
         }
 
