@@ -541,7 +541,13 @@ rtos_status_t rtos_task_delete(rtos_task_handle_t task_handle)
         }
     }
 
-    task->state = RTOS_TASK_STATE_DELETED;
+    task->state         = RTOS_TASK_STATE_DELETED;
+    task->task_function = NULL;
+
+    if (g_task_count > 0)
+    {
+        g_task_count--;
+    }
 
     KLOGI("Task", "TaskDelete id=%u", task->task_id);
 
