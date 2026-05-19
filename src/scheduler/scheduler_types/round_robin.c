@@ -208,7 +208,15 @@ static void round_robin_update_delayed_tasks_internal(void)
 
 static rtos_task_handle_t round_robin_get_next_ready(void)
 {
-    return g_round_robin_data.ready_list;
+    rtos_tcb_t *best = NULL;
+    for (rtos_tcb_t *t = g_round_robin_data.ready_list; t != NULL; t = t->next)
+    {
+        if (best == NULL || t->priority > best->priority)
+        {
+            best = t;
+        }
+    }
+    return best;
 }
 
 static rtos_status_t round_robin_init(rtos_scheduler_instance_t *instance)
@@ -250,32 +258,58 @@ static rtos_task_handle_t round_robin_get_next_task(rtos_scheduler_instance_t *i
 }
 
 /**
- * For round robin, preemption occurs when:
- * 1. A new task becomes ready (basic check)
- * 2. The current task's time slice has expired (handled via tick handler)
+ * Priority-aware round-robin preemption
  */
 static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
-    if (instance == NULL)
+    if (instance == NULL || new_task == NULL)
     {
         return false;
     }
 
-    /* Only decrement the time slice on the tick path (current task still running).
-     * When a new task becomes ready, new_task != current_task — skip decrement
-     * to avoid depleting the slice faster than intended. */
-    if (new_task == g_kernel.current_task)
+    rtos_tcb_t *current = g_kernel.current_task;
+    if (current == NULL)
     {
-        if (g_round_robin_data.slice_remaining > 0)
-        {
-            g_round_robin_data.slice_remaining--;
-        }
+        return false;
+    }
 
-        if (g_round_robin_data.slice_remaining == 0 && g_round_robin_data.ready_count > 1)
+    /* Higher priority always wins — preempt the current task. */
+    if (new_task->priority > current->priority)
+    {
+        return true;
+    }
+
+    /* Lower priority can never preempt. */
+    if (new_task->priority < current->priority)
+    {
+        return false;
+    }
+
+    /* Equal priority: only advance the slice on the tick-driven path. */
+    rtos_tcb_t *first_at_prio = NULL;
+    for (rtos_tcb_t *t = g_round_robin_data.ready_list; t != NULL; t = t->next)
+    {
+        if (t->priority == new_task->priority)
         {
-            KLOGT("Sched/RR", "TimeSlice");
-            return true;
+            first_at_prio = t;
+            break;
         }
+    }
+
+    if (new_task != first_at_prio)
+    {
+        return false;
+    }
+
+    if (g_round_robin_data.slice_remaining > 0)
+    {
+        g_round_robin_data.slice_remaining--;
+    }
+
+    if (g_round_robin_data.slice_remaining == 0)
+    {
+        KLOGT("Sched/RR", "TimeSlice");
+        return true;
     }
 
     return false;

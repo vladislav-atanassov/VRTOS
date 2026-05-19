@@ -197,7 +197,15 @@ static void cooperative_update_delayed_tasks_internal(void)
 
 static rtos_task_handle_t cooperative_get_next_ready(void)
 {
-    return g_cooperative_data.ready_list;
+    rtos_tcb_t *best = NULL;
+    for (rtos_tcb_t *t = g_cooperative_data.ready_list; t != NULL; t = t->next)
+    {
+        if (best == NULL || t->priority > best->priority)
+        {
+            best = t;
+        }
+    }
+    return best;
 }
 
 static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
