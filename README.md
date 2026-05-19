@@ -147,7 +147,7 @@ cmake --build --preset basic_blinky
 cmake --build --preset flash-basic_blinky
 
 # Run automated scheduler test (flash + capture + verdict)
-kartos test -e test_scheduler_rr_state --duration 10
+kartos test -e test_scheduler_rr_suite --duration 10
 ```
 
 ### Available Environments
@@ -159,21 +159,20 @@ kartos test -e test_scheduler_rr_state --duration 10
 - `profiling_demo` - Cycle counter profiling example
 - `fpu_context_test` - FPU context preservation verification
 
-**Scheduler Tests**:
+**Scheduler Test Suites**:
 
-- `test_scheduler_preemptive_state` - Preemptive priority scheduling invariants
-- `test_scheduler_cooperative_state` - Cooperative scheduling invariants
-- `test_scheduler_rr_state` - Round-robin scheduling invariants
+- `test_scheduler_preemptive_suite` - Preemptive priority scheduling cases
+- `test_scheduler_cooperative_suite` - Cooperative scheduling cases
+- `test_scheduler_rr_suite` - Round-robin scheduling cases
 
-**Integration Tests**:
+**Integration Test Suites**:
 
-- `test_mutex_state` - Mutex state and priority inheritance invariants
-- `test_semaphore_state` - Counting semaphore invariants
-- `test_queue_state` - Queue blocking and wake invariants
-- `test_event_group_state` - Event group bit-wait invariants
-- `test_notification_state` - Task notification invariants
-- `test_task_state_transitions` - Task lifecycle state transitions
-- `test_tickless_idle` - Tickless idle: tick/uptime advance correctly across delays from 1 ms to 2 s
+- `test_mutex_suite` - Mutex ownership, blocking, and priority inheritance
+- `test_semaphore_suite` - Counting semaphore wait/signal cases
+- `test_queue_suite` - Queue blocking, wake, and ordering cases
+- `test_event_group_suite` - Event group bit-wait cases
+- `test_notify_suite` - Task notification cases
+- `test_task_state_suite` - Task lifecycle state transitions
 
 **Benchmarks**:
 
@@ -208,23 +207,20 @@ The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc`
 
 1. **Upload firmware** to STM32 board
 2. **Capture serial logs** (tab-delimited format)
-3. **Parse logs** to CSV format (`tools/test/log_parser.py`)
-4. **Analyze verdict** — each test emits a `RESULT:PASS` or `RESULT:FAIL` line that `test` detects and returns as the exit code
+3. **Parse logs** to CSV format (saved alongside the raw log under `tests/artifacts/`)
+4. **Analyze verdict** — each suite emits `CASE_RESULT` lines per test case and a final `SUITE_RESULT` line; `test` detects the suite verdict and exits non-zero on failure
 
 ### Usage
 
 ```bash
 # Automated end-to-end test (upload, capture, verdict)
-python -m kartos test -e test_scheduler_rr_state --duration 10
+python -m kartos test -e test_mutex_suite --duration 10
 
 # Capture from an already-running board without reflashing
 python -m kartos test -e basic_blinky --skip-upload --skip-analysis --duration 8
 
 # Live serial monitor (auto-detects ST-Link COM port)
 python -m kartos monitor
-
-# Parse a captured log file to CSV
-python tools/test/log_parser.py captured_log.txt -o parsed.csv
 ```
 
 ### Log Format
@@ -601,19 +597,19 @@ KARTOS/
 │       ├── producer_consumer/
 │       ├── profiling_demo/
 │       └── fpu_context_test/
-├── tests/                 # Test suite
-│   ├── integration/       # Sync primitive invariant tests
-│   │   ├── test_mutex_state.c          # PIP + ownership invariants
-│   │   ├── test_semaphore_state.c      # Counting semaphore invariants
-│   │   ├── test_queue_state.c          # Queue blocking invariants
-│   │   ├── test_event_group_state.c    # Event group bit-wait tests
-│   │   ├── test_notification_state.c   # Task notification tests
-│   │   └── test_task_state_transitions.c # Task lifecycle tests
-│   ├── scheduler/         # Scheduler tests (one dir per policy)
-│   │   ├── test_common.h  # Shared test infrastructure: assertions, ulog-based logging macros, verdict emit
-│   │   ├── round_robin/
-│   │   ├── preemptive/
-│   │   └── cooperative/
+├── tests/                 # Test suites (suite-per-binary, case-per-invariant)
+│   ├── framework/         # Suite runner, three-tier assertions, invariant table, watchdog, sync
+│   ├── integration/       # Sync primitive and scheduler suites (one binary per area)
+│   │   ├── test_mutex_suite.c
+│   │   ├── test_semaphore_suite.c
+│   │   ├── test_queue_suite.c
+│   │   ├── test_event_group_suite.c
+│   │   ├── test_notify_suite.c
+│   │   ├── test_task_state_suite.c
+│   │   ├── test_scheduler_cooperative_suite.c
+│   │   ├── test_scheduler_rr_suite.c
+│   │   └── test_scheduler_preemptive_suite.c
+│   ├── host/              # Unity + FFF host-side unit tests (pure logic, no flash)
 │   └── benchmarks/        # Cycle-accurate benchmarks
 │       ├── bench_context_switch/
 │       ├── bench_mutex/
@@ -624,10 +620,8 @@ KARTOS/
 ├── docs/                  # Documentation
 │   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/
-│   ├── kartos/            # KARTOS CLI — invoke as: python -m kartos <subcommand>
-│   │   └── __main__.py    # build, upload, monitor, test, configure, list, clean
-│   └── test/              # Supporting utilities
-│       └── log_parser.py   # Parse serial logs to CSV
+│   └── kartos/            # KARTOS CLI — invoke as: python -m kartos <subcommand>
+│       └── __main__.py    # build, upload, monitor, test, configure, list, clean
 ├── CMakeLists.txt         # Root build file
 ├── CMakePresets.json      # Configure + build presets for all boards/variants
 ├── pyproject.toml         # Python package config for the kartos CLI (pip install -e . from repo root)
@@ -844,17 +838,6 @@ ulog_info("Connection established to %s", ip_addr);
 ulog_error("Failed to read sensor: %d", error_code);
 ```
 
-### Test Logger (`tests/scheduler/test_common.h`)
+### Test Framework (`tests/framework/`)
 
-All on-target tests use a structured, tab-delimited log format consumed by the Python test runner. The macros live in [tests/scheduler/test_common.h](tests/scheduler/test_common.h) and are built on top of `ulog` (not `printf`), making them safe under preemption:
-
-```c
-// Emits: <tick>\tTASK\t<file.c>\t<line>\t<func>\t<event>\t<context>
-test_log_task("START", "MyTask");
-test_log_task("ASSERT_PASS", "INV-EG2:AnyWoke");
-
-// Emits: <tick>\tTEST\t<file.c>\t<line>\t<func>\t<event>\t<test_name>
-test_log_framework("BEGIN", "EventGroupState");
-```
-
-`TEST_EMIT_VERDICT()` writes the final `RESULT PASS` / `RESULT FAIL:<N>` line by polling `USART2->DR` directly, bypassing the ring buffer to guarantee delivery even with interrupts disabled.
+On-target tests use a suite-with-cases framework: each binary registers a suite of small focused cases via [tests/framework/test_suite.h](tests/framework/test_suite.h), declares per-case invariants via [tests/framework/test_invariants.h](tests/framework/test_invariants.h), and reports per-case `CASE_RESULT` lines plus a final `SUITE_RESULT` line. Three-tier assertions (`TEST_ASSERT`, `TEST_EXPECT`, `TEST_ASSUME`) live in [tests/framework/test_assert.h](tests/framework/test_assert.h); the watchdog macro `TEST_AWAIT_PHASE` in [tests/framework/test_watchdog.h](tests/framework/test_watchdog.h) converts hangs into named invariant failures. Verdict lines are written via polled-UART (bypassing the ulog ring buffer) so they survive even with interrupts disabled.

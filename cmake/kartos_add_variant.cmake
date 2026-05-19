@@ -1,7 +1,8 @@
 # add_kartos_variant(name SOURCE <file>
 #                         [SCHEDULER <RTOS_SCHEDULER_...>]
 #                         [EXTRA_INCLUDES <dir>...]
-#                         [EXTRA_DEFINES <def>...])
+#                         [EXTRA_DEFINES <def>...]
+#                         [EXTRA_LIBS <target>...])
 #
 # Creates an ELF executable target <name> that links the full KARTOS stack
 # (kernel + arch + mcu + board), applies the generated linker script, and
@@ -26,7 +27,7 @@ if(NOT OPENOCD_EXECUTABLE)
 endif()
 
 function(add_kartos_variant name)
-    cmake_parse_arguments(_V "" "SOURCE;SCHEDULER" "EXTRA_INCLUDES;EXTRA_DEFINES" ${ARGN})
+    cmake_parse_arguments(_V "" "SOURCE;SCHEDULER" "EXTRA_INCLUDES;EXTRA_DEFINES;EXTRA_LIBS" ${ARGN})
 
     if(NOT _V_SCHEDULER)
         set(_V_SCHEDULER RTOS_SCHEDULER_PREEMPTIVE_SP)
@@ -59,7 +60,8 @@ const rtos_scheduler_type_t kernel_scheduler_choice = ${_V_SCHEDULER};\n")
         kartos::board_support
         kartos::arch_${KARTOS_ARCH}
         kartos::mcu_${KARTOS_MCU_FAMILY}
-        kartos::board)
+        kartos::board
+        ${_V_EXTRA_LIBS})
 
     target_include_directories(${name} PRIVATE
         ${_V_EXTRA_INCLUDES}

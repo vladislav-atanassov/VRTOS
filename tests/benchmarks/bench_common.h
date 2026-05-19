@@ -1,12 +1,13 @@
-/* Benchmark results are printed via rtos_profiling_print_stat() after all
- * iterations; the test_log macros from test_common.h are also available. */
-
 #ifndef BENCH_COMMON_H
 #define BENCH_COMMON_H
 
-#include "config.h"       /* RTOS_DEFAULT_TASK_STACK_SIZE, RTOS_SCHEDULER_* */
-#include "profiling.h"    /* rtos_profile_stat_t, rtos_profiling_*, macros  */
-#include "test_common.h"  /* test_create_startup_timer, test_create_log_flush_task */
+#include "KARTOS.h"         /* rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE */
+#include "config.h"         /* RTOS_DEFAULT_TASK_STACK_SIZE, RTOS_SCHEDULER_* */
+#include "log_flush_task.h" /* log_flush_task, KLOG_FLUSH_TASK_STACK_SIZE */
+#include "profiling.h"      /* rtos_profile_stat_t, rtos_profiling_*, macros */
+#include "task.h"           /* rtos_task_create */
+#include "timer.h"          /* rtos_timer_create, rtos_timer_start */
+#include "ulog.h"           /* ulog_init, ULOG_LEVEL_INFO */
 
 #include <stdint.h>
 
@@ -24,6 +25,41 @@
 #ifndef BENCH_WARMUP
 #define BENCH_WARMUP (50U)
 #endif
+
+/* ========================= STARTUP HELPERS ================================= */
+
+/* Hold time before benchmarks begin — gives the serial monitor time to connect
+ * after flashing. A one-shot timer fires this far in to gate worker tasks. */
+#define TEST_STARTUP_HOLD_MS (2000U)
+
+/* Worker tasks call this at the top of their function to wait for the startup
+ * timer to set `started_flag`. */
+#define TEST_WAIT_FOR_START(started_flag)                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        while (!(started_flag))                                                                                        \
+        {                                                                                                              \
+            rtos_delay_ms(100);                                                                                        \
+        }                                                                                                              \
+    } while (0)
+
+static inline rtos_status_t test_create_startup_timer(void (*callback)(void *, void *), void *param,
+                                                      rtos_timer_handle_t *p_handle)
+{
+    rtos_status_t status =
+        rtos_timer_create("StartupHold", TEST_STARTUP_HOLD_MS, RTOS_TIMER_ONE_SHOT, callback, param, p_handle);
+    if (status != RTOS_SUCCESS)
+    {
+        return status;
+    }
+    return rtos_timer_start(*p_handle);
+}
+
+static inline rtos_status_t test_create_log_flush_task(rtos_task_handle_t *p_handle)
+{
+    ulog_init(ULOG_LEVEL_INFO);
+    return rtos_task_create(log_flush_task, "LogFlush", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, p_handle);
+}
 
 /* ========================= OUTPUT HELPERS ================================== */
 
