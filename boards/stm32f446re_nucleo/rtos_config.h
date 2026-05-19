@@ -13,10 +13,13 @@
  * (pass -b to `python -m kartos monitor/test` if you change it). */
 #define RTOS_UART_BAUD_RATE (921600U)
 
-/* Power Management: enable tickless idle (idle task suppresses SysTick
- * and sleeps with WFI when the next wake-up is far enough away). */
-#define RTOS_CONFIG_USE_TICKLESS_IDLE               (0U)
+/* Power Management: enable tickless idle (idle task suppresses SysTick. */
+#ifndef RTOS_CONFIG_USE_TICKLESS_IDLE
+#define RTOS_CONFIG_USE_TICKLESS_IDLE (1U)
+#endif
+#ifndef RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP
 #define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)
+#endif
 
 /* Task limits */
 #ifndef RTOS_MAX_TASKS
