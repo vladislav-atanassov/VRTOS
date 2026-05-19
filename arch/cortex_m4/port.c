@@ -14,6 +14,10 @@
 static volatile uint32_t g_critical_nesting = 0;
 static volatile uint32_t g_critical_basepri = 0;
 
+#if PORT_HAS_FPU
+static uint32_t g_fpu_lazy_scratch[18] __attribute__((aligned(8)));
+#endif
+
 rtos_status_t rtos_port_init(void)
 {
 #if PORT_HAS_FPU
@@ -25,6 +29,7 @@ rtos_status_t rtos_port_init(void)
      *        S0-S15/FPSCR until the ISR first touches the FPU.
      */
     FPU->FPCCR |= FPU_FPCCR_ASPEN_Msk | FPU_FPCCR_LSPEN_Msk;
+    FPU->FPCAR = (uint32_t) g_fpu_lazy_scratch;
 #endif
 
     NVIC_SetPriority(PendSV_IRQn, PORT_IRQ_PRIORITY_PENDSV >> 4);  /* Lowest */
