@@ -6,6 +6,12 @@
 
 set(_K ${CMAKE_CURRENT_SOURCE_DIR})
 
+# ── Test-hook instrumentation ─────────────────────────────────────────────────
+# OFF by default: all RTOS_TEST_HOOK_FIRE() macros expand to nothing and
+# test_hooks.c is excluded, giving a byte-identical production binary.
+# Enable for test configurations: cmake -DKARTOS_TEST_HOOKS=ON .
+option(KARTOS_TEST_HOOKS "Compile kernel test-hook instrumentation (test configurations only)" OFF)
+
 add_library(kartos_kernel STATIC
     ${_K}/core/kernel.c
     ${_K}/core/memory.c
@@ -27,8 +33,15 @@ add_library(kartos_kernel STATIC
     ${_K}/timer/timer.c
     ${_K}/timer/timer_list.c
     ${_K}/utils/ring_buffer.c
-    ${_K}/utils/rtos_assert.c)
+    ${_K}/utils/rtos_assert.c
+    $<$<BOOL:${KARTOS_TEST_HOOKS}>:${_K}/core/test_hooks.c>)
 add_library(kartos::kernel ALIAS kartos_kernel)
+
+if(KARTOS_TEST_HOOKS)
+    target_compile_definitions(kartos_kernel PUBLIC RTOS_TEST_HOOKS_ENABLED=1)
+else()
+    target_compile_definitions(kartos_kernel PUBLIC RTOS_TEST_HOOKS_ENABLED=0)
+endif()
 
 target_include_directories(kartos_kernel
     PUBLIC

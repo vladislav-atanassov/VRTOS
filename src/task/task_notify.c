@@ -4,6 +4,7 @@
 #include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action)
 {
@@ -38,6 +39,11 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
     }
 
     task->notification_pending = 1;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_NOTIFY_SEND, {
+        _ctx_.u.notify.task  = task;
+        _ctx_.u.notify.value = task->notification_value;
+    });
 
     KLOGD("Notify", "NotifySend id=%u act=%u", task->task_id, (uint32_t) action);
 
@@ -93,6 +99,10 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
         }
         current_task->notification_value &= ~exit_clear_bits;
         current_task->notification_pending = 0;
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_NOTIFY_RECEIVE, {
+            _ctx_.u.notify.task  = current_task;
+            _ctx_.u.notify.value = current_task->notification_value;
+        });
         rtos_port_exit_critical();
         return RTOS_NOTIFY_OK;
     }

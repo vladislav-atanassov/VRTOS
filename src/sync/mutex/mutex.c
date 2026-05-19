@@ -7,6 +7,7 @@
 #include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 #include <string.h>
 
@@ -128,6 +129,10 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
             {
                 target_task->priority = boost_prio;
             }
+            RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_BOOST, {
+                _ctx_.u.mutex_boost.owner    = target_task;
+                _ctx_.u.mutex_boost.new_prio = boost_prio;
+            });
         }
         else
         {
@@ -204,6 +209,10 @@ static void mutex_restore_priority(rtos_tcb_t *task)
     {
         KLOGD("Mutex", "MutexRestore id=%u prio=%u", task->task_id, max_prio);
         task->priority = max_prio;
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_RESTORE, {
+            _ctx_.u.mutex_restore.owner         = task;
+            _ctx_.u.mutex_restore.restored_prio = max_prio;
+        });
     }
 }
 
@@ -259,6 +268,11 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         current_task->held_mutex_list = m;
         rtos_port_exit_critical();
         KLOGD("Mutex", "MutexLock id=%u", current_task->task_id);
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_LOCK_EXIT, {
+            _ctx_.u.mutex_lock.mutex  = m;
+            _ctx_.u.mutex_lock.caller = current_task;
+            _ctx_.u.mutex_lock.status = RTOS_MUTEX_OK;
+        });
         return RTOS_MUTEX_OK;
     }
 
@@ -319,6 +333,11 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 
     rtos_port_exit_critical();
     KLOGD("Mutex", "MutexLock id=%u", current_task->task_id);
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_LOCK_EXIT, {
+        _ctx_.u.mutex_lock.mutex  = m;
+        _ctx_.u.mutex_lock.caller = current_task;
+        _ctx_.u.mutex_lock.status = RTOS_MUTEX_OK;
+    });
     return RTOS_MUTEX_OK;
 }
 
@@ -359,6 +378,10 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     }
 
     /* Full unlock - remove from held list, then restore priority */
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_UNLOCK, {
+        _ctx_.u.mutex_unlock.mutex  = m;
+        _ctx_.u.mutex_unlock.caller = current_task;
+    });
     mutex_remove_from_held_list(current_task, m);
     mutex_restore_priority(current_task);
 

@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 #include "timer.h"
 
 rtos_kernel_cb_t g_kernel = {.state               = RTOS_KERNEL_STATE_INACTIVE,
@@ -215,6 +216,10 @@ void rtos_kernel_tick_handler(void)
 {
     RTOS_SYS_PROFILE_START(tick);
     g_kernel.tick_count++;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TICK, {
+        _ctx_.u.tick_val = g_kernel.tick_count;
+    });
 
     rtos_timer_tick();
 
@@ -434,7 +439,16 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
         return;
     }
 
+#if RTOS_TEST_HOOKS_ENABLED
+    rtos_task_state_t _old_state_ready = task->state;
+#endif
     task->state = RTOS_TASK_STATE_READY;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TASK_STATE, {
+        _ctx_.u.task_state.task      = task;
+        _ctx_.u.task_state.old_state = (uint8_t) _old_state_ready;
+        _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_READY;
+    });
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
     /* Only track scheduling latency for tasks above idle priority.
@@ -489,7 +503,16 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
         rtos_scheduler_remove_from_ready_list(task);
     }
 
+#if RTOS_TEST_HOOKS_ENABLED
+    rtos_task_state_t _old_state_block = task->state;
+#endif
     task->state = RTOS_TASK_STATE_BLOCKED;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TASK_STATE, {
+        _ctx_.u.task_state.task      = task;
+        _ctx_.u.task_state.old_state = (uint8_t) _old_state_block;
+        _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_BLOCKED;
+    });
 
     if (delay_ticks > 0)
     {

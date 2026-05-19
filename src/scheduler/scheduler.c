@@ -5,7 +5,9 @@
 #include "preemptive_sp.h"
 #include "profiling.h"
 #include "round_robin.h"
+#include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 #include <string.h>
 
@@ -91,6 +93,11 @@ rtos_task_handle_t rtos_scheduler_get_next_task(void)
     RTOS_SYS_PROFILE_END(scheduler, &g_prof_scheduler);
 
     KLOGT("Scheduler", "GetNext picked=%s", (uint32_t) (next ? next->name : "none"));
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_CTX_SWITCH, {
+        _ctx_.u.ctx_switch.out_task = rtos_task_get_current();
+        _ctx_.u.ctx_switch.in_task  = next;
+    });
 
     return next;
 }

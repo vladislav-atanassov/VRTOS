@@ -10,6 +10,7 @@
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 /* =================== Static Helpers =================== */
 
@@ -215,6 +216,7 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
         {
             eg->bits &= ~bits_to_wait;
         }
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_EVENT_WAIT_SATISFIED, { _ctx_.u.event_bits.bits = eg->bits; });
         rtos_port_exit_critical();
         return RTOS_EG_OK;
     }
@@ -284,6 +286,8 @@ rtos_eg_status_t rtos_event_group_set_bits(rtos_event_group_t *eg, uint32_t bits
     rtos_port_enter_critical();
 
     rtos_tcb_t *wake_list = eg_set_bits_internal(eg, bits_to_set);
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_EVENT_SET, { _ctx_.u.event_bits.bits = eg->bits; });
 
     rtos_port_exit_critical();
 

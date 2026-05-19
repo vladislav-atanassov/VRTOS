@@ -5,6 +5,7 @@
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 #include <string.h>
 
@@ -133,6 +134,10 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
         sem->count--;
         rtos_port_exit_critical();
         KLOGD("Semaphore", "SemAcquire count=%u", sem->count);
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_SEM_TAKE, {
+            _ctx_.u.prim.primitive = sem;
+            _ctx_.u.prim.caller    = rtos_task_get_current();
+        });
         return RTOS_SEM_OK;
     }
 
@@ -201,6 +206,10 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
     {
         /* Wake the highest priority waiter instead of incrementing count */
         KLOGD("Semaphore", "SemWake id=%u", waiter->task_id);
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_SEM_GIVE, {
+            _ctx_.u.prim.primitive = sem;
+            _ctx_.u.prim.caller    = rtos_task_get_current();
+        });
 
         rtos_kernel_task_unblock(waiter);
         rtos_port_exit_critical();

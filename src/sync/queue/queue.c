@@ -9,6 +9,7 @@
 #include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
+#include "test_hooks_priv.h"
 
 #include <string.h>
 
@@ -185,6 +186,10 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
         return RTOS_ERROR_INVALID_STATE;
     }
 
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_BLOCK_FULL, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = current_task;
+    });
     queue_add_to_waiting_list(&queue->sender_wait_list, current_task, queue);
 
     KLOGD("Queue", "QueueSendBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
@@ -239,6 +244,10 @@ copy_data:
     queue->count++;
 
     KLOGD("Queue", "QueueSend count=%u", queue->count);
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_SEND, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = g_kernel.current_task;
+    });
 
     rtos_tcb_t *waiting_receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
     if (waiting_receiver != NULL)
@@ -286,6 +295,10 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
         return RTOS_ERROR_INVALID_STATE;
     }
 
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_BLOCK_EMPTY, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = current_task;
+    });
     queue_add_to_waiting_list(&queue->receiver_wait_list, current_task, queue);
 
     KLOGD("Queue", "QueueRecvBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
@@ -340,6 +353,10 @@ copy_data:
     queue->count--;
 
     KLOGD("Queue", "QueueRecv count=%u", queue->count);
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_RECEIVE, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = g_kernel.current_task;
+    });
 
     rtos_tcb_t *waiting_sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
     if (waiting_sender != NULL)
