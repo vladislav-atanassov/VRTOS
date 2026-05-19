@@ -504,6 +504,39 @@ def cmd_verbosity(args):
     sys.exit(result.returncode)
 
 
+def cmd_host_test(args):
+    """Configure, build, and run the pure-logic host test suite.
+
+    The host suite lives in tests/host/ as a standalone CMake project (it uses
+    the native C compiler, not arm-none-eabi-gcc). We invoke ctest there and
+    bubble the exit code up — failure means at least one test binary returned
+    non-zero, which Unity's UNITY_END() does when any assertion failed.
+    """
+    host_dir = _project_root() / "tests" / "host"
+    if not host_dir.exists():
+        print(f"[!] {host_dir} not found")
+        sys.exit(1)
+
+    # Configure if the build dir doesn't exist yet, or always when --reconfigure.
+    build_dir = _project_root() / "build" / "host"
+    if args.reconfigure or not (build_dir / "CMakeCache.txt").exists():
+        result = subprocess.run(["cmake", "--preset", "host"], cwd=str(host_dir))
+        if result.returncode != 0:
+            sys.exit(result.returncode)
+
+    # Build.
+    result = subprocess.run(["cmake", "--build", "--preset", "host"], cwd=str(host_dir))
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+    # Run. Default: print summary; -v: stream each test's output.
+    ctest_cmd = ["ctest", "--preset", "host"]
+    if args.verbose:
+        ctest_cmd.append("--verbose")
+    result = subprocess.run(ctest_cmd, cwd=str(host_dir))
+    sys.exit(result.returncode)
+
+
 def cmd_clean(args):
     board = _resolve_board(args.board)
     build_dir = _build_dir(board)
@@ -566,6 +599,20 @@ def main():
 
     p_clean = sub.add_parser("clean", help="Remove a board's build directory")
     p_clean.set_defaults(func=cmd_clean)
+
+    p_host = sub.add_parser(
+        "host-test",
+        help="Build and run the pure-logic host unit tests (tests/host/)",
+    )
+    p_host.add_argument(
+        "--reconfigure", action="store_true",
+        help="Re-run cmake configure even if the build dir already exists",
+    )
+    p_host.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Stream each test binary's stdout (ctest --verbose)",
+    )
+    p_host.set_defaults(func=cmd_host_test)
 
     p_verbosity = sub.add_parser(
         "verbosity",

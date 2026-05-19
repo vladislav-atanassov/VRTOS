@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "host",
+      "displayName": "Host unit tests (native toolchain)",
+      "description": "Builds the pure-logic VRTOS tests with the host C compiler. No cross-toolchain.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/host",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host",
+      "configurePreset": "host"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "host",
+      "configurePreset": "host",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
