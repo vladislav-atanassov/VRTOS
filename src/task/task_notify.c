@@ -77,8 +77,10 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
         return RTOS_NOTIFY_ERR_INVALID;
     }
 
-    /* Clear entry bits before checking pending state */
-    current_task->notification_value &= ~entry_clear_bits;
+    if (!current_task->notification_pending)
+    {
+        current_task->notification_value &= ~entry_clear_bits;
+    }
 
     KLOGD("Notify", "NotifyWait id=%u val=%u", current_task->task_id, current_task->notification_value);
 
