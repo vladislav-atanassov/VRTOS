@@ -24,6 +24,9 @@ target_link_libraries(kartos_mcu_${KARTOS_MCU_FAMILY} PRIVATE
 # ── 4. Kernel — creates kartos::kernel STATIC ────────────────────────────────
 add_subdirectory(src)
 
+# ── 4b. Test framework — creates kartos::test_framework STATIC ──────────────
+add_subdirectory(tests/framework)
+
 # ── 5. Linker script generation ──────────────────────────────────────────────
 include(cmake/kartos_linker_script.cmake)
 

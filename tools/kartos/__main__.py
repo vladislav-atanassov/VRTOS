@@ -2,11 +2,14 @@
 """KARTOS CLI — build, upload, monitor, and test."""
 
 import argparse
+import csv
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,10 +17,47 @@ from pathlib import Path
 import serial
 import serial.tools.list_ports
 
-# Import log_parser from tools/test/ (stays in place per project convention)
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE.parent / "test"))
-from log_parser import parse_log_file, write_csv  # noqa: E402
+
+# Tab-delimited log lines emitted by the test framework:
+#   <tick>\t<level>\t<file>\t<line>\t<func>\t<event>\t<context>
+_LOG_PATTERN = re.compile(r"^(\d+)\t(\w+)\t([^\t]+)\t(\d+)\t([^\t]+)\t([^\t]+)\t(.+)$")
+_CSV_FIELDS = ["timestamp_ms", "level", "file", "line", "function", "event", "context"]
+
+
+def _parse_log_line(line: str) -> dict | None:
+    match = _LOG_PATTERN.match(line.strip())
+    if not match:
+        return None
+    return {
+        "timestamp_ms": int(match.group(1)),
+        "level": match.group(2),
+        "file": os.path.basename(match.group(3)),
+        "line": int(match.group(4)),
+        "function": match.group(5),
+        "event": match.group(6),
+        "context": match.group(7),
+    }
+
+
+def parse_log_file(input_path: str) -> list[dict]:
+    entries: list[dict] = []
+    with open(input_path, "r", encoding="utf-8", errors="replace") as f:
+        for raw in f:
+            entry = _parse_log_line(raw)
+            if entry:
+                entries.append(entry)
+    return entries
+
+
+def write_csv(entries: list[dict], output_path: str) -> None:
+    if not entries:
+        return
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(entries)
+
 
 DEFAULT_BOARD = "stm32f446re_nucleo"
 DEFAULT_BAUD = 921600
@@ -164,8 +204,8 @@ def capture_serial(port: str, baud: int, duration_sec: int, output_file: str) ->
             output_lines.append(line)
             print(line, end="", flush=True)
 
-            if "\tRESULT\t" in line or ",RESULT," in line:
-                print("\n[*] RESULT detected — stopping capture.")
+            if "\tSUITE_RESULT\t" in line or ",SUITE_RESULT," in line:
+                print("\n[*] SUITE_RESULT detected — stopping capture.")
                 test_complete = True
                 break
 
@@ -181,7 +221,7 @@ def capture_serial(port: str, baud: int, duration_sec: int, output_file: str) ->
                         extra_line = extra.decode("utf-8", errors="replace")
                         output_lines.append(extra_line)
                         print(extra_line, end="", flush=True)
-                        if "\tRESULT\t" in extra_line or ",RESULT," in extra_line:
+                        if "\tSUITE_RESULT\t" in extra_line or ",SUITE_RESULT," in extra_line:
                             break
                 test_complete = True
                 break
@@ -196,27 +236,99 @@ def capture_serial(port: str, baud: int, duration_sec: int, output_file: str) ->
     return True
 
 
+def _parse_case_result(ctx: str) -> dict:
+    """Decode the tab-delimited body of a CASE_RESULT log entry.
+
+    The body produced by tests/framework/test_invariants.c looks like:
+        <suite>:<case>:VERDICT \t INV-A:p/c;INV-B:p/c \t failed=<csv>
+    where the trailing 'failed=' may be SKIP:<reason>, HARD_FAIL[,IDs], or empty.
+    """
+    parts = ctx.split("\t")
+    head = parts[0] if parts else ""
+    suite, _, rest = head.partition(":")
+    case, _, verdict = rest.partition(":")
+
+    inv_field = parts[1] if len(parts) > 1 else "-"
+    invariants: list[tuple[str, int, int]] = []
+    if inv_field and inv_field != "-":
+        for tok in inv_field.split(";"):
+            tok = tok.strip()
+            if not tok:
+                continue
+            inv_id, _, counts = tok.rpartition(":")
+            passed_s, _, checked_s = counts.partition("/")
+            try:
+                invariants.append((inv_id, int(passed_s), int(checked_s)))
+            except ValueError:
+                continue
+
+    failed_field = parts[2] if len(parts) > 2 else ""
+    if failed_field.startswith("failed="):
+        failed_field = failed_field[len("failed="):]
+    failed_field = failed_field.strip()
+
+    return {
+        "suite": suite, "case": case, "verdict": verdict,
+        "invariants": invariants, "failed": failed_field,
+    }
+
+
+def _parse_suite_result(ctx: str) -> dict:
+    """Decode the tab-delimited body of a SUITE_RESULT log entry.
+
+    Body shape: <suite>:VERDICT \t cases=N;pass=P;fail=F;skip=S
+    """
+    parts = ctx.split("\t")
+    head = parts[0] if parts else ""
+    suite, _, verdict = head.partition(":")
+
+    stats = {"cases": 0, "pass": 0, "fail": 0, "skip": 0}
+    if len(parts) > 1:
+        for tok in parts[1].split(";"):
+            key, _, val = tok.partition("=")
+            try:
+                stats[key.strip()] = int(val)
+            except ValueError:
+                continue
+
+    return {"suite": suite, "verdict": verdict, **stats}
+
+
 def analyze_verdict(entries: list[dict]) -> tuple[bool, str]:
-    lines = ["=" * 50, "VERDICT RESULTS", "=" * 50]
+    lines = ["=" * 60, "VERDICT RESULTS", "=" * 60]
 
-    pass_count = sum(1 for e in entries if e["event"] == "ASSERT_PASS")
-    fail_count = sum(1 for e in entries if e["event"] == "ASSERT_FAIL")
-    lines.append(f"\nAssertions: {pass_count} passed, {fail_count} failed")
+    cases = [_parse_case_result(e["context"]) for e in entries if e["event"] == "CASE_RESULT"]
+    suite = next((_parse_suite_result(e["context"]) for e in entries if e["event"] == "SUITE_RESULT"), None)
 
-    result_entry = next((e for e in entries if e["event"] == "RESULT"), None)
-    if result_entry is None:
+    if cases:
+        labels = [f'{c["suite"]}:{c["case"]}' for c in cases]
+        width = max((len(lbl) for lbl in labels), default=20)
+        lines.append("")
+        lines.append(f'{"CASE".ljust(width)}  VERDICT  INVARIANTS')
+        lines.append("-" * 60)
+        for c, label in zip(cases, labels):
+            inv_summary = ";".join(f"{i}:{p}/{ch}" for (i, p, ch) in c["invariants"]) or "-"
+            lines.append(f'{label.ljust(width)}  {c["verdict"]:<7}  {inv_summary}')
+            if c["failed"]:
+                lines.append(f'{" " * width}           failed={c["failed"]}')
+
+    if suite is None:
         lines += [
-            "\n[!] No RESULT line found — test may have timed out without verdict",
-            "Result: FAIL (no verdict)",
-            "=" * 50,
+            "",
+            "[!] No SUITE_RESULT line — capture likely truncated mid-suite",
+            "Result: FAIL (no suite verdict)",
+            "=" * 60,
         ]
         return False, "\n".join(lines)
 
-    verdict = result_entry["context"].strip()
-    passed = verdict == "PASS"
-    lines.append(f"\nVerdict: {verdict}")
+    passed = suite["verdict"] == "PASS" and suite["fail"] == 0
+    lines.append("")
+    lines.append(
+        f'Suite {suite["suite"]}: {suite["verdict"]}  '
+        f'(cases={suite["cases"]} pass={suite["pass"]} fail={suite["fail"]} skip={suite["skip"]})'
+    )
     lines.append(f'Result: {"PASS" if passed else "FAIL"}')
-    lines.append("=" * 50)
+    lines.append("=" * 60)
     return passed, "\n".join(lines)
 
 
@@ -273,16 +385,6 @@ def cmd_test(args):
     board = _resolve_board(args.board)
     project_dir = _project_root()
 
-    if not args.skip_upload:
-        _ensure_configured(board)
-        result = subprocess.run(
-            ["cmake", "--build", "--preset", f"flash-{args.environment}"],
-            cwd=str(project_dir),
-        )
-        if result.returncode != 0:
-            sys.exit(result.returncode)
-        time.sleep(1)
-
     port = args.port or find_serial_port()
     if not port:
         print("[!] No serial port found. Specify -p/--port.")
@@ -298,7 +400,31 @@ def cmd_test(args):
     print(f"KARTOS TEST: {args.environment}")
     print("=" * 50)
 
-    if not capture_serial(port, args.baud_rate, args.duration, log_file):
+    # Start capturing BEFORE flashing so we don't miss output from fast-completing
+    # test suites (semaphore suite finishes in ~30 ms; OpenOCD takes several seconds).
+    capture_ok = [False]
+    capture_done = threading.Event()
+
+    def _capture():
+        capture_ok[0] = capture_serial(port, args.baud_rate, args.duration, log_file)
+        capture_done.set()
+
+    capture_thread = threading.Thread(target=_capture, daemon=True)
+    capture_thread.start()
+
+    if not args.skip_upload:
+        _ensure_configured(board)
+        result = subprocess.run(
+            ["cmake", "--build", "--preset", f"flash-{args.environment}"],
+            cwd=str(project_dir),
+        )
+        if result.returncode != 0:
+            capture_thread.join(timeout=2)
+            sys.exit(result.returncode)
+
+    capture_done.wait()
+
+    if not capture_ok[0]:
         sys.exit(1)
 
     print("\n[*] Parsing log file...")

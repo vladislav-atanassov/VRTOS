@@ -1,4 +1,0 @@
-# KARTOS Test Tools Dependencies
-# Install with: pip install -r requirements.txt
-
-pyserial>=3.5
