@@ -381,23 +381,18 @@ def cmd_monitor(args):
         ser.close()
 
 
-def cmd_test(args):
-    board = _resolve_board(args.board)
+def _capture_suite(board: str, environment: str, port: str, baud: int, duration: int,
+                   output_dir: str, skip_upload: bool) -> tuple[bool, str, str]:
+    """Build+flash+capture one on-board suite. Returns (capture_ok, log_path, csv_path)."""
     project_dir = _project_root()
-
-    port = args.port or find_serial_port()
-    if not port:
-        print("[!] No serial port found. Specify -p/--port.")
-        sys.exit(1)
-
-    output_dir = project_dir / args.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
+    out = project_dir / output_dir
+    out.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = str(output_dir / f"log_{args.environment}_{timestamp}.txt")
-    csv_file = str(output_dir / f"log_{args.environment}_{timestamp}.csv")
+    log_file = str(out / f"log_{environment}_{timestamp}.txt")
+    csv_file = str(out / f"log_{environment}_{timestamp}.csv")
 
     print("=" * 50)
-    print(f"KARTOS TEST: {args.environment}")
+    print(f"KARTOS TEST: {environment}")
     print("=" * 50)
 
     # Start capturing BEFORE flashing so we don't miss output from fast-completing
@@ -406,25 +401,39 @@ def cmd_test(args):
     capture_done = threading.Event()
 
     def _capture():
-        capture_ok[0] = capture_serial(port, args.baud_rate, args.duration, log_file)
+        capture_ok[0] = capture_serial(port, baud, duration, log_file)
         capture_done.set()
 
     capture_thread = threading.Thread(target=_capture, daemon=True)
     capture_thread.start()
 
-    if not args.skip_upload:
+    if not skip_upload:
         _ensure_configured(board)
         result = subprocess.run(
-            ["cmake", "--build", "--preset", f"flash-{args.environment}"],
+            ["cmake", "--build", "--preset", f"flash-{environment}"],
             cwd=str(project_dir),
         )
         if result.returncode != 0:
             capture_thread.join(timeout=2)
-            sys.exit(result.returncode)
+            return False, log_file, csv_file
 
     capture_done.wait()
+    return capture_ok[0], log_file, csv_file
 
-    if not capture_ok[0]:
+
+def cmd_test(args):
+    board = _resolve_board(args.board)
+
+    port = args.port or find_serial_port()
+    if not port:
+        print("[!] No serial port found. Specify -p/--port.")
+        sys.exit(1)
+
+    ok, log_file, csv_file = _capture_suite(
+        board, args.environment, port, args.baud_rate, args.duration,
+        args.output_dir, args.skip_upload,
+    )
+    if not ok:
         sys.exit(1)
 
     print("\n[*] Parsing log file...")
@@ -504,37 +513,129 @@ def cmd_verbosity(args):
     sys.exit(result.returncode)
 
 
-def cmd_host_test(args):
-    """Configure, build, and run the pure-logic host test suite.
+_CTEST_SUMMARY_RE = re.compile(r"(\d+)% tests passed, (\d+) tests? failed out of (\d+)")
 
-    The host suite lives in tests/host/ as a standalone CMake project (it uses
-    the native C compiler, not arm-none-eabi-gcc). We invoke ctest there and
-    bubble the exit code up — failure means at least one test binary returned
-    non-zero, which Unity's UNITY_END() does when any assertion failed.
-    """
+
+def _run_host_tests(reconfigure: bool = False, verbose: bool = False) -> tuple[bool, int, int]:
+    """Configure+build+ctest the host suite. Returns (passed, n_passed, n_total)."""
     host_dir = _project_root() / "tests" / "host"
     if not host_dir.exists():
         print(f"[!] {host_dir} not found")
-        sys.exit(1)
+        return False, 0, 0
 
-    # Configure if the build dir doesn't exist yet, or always when --reconfigure.
     build_dir = _project_root() / "build" / "host"
-    if args.reconfigure or not (build_dir / "CMakeCache.txt").exists():
-        result = subprocess.run(["cmake", "--preset", "host"], cwd=str(host_dir))
-        if result.returncode != 0:
-            sys.exit(result.returncode)
+    if reconfigure or not (build_dir / "CMakeCache.txt").exists():
+        if subprocess.run(["cmake", "--preset", "host"], cwd=str(host_dir)).returncode != 0:
+            return False, 0, 0
 
-    # Build.
-    result = subprocess.run(["cmake", "--build", "--preset", "host"], cwd=str(host_dir))
-    if result.returncode != 0:
-        sys.exit(result.returncode)
+    if subprocess.run(["cmake", "--build", "--preset", "host"], cwd=str(host_dir)).returncode != 0:
+        return False, 0, 0
 
-    # Run. Default: print summary; -v: stream each test's output.
-    ctest_cmd = ["ctest", "--preset", "host"]
-    if args.verbose:
-        ctest_cmd.append("--verbose")
-    result = subprocess.run(ctest_cmd, cwd=str(host_dir))
-    sys.exit(result.returncode)
+    ctest_cmd = ["ctest", "--preset", "host"] + (["--verbose"] if verbose else [])
+    proc = subprocess.run(ctest_cmd, cwd=str(host_dir), capture_output=True, text=True)
+    if proc.stdout:
+        print(proc.stdout, end="")
+    if proc.stderr:
+        print(proc.stderr, end="", file=sys.stderr)
+
+    n_total = n_failed = 0
+    if m := _CTEST_SUMMARY_RE.search(proc.stdout):
+        n_failed = int(m.group(2))
+        n_total = int(m.group(3))
+    return proc.returncode == 0, max(0, n_total - n_failed), n_total
+
+
+def cmd_host_test(args):
+    passed, _, _ = _run_host_tests(reconfigure=args.reconfigure, verbose=args.verbose)
+    sys.exit(0 if passed else 1)
+
+
+def _discover_suite_variants(pattern: str) -> list[str]:
+    """Return build-preset names matching `pattern` (fnmatch glob), excluding flash- presets."""
+    import fnmatch
+    presets_path = _project_root() / "CMakePresets.json"
+    if not presets_path.exists():
+        return []
+    data = json.loads(presets_path.read_text())
+    names = [p["name"] for p in data.get("buildPresets", [])]
+    return [n for n in names if not n.startswith("flash-") and fnmatch.fnmatch(n, pattern)]
+
+
+def cmd_test_all(args):
+    """Run host tests and every on-board *_suite variant, then print an aggregated verdict."""
+    host_passed: bool | None = None
+    host_pass_n = host_total_n = 0
+    if not args.skip_host:
+        print("=" * 60)
+        print("KARTOS HOST TESTS")
+        print("=" * 60)
+        host_passed, host_pass_n, host_total_n = _run_host_tests(reconfigure=args.reconfigure, verbose=False)
+
+    variants: list[str] = []
+    if not args.skip_board:
+        variants = _discover_suite_variants(args.pattern)
+        if not variants:
+            print(f"[!] No on-board variants matched pattern {args.pattern!r}.")
+
+    port = None
+    if variants:
+        port = args.port or find_serial_port()
+        if not port:
+            print("[!] No serial port found. Specify -p/--port.")
+            sys.exit(1)
+
+    board = _resolve_board(args.board)
+    board_results: list[dict] = []
+    for v in variants:
+        ok, log_file, _csv = _capture_suite(
+            board, v, port, args.baud_rate, args.duration, args.output_dir, skip_upload=False,
+        )
+        suite = None
+        if ok:
+            entries = parse_log_file(log_file)
+            suite = next(
+                (_parse_suite_result(e["context"]) for e in entries if e["event"] == "SUITE_RESULT"),
+                None,
+            )
+        passed = bool(ok and suite and suite["verdict"] == "PASS" and suite["fail"] == 0)
+        board_results.append({"name": v, "passed": passed, "suite": suite})
+
+    print()
+    print("=" * 60)
+    print("KARTOS TEST-ALL SUMMARY")
+    print("=" * 60)
+
+    labels = [r["name"] for r in board_results]
+    if host_passed is not None:
+        labels.append("host")
+    width = max((len(lbl) for lbl in labels), default=20)
+
+    if host_passed is not None:
+        verdict = "PASS" if host_passed else "FAIL"
+        print(f"  {'host'.ljust(width)}  {verdict}  ({host_pass_n}/{host_total_n})")
+
+    for r in board_results:
+        verdict = "PASS" if r["passed"] else "FAIL"
+        if r["suite"]:
+            detail = f"({r['suite']['pass']}/{r['suite']['cases']} cases, {r['suite']['fail']} fail, {r['suite']['skip']} skip)"
+        else:
+            detail = "(no verdict captured)"
+        print(f"  {r['name'].ljust(width)}  {verdict}  {detail}")
+
+    board_pass_n = sum(1 for r in board_results if r["passed"])
+    board_total_n = len(board_results)
+    all_ok = (host_passed is not False) and (board_pass_n == board_total_n)
+
+    bits: list[str] = []
+    if host_passed is not None:
+        bits.append(f"host {host_pass_n}/{host_total_n}")
+    if board_results:
+        bits.append(f"board {board_pass_n}/{board_total_n}")
+    print("-" * 60)
+    print(f"Result: {'PASS' if all_ok else 'FAIL'}  ({', '.join(bits) or 'nothing run'})")
+    print("=" * 60)
+
+    sys.exit(0 if all_ok else 1)
 
 
 def cmd_clean(args):
@@ -613,6 +714,25 @@ def main():
         help="Stream each test binary's stdout (ctest --verbose)",
     )
     p_host.set_defaults(func=cmd_host_test)
+
+    p_all = sub.add_parser(
+        "test-all",
+        help="Run host tests plus every on-board *_suite variant; print aggregated verdict",
+    )
+    p_all.add_argument("-p", "--port", default=None, help="Serial port (auto-detected if omitted)")
+    p_all.add_argument("-b", "--baud-rate", type=int, default=DEFAULT_BAUD,
+                       help=f"Baud rate (default: {DEFAULT_BAUD})")
+    p_all.add_argument("--duration", type=int, default=DEFAULT_TEST_DURATION_SEC,
+                       help=f"Max capture duration per suite in seconds (default: {DEFAULT_TEST_DURATION_SEC})")
+    p_all.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR,
+                       help="Output directory for logs and CSVs")
+    p_all.add_argument("--pattern", default="test_*_suite",
+                       help="Glob filtering CMakePresets build names (default: test_*_suite)")
+    p_all.add_argument("--skip-host", action="store_true", help="Skip the host (Unity) test pass")
+    p_all.add_argument("--skip-board", action="store_true", help="Skip the on-board suite pass")
+    p_all.add_argument("--reconfigure", action="store_true",
+                       help="Force cmake reconfigure for the host build")
+    p_all.set_defaults(func=cmd_test_all)
 
     p_verbosity = sub.add_parser(
         "verbosity",
