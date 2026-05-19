@@ -239,9 +239,7 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
 
     if (timeout_ticks == RTOS_EG_MAX_WAIT)
     {
-        /* Infinite wait — block without delay timeout */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }

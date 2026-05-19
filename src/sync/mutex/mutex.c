@@ -292,9 +292,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 
     if (timeout_ticks == RTOS_MAX_WAIT)
     {
-        /* Infinite wait - block without delay timeout */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }

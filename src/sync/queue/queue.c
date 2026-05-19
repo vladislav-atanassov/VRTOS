@@ -191,9 +191,7 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
 
     if (timeout_ticks == RTOS_MAX_DELAY)
     {
-        /* Infinite wait */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }
@@ -294,9 +292,7 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
 
     if (timeout_ticks == RTOS_MAX_DELAY)
     {
-        /* Infinite wait */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
         rtos_yield();
     }
