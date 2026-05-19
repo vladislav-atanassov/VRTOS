@@ -200,33 +200,86 @@ __attribute__((naked)) void HardFault_Handler(void)
                    "B HardFault_Handler_C");
 }
 
+/* Direct polled UART write — safe from hard fault context (no RTOS, no interrupts). */
+static void hf_uart_write(const char *s)
+{
+    while (*s)
+    {
+        while (!(USART2->SR & USART_SR_TXE))
+        {
+        }
+        USART2->DR = (uint8_t) *s++;
+    }
+    while (!(USART2->SR & USART_SR_TC))
+    {
+    }
+}
+
+static void hf_uart_write_hex32(uint32_t v)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    char              buf[11];
+    buf[0]  = '0';
+    buf[1]  = 'x';
+    buf[2]  = hex[(v >> 28) & 0xF];
+    buf[3]  = hex[(v >> 24) & 0xF];
+    buf[4]  = hex[(v >> 20) & 0xF];
+    buf[5]  = hex[(v >> 16) & 0xF];
+    buf[6]  = hex[(v >> 12) & 0xF];
+    buf[7]  = hex[(v >>  8) & 0xF];
+    buf[8]  = hex[(v >>  4) & 0xF];
+    buf[9]  = hex[(v >>  0) & 0xF];
+    buf[10] = '\0';
+    hf_uart_write(buf);
+}
+
 __attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame)
 {
-    uint32_t r0  = stack_frame[0];
-    uint32_t r1  = stack_frame[1];
-    uint32_t r2  = stack_frame[2];
-    uint32_t r3  = stack_frame[3];
-    uint32_t r12 = stack_frame[4];
-    uint32_t lr  = stack_frame[5];
-    uint32_t pc  = stack_frame[6];
-    uint32_t psr = stack_frame[7];
+    __asm volatile("CPSID I");  /* mask all interrupts — we're not returning */
 
-    KLOGF("HwEnv", "HardFault pc=0x%08x psr=0x%08x", pc, psr);
-    KLOGF("HwEnv", "HardFaultRegs r0=0x%08x r1=0x%08x", r0, r1);
-
+    uint32_t pc   = stack_frame[6];
+    uint32_t lr   = stack_frame[5];
+    uint32_t psr  = stack_frame[7];
     uint32_t cfsr = SCB->CFSR;
     uint32_t hfsr = SCB->HFSR;
     uint32_t psp  = __get_PSP();
     uint32_t msp  = __get_MSP();
+    uint32_t mmfar = SCB->MMFAR;
+    uint32_t bfar  = SCB->BFAR;
+    uint32_t ccr   = SCB->CCR;
+    uint32_t fpccr = FPU->FPCCR;
+    uint32_t instr = *(volatile uint32_t *) (pc & ~3UL);
 
-    KLOGF("HwEnv", "HardFaultSCB cfsr=0x%08x hfsr=0x%08x", cfsr, hfsr);
-    KLOGF("HwEnv", "HardFaultSP psp=0x%08x msp=0x%08x", psp, msp);
+    hf_uart_write("\r\n!!HARDFAULT pc=");
+    hf_uart_write_hex32(pc);
+    hf_uart_write(" lr=");
+    hf_uart_write_hex32(lr);
+    hf_uart_write(" psr=");
+    hf_uart_write_hex32(psr);
+    hf_uart_write("\r\n!!HARDFAULT cfsr=");
+    hf_uart_write_hex32(cfsr);
+    hf_uart_write(" hfsr=");
+    hf_uart_write_hex32(hfsr);
+    hf_uart_write(" psp=");
+    hf_uart_write_hex32(psp);
+    hf_uart_write(" msp=");
+    hf_uart_write_hex32(msp);
+    hf_uart_write("\r\n!!HARDFAULT mmfar=");
+    hf_uart_write_hex32(mmfar);
+    hf_uart_write(" bfar=");
+    hf_uart_write_hex32(bfar);
+    hf_uart_write(" ccr=");
+    hf_uart_write_hex32(ccr);
+    hf_uart_write(" fpccr=");
+    hf_uart_write_hex32(fpccr);
+    hf_uart_write(" instr@pc=");
+    hf_uart_write_hex32(instr);
+    hf_uart_write("\r\n");
 
-    /* Suppress unused variable warnings for registers we logged via arg0/arg1 */
-    (void) r2;
-    (void) r3;
-    (void) r12;
-    (void) lr;
+    /* Suppress unused warnings */
+    (void) stack_frame[0]; (void) stack_frame[1];
+    (void) stack_frame[2]; (void) stack_frame[3];
+    (void) stack_frame[4];
 
     indicate_system_failure();
 }
