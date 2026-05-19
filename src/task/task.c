@@ -426,7 +426,12 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
         return RTOS_ERROR_INVALID_STATE;
     }
 
-    KLOGD("Task", "TaskResume id=%u", task_handle->task_id);
+    if (task_handle->blocked_on != NULL)
+    {
+        task_handle->state = RTOS_TASK_STATE_BLOCKED;
+        rtos_port_exit_critical();
+        return RTOS_SUCCESS;
+    }
 
     rtos_port_exit_critical();
 
