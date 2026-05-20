@@ -6,6 +6,7 @@
 #include "memory.h"
 #include "mutex.h"
 #include "port_common.h"
+#include "rtos_assert.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task_priv.h"
@@ -39,6 +40,8 @@ rtos_status_t rtos_task_init_system(void)
 rtos_status_t rtos_task_create(rtos_task_function_t task_function, const char *name, rtos_stack_size_t stack_size,
                                void *parameter, rtos_priority_t priority, rtos_task_handle_t *task_handle)
 {
+    RTOS_ASSERT_PARAM(task_function != NULL);
+    RTOS_ASSERT_PARAM(task_handle != NULL);
     if (task_function == NULL || task_handle == NULL)
     {
         KLOGE("Task", "InvalidParam fn=%u hdl=%u", (uint32_t) task_function, (uint32_t) task_handle);
@@ -413,6 +416,7 @@ rtos_status_t rtos_task_suspend(rtos_task_handle_t task_handle)
  */
 rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
 {
+    RTOS_ASSERT_PARAM(task_handle != NULL);
     if (task_handle == NULL)
     {
         return RTOS_ERROR_INVALID_PARAM;

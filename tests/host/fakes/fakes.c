@@ -21,6 +21,8 @@ DEFINE_FAKE_VOID_FUNC(rtos_kernel_task_unblock, rtos_task_handle_t);
 
 DEFINE_FAKE_VOID_FUNC(rtos_yield);
 
+DEFINE_FAKE_VOID_FUNC(rtos_assert_failed, const char *, uint32_t, const char *, const char *);
+
 DEFINE_FAKE_VOID_FUNC(klog_write, int, const char *, const char *, uint16_t, const char *,
                       uint32_t, uint32_t, uint32_t, uint32_t);
 volatile uint8_t klog_verbosity = 0; /* below KLOG_LEVEL_FAULT (0) — every call filtered out */
@@ -60,6 +62,7 @@ void host_reset_all_fakes(void)
     RESET_FAKE(rtos_kernel_task_block);
     RESET_FAKE(rtos_kernel_task_unblock);
     RESET_FAKE(rtos_yield);
+    RESET_FAKE(rtos_assert_failed);
     RESET_FAKE(klog_write);
     FFF_RESET_HISTORY();
 

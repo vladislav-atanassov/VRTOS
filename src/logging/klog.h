@@ -13,7 +13,7 @@ extern "C"
 #endif
 
 #ifndef KLOG_MIN_LEVEL
-#define KLOG_MIN_LEVEL KLOG_LEVEL_TRACE
+#define KLOG_MIN_LEVEL KLOG_LEVEL_INFO
 #endif
 
 #define KLOG_MAX_ARGS 4

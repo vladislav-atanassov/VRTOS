@@ -11,7 +11,8 @@ add_library(kartos_test_framework STATIC
     test_runtime.c
     test_watchdog.c
     test_sync.c
-    test_rand.c)
+    test_rand.c
+    test_kassert_catcher.c)
 add_library(kartos::test_framework ALIAS kartos_test_framework)
 
 target_include_directories(kartos_test_framework

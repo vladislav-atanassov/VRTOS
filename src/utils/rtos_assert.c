@@ -25,6 +25,8 @@
  * @param func Function name where assertion failed
  * @param expr Expression that failed
  */
+
+__attribute__((weak))
 void rtos_assert_failed(const char *file, uint32_t line, const char *func, const char *expr)
 {
 /* Disable interrupts to prevent further issues */

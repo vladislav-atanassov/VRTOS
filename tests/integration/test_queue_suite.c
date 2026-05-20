@@ -441,9 +441,42 @@ TEST_CASE(queue, empty_receive_fires_block_empty_hook)
 #endif
 }
 
+/* ── Case: null_input_asserts ────────────────────────────────────────────── */
+/*
+ * Queue create/send/receive call RTOS_ASSERT_PARAM on each pointer argument
+ * before the legacy ERR_INVALID_PARAM return. The framework's KASSERT catcher
+ * verifies each assert fires; the error-return remains as a release-build
+ * fallback when RTOS_ASSERT_ENABLED=0.
+ */
+TEST_CASE(queue, null_input_asserts)
+{
+#if RTOS_ASSERT_ENABLED
+    TEST_INV_DECLARE("INV-Q-NULL-ASSERT-CREATE",        1);
+    TEST_INV_DECLARE("INV-Q-NULL-ASSERT-SEND-HANDLE",   1);
+    TEST_INV_DECLARE("INV-Q-NULL-ASSERT-SEND-ITEM",     1);
+    TEST_INV_DECLARE("INV-Q-NULL-ASSERT-RECV-HANDLE",   1);
+    TEST_INV_DECLARE("INV-Q-NULL-ASSERT-RECV-BUFFER",   1);
+
+    uint32_t dummy = 0U;
+
+    TEST_ASSERT_KASSERT_FIRES(rtos_queue_create(NULL, 4U, sizeof(uint32_t)),
+                              "INV-Q-NULL-ASSERT-CREATE");
+    TEST_ASSERT_KASSERT_FIRES(rtos_queue_send(NULL, &dummy, 0U),
+                              "INV-Q-NULL-ASSERT-SEND-HANDLE");
+    TEST_ASSERT_KASSERT_FIRES(rtos_queue_send(g_q, NULL, 0U),
+                              "INV-Q-NULL-ASSERT-SEND-ITEM");
+    TEST_ASSERT_KASSERT_FIRES(rtos_queue_receive(NULL, &dummy, 0U),
+                              "INV-Q-NULL-ASSERT-RECV-HANDLE");
+    TEST_ASSERT_KASSERT_FIRES(rtos_queue_receive(g_q, NULL, 0U),
+                              "INV-Q-NULL-ASSERT-RECV-BUFFER");
+#else
+    TEST_ASSUME(false, "null_input_asserts requires RTOS_ASSERT_ENABLED");
+#endif
+}
+
 /* ── Suite registration ──────────────────────────────────────────────────── */
 
-static const test_case_t *const g_queue_cases[] = {
+static const test_case_t *const g_q_cases[] = {
     &TEST_CASE_REF(queue, consumer_blocks_on_empty),
     &TEST_CASE_REF(queue, producer_blocks_on_full),
     &TEST_CASE_REF(queue, fifo_ordering),
@@ -453,9 +486,10 @@ static const test_case_t *const g_queue_cases[] = {
     &TEST_CASE_REF(queue, send_fires_send_hook),
     &TEST_CASE_REF(queue, receive_fires_receive_hook),
     &TEST_CASE_REF(queue, empty_receive_fires_block_empty_hook),
+    &TEST_CASE_REF(queue, null_input_asserts),
 };
 
-TEST_SUITE_DEFINE(queue, g_queue_cases,
+TEST_SUITE_DEFINE(queue, g_q_cases,
                   .setup  = queue_setup,
                   .before = queue_before);
 

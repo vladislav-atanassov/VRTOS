@@ -2,6 +2,7 @@
 #define TEST_ASSERT_H
 
 #include "test_invariants.h"
+#include "test_kassert_catcher.h"
 
 #include <setjmp.h>
 #include <stdbool.h>
@@ -100,20 +101,32 @@ extern bool     g_test_case_jmp_active;
     } while (0)
 
 /**
- * @brief Negative test: prove KASSERT fires when @p stmt runs.
+ * @brief Negative test: prove RTOS_ASSERT fires when @p stmt runs.
  *
- * Wraps @p stmt in a per-call setjmp; the assert handler longjmps back here
- * when KASSERT triggers. Passes iff KASSERT fired.
+ * Wraps @p stmt in a setjmp; the framework's strong override of
+ * @c rtos_assert_failed (test_kassert_catcher.c) longjmps back here when the
+ * assert triggers. Records @p inv_id as passed iff the assert fired, failed
+ * otherwise.
  *
- * Requires RTOS_ASSERT_ENABLED and the test build to override @c rtos_assert_failed
- * with the framework's catcher (see @ref test_kassert_catcher.c when added in
- * a later phase). For Phase 1 the macro is a stub that fails — declare an
- * invariant "INV-KASSERT-NOT-YET-WIRED" in cases that try to use it.
+ * Requires RTOS_ASSERT_ENABLED at build time. Only safe for asserts that
+ * fire from synchronous code in the runner task before any state is mutated
+ * (e.g. entry-point NULL checks) — the longjmp bypasses normal unwinding.
  */
-#define TEST_ASSERT_KASSERT_FIRES(stmt)                                                                                \
+#define TEST_ASSERT_KASSERT_FIRES(stmt, inv_id)                                                                        \
     do                                                                                                                 \
     {                                                                                                                  \
-        test_inv_fail("INV-FRAMEWORK-KASSERT-CATCHER", "kassert catcher not yet wired (Phase 2+)");                    \
+        if (setjmp(g_test_kassert_jmp_buf) == 0)                                                                       \
+        {                                                                                                              \
+            g_test_kassert_jmp_active = true;                                                                          \
+            stmt;                                                                                                      \
+            g_test_kassert_jmp_active = false;                                                                         \
+            test_inv_fail((inv_id), "kassert did not fire for: " #stmt);                                               \
+        }                                                                                                              \
+        else                                                                                                           \
+        {                                                                                                              \
+            /* longjmp path: catcher already cleared the flag and re-enabled IRQs */                                   \
+            test_inv_pass((inv_id));                                                                                   \
+        }                                                                                                              \
     } while (0)
 
 #ifdef __cplusplus

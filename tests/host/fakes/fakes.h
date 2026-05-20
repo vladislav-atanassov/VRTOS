@@ -42,6 +42,14 @@ DECLARE_FAKE_VOID_FUNC(rtos_kernel_task_unblock, rtos_task_handle_t);
 DECLARE_FAKE_VOID_FUNC(rtos_yield);
 
 /*
+ * RTOS_ASSERT_PARAM expands to rtos_assert_failed() on the kernel's NULL
+ * pre-checks. Host tests pass valid inputs so this fake is essentially a
+ * link-satisfier — call count is still observable if a test wants to assert
+ * "this call should NOT have asserted".
+ */
+DECLARE_FAKE_VOID_FUNC(rtos_assert_failed, const char *, uint32_t, const char *, const char *);
+
+/*
  * KLOG_* expand to klog_write(...) gated on the klog_verbosity global. The
  * host build sets klog_verbosity = KLOG_LEVEL_FAULT - 1 (effectively "off")
  * so the fake is rarely called; we still need it linkable.

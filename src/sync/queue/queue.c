@@ -5,6 +5,7 @@
 #include "klog.h"
 #include "memory.h"
 #include "queue_priv.h"
+#include "rtos_assert.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task.h"
@@ -129,6 +130,7 @@ static rtos_status_t rtos_queue_init(rtos_queue_t *queue, uint32_t item_count, u
 
 rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item_count, uint32_t item_size)
 {
+    RTOS_ASSERT_PARAM(queue_handle != NULL);
     if (queue_handle == NULL)
     {
         return RTOS_ERROR_INVALID_PARAM;
@@ -156,6 +158,8 @@ rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item
 
 rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item_ptr, rtos_tick_t timeout_ticks)
 {
+    RTOS_ASSERT_PARAM(queue_handle != NULL);
+    RTOS_ASSERT_PARAM(item_ptr != NULL);
     if (queue_handle == NULL || item_ptr == NULL)
     {
         return RTOS_ERROR_INVALID_PARAM;
@@ -265,6 +269,8 @@ copy_data:
 
 rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer, rtos_tick_t timeout_ticks)
 {
+    RTOS_ASSERT_PARAM(queue_handle != NULL);
+    RTOS_ASSERT_PARAM(buffer != NULL);
     if (queue_handle == NULL || buffer == NULL)
     {
         return RTOS_ERROR_INVALID_PARAM;
@@ -439,6 +445,7 @@ bool rtos_queue_is_empty(rtos_queue_handle_t queue_handle)
 /* Warning: does not wake waiting receivers */
 rtos_status_t rtos_queue_reset(rtos_queue_handle_t queue_handle)
 {
+    RTOS_ASSERT_PARAM(queue_handle != NULL);
     if (queue_handle == NULL)
     {
         return RTOS_ERROR_INVALID_PARAM;

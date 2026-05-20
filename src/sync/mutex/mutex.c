@@ -3,6 +3,7 @@
 #include "KARTOS.h"
 #include "kernel_priv.h"
 #include "klog.h"
+#include "rtos_assert.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task.h"
@@ -244,6 +245,7 @@ rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
  */
 rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 {
+    RTOS_ASSERT_PARAM(m != NULL);
     if (m == NULL)
     {
         return RTOS_MUTEX_ERR_INVALID;
@@ -351,6 +353,7 @@ void rtos_mutex_remove_task_from_wait(void *mutex_ptr, rtos_tcb_t *task)
 
 rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 {
+    RTOS_ASSERT_PARAM(m != NULL);
     if (m == NULL)
     {
         return RTOS_MUTEX_ERR_INVALID;

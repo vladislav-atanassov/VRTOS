@@ -18,6 +18,10 @@
 #include "semaphore.h"
 #include "task.h"
 
+#if RTOS_TEST_HOOKS_ENABLED
+#include "rtos_test_hooks.h"
+#endif
+
 /* ── Constants ───────────────────────────────────────────────────────────── */
 
 #define PRIO_LOW  2U
@@ -39,6 +43,13 @@ static volatile uint32_t  g_seq_high;
 
 static rtos_semaphore_t g_sem;
 
+#if RTOS_TEST_HOOKS_ENABLED
+static test_signal_t               g_ctx_switch_observed;
+static volatile rtos_task_handle_t g_observed_out;
+static volatile rtos_task_handle_t g_observed_in;
+static int                         g_hook_id;
+#endif
+
 static void preempt_before(void)
 {
     test_signal_init(&g_case_done);
@@ -50,6 +61,12 @@ static void preempt_before(void)
     g_seq_low     = 0U;
     g_seq_mid     = 0U;
     g_seq_high    = 0U;
+#if RTOS_TEST_HOOKS_ENABLED
+    test_signal_init(&g_ctx_switch_observed);
+    g_observed_out = NULL;
+    g_observed_in  = NULL;
+    g_hook_id      = -1;
+#endif
 }
 
 /* ── Task bodies ─────────────────────────────────────────────────────────── */
@@ -258,6 +275,74 @@ TEST_CASE(preempt, newly_created_higher_priority_preempts_current)
                 "INV-PREEMPT-NEW-HIGH");
 }
 
+/* ── Case 5: ctx_switch_hook_fires_on_preempt ────────────────────────────── */
+/*
+ * Verifies RTOS_HOOK_CTX_SWITCH fires when the scheduler picks a different
+ * task and that the payload names the correct (out, in) pair. We arrange a
+ * deterministic preemption: high task blocks on g_sem, runner signals, the
+ * scheduler picks high → hook fires with in_task = high_task.
+ *
+ * The hook fires unconditionally on every get_next_task call (including
+ * "same task chosen"), so the callback filters for the specific in_task we
+ * care about before posting g_ctx_switch_observed.
+ */
+#if RTOS_TEST_HOOKS_ENABLED
+static void on_ctx_switch(const rtos_hook_ctx_t *ctx, void *ud)
+{
+    (void) ud;
+    if (ctx->u.ctx_switch.in_task == g_high_task)
+    {
+        g_observed_out = ctx->u.ctx_switch.out_task;
+        g_observed_in  = ctx->u.ctx_switch.in_task;
+        test_signal_post(&g_ctx_switch_observed);
+    }
+}
+#endif
+
+TEST_CASE(preempt, ctx_switch_hook_fires_on_preempt)
+{
+#if RTOS_TEST_HOOKS_ENABLED
+    TEST_ASSUME(rtos_scheduler_get_type() == RTOS_SCHEDULER_PREEMPTIVE_SP,
+                "INV-PREEMPT-CTX-SWITCH-HOOK requires RTOS_SCHEDULER_PREEMPTIVE_SP");
+    TEST_INV_DECLARE("INV-PREEMPT-CTX-SWITCH-HOOK-FIRES",   1);
+    TEST_INV_DECLARE("INV-PREEMPT-CTX-SWITCH-HOOK-PAYLOAD", 1);
+
+    rtos_semaphore_init(&g_sem, 0U, 1U);
+
+    /* High task blocks on sem first so we know its TCB before the hook fires. */
+    TEST_ASSERT(rtos_task_create(task_high_wait_then_seq, "TH", STK, NULL,
+                                 PRIO_HIGH, &g_high_task) == RTOS_SUCCESS,
+                "INV-PREEMPT-CTX-SWITCH-HOOK-FIRES");
+
+    TEST_AWAIT_PHASE("high-blocking", 100, { rtos_delay_ms(2); });
+
+    TEST_ASSERT(rtos_test_hook_register(RTOS_HOOK_CTX_SWITCH, on_ctx_switch,
+                                        NULL, &g_hook_id) == 0,
+                "INV-PREEMPT-CTX-SWITCH-HOOK-FIRES");
+
+    /* Signal sem → high task becomes READY, scheduler picks it → CTX_SWITCH fires. */
+    rtos_semaphore_signal(&g_sem);
+
+    TEST_AWAIT_PHASE("ctx-switch-delivered", 500, {
+        test_signal_wait(&g_ctx_switch_observed, RTOS_SEM_MAX_WAIT);
+    });
+
+    TEST_INV_PASS("INV-PREEMPT-CTX-SWITCH-HOOK-FIRES");
+    TEST_EXPECT(g_observed_in == g_high_task,
+                "INV-PREEMPT-CTX-SWITCH-HOOK-PAYLOAD");
+
+    /* Let high task finish its body so the case doesn't leak it. */
+    TEST_AWAIT_PHASE("high-ran", 500, {
+        test_signal_wait(&g_high_ran, RTOS_SEM_MAX_WAIT);
+    });
+
+    rtos_test_hook_unregister(g_hook_id);
+    g_hook_id = -1;
+#else
+    TEST_ASSUME(false, "INV-PREEMPT-CTX-SWITCH-HOOK requires RTOS_TEST_HOOKS_ENABLED");
+#endif
+}
+
 /* ── Suite registration ──────────────────────────────────────────────────── */
 
 static const test_case_t *const g_preempt_cases[] = {
@@ -265,6 +350,7 @@ static const test_case_t *const g_preempt_cases[] = {
     &TEST_CASE_REF(preempt, unblock_causes_immediate_preemption),
     &TEST_CASE_REF(preempt, priority_ordering_is_strict),
     &TEST_CASE_REF(preempt, newly_created_higher_priority_preempts_current),
+    &TEST_CASE_REF(preempt, ctx_switch_hook_fires_on_preempt),
 };
 
 TEST_SUITE_DEFINE(preempt, g_preempt_cases,

@@ -322,6 +322,30 @@ TEST_CASE(sem, take_when_available_fires_take_hook)
 #endif
 }
 
+/* ── Case: null_input_asserts ────────────────────────────────────────────── */
+/*
+ * Semaphore init/wait/signal call RTOS_ASSERT_PARAM(sem != NULL) before the
+ * legacy ERR_INVALID return. The framework's KASSERT catcher proves the
+ * assert fires; the error-return remains as a release-build fallback.
+ */
+TEST_CASE(sem, null_input_asserts)
+{
+#if RTOS_ASSERT_ENABLED
+    TEST_INV_DECLARE("INV-SEM-NULL-ASSERT-INIT",   1);
+    TEST_INV_DECLARE("INV-SEM-NULL-ASSERT-WAIT",   1);
+    TEST_INV_DECLARE("INV-SEM-NULL-ASSERT-SIGNAL", 1);
+
+    TEST_ASSERT_KASSERT_FIRES(rtos_semaphore_init(NULL, 0U, 1U),
+                              "INV-SEM-NULL-ASSERT-INIT");
+    TEST_ASSERT_KASSERT_FIRES(rtos_semaphore_wait(NULL, RTOS_SEM_NO_WAIT),
+                              "INV-SEM-NULL-ASSERT-WAIT");
+    TEST_ASSERT_KASSERT_FIRES(rtos_semaphore_signal(NULL),
+                              "INV-SEM-NULL-ASSERT-SIGNAL");
+#else
+    TEST_ASSUME(false, "null_input_asserts requires RTOS_ASSERT_ENABLED");
+#endif
+}
+
 /* ── Suite registration ──────────────────────────────────────────────────── */
 
 static const test_case_t *const g_sem_cases[] = {
@@ -332,6 +356,7 @@ static const test_case_t *const g_sem_cases[] = {
     &TEST_CASE_REF(sem, counting_sem_accumulates),
     &TEST_CASE_REF(sem, signal_to_waiter_fires_give_hook),
     &TEST_CASE_REF(sem, take_when_available_fires_take_hook),
+    &TEST_CASE_REF(sem, null_input_asserts),
 };
 
 TEST_SUITE_DEFINE(sem, g_sem_cases,

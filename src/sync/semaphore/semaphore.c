@@ -2,6 +2,7 @@
 
 #include "KARTOS.h"
 #include "klog.h"
+#include "rtos_assert.h"
 #include "rtos_port.h"
 #include "task.h"
 #include "task_priv.h"
@@ -96,6 +97,7 @@ void rtos_sem_remove_task_from_wait(void *sem_ptr, rtos_tcb_t *task)
 
 rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_count, uint32_t max_count)
 {
+    RTOS_ASSERT_PARAM(sem != NULL);
     if (sem == NULL)
     {
         return RTOS_SEM_ERR_INVALID;
@@ -121,6 +123,7 @@ rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_co
 
 rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout_ticks)
 {
+    RTOS_ASSERT_PARAM(sem != NULL);
     if (sem == NULL)
     {
         return RTOS_SEM_ERR_INVALID;
@@ -193,6 +196,7 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
 
 rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
 {
+    RTOS_ASSERT_PARAM(sem != NULL);
     if (sem == NULL)
     {
         return RTOS_SEM_ERR_INVALID;

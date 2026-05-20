@@ -440,10 +440,26 @@ TEST_CASE(mutex, pip_transitive_chain)
 }
 
 /* ── Case 8: null_input_asserts ──────────────────────────────────────────── */
+/*
+ * rtos_mutex_lock/unlock call RTOS_ASSERT_PARAM(m != NULL) before the
+ * legacy error-return path. The framework's strong override of
+ * rtos_assert_failed (tests/framework/test_kassert_catcher.c) longjmps back
+ * to TEST_ASSERT_KASSERT_FIRES so we can prove the assert fired. The
+ * error-return remains as a release-build fallback when RTOS_ASSERT_ENABLED=0.
+ */
 TEST_CASE(mutex, null_input_asserts)
 {
-    /* Kernel KASSERT catcher not yet wired — skip until Phase 5. */
-    TEST_ASSUME(false, "kassert-catcher-not-wired");
+#if RTOS_ASSERT_ENABLED
+    TEST_INV_DECLARE("INV-MUTEX-NULL-ASSERT-LOCK",   1);
+    TEST_INV_DECLARE("INV-MUTEX-NULL-ASSERT-UNLOCK", 1);
+
+    TEST_ASSERT_KASSERT_FIRES(rtos_mutex_lock(NULL, RTOS_NO_WAIT),
+                              "INV-MUTEX-NULL-ASSERT-LOCK");
+    TEST_ASSERT_KASSERT_FIRES(rtos_mutex_unlock(NULL),
+                              "INV-MUTEX-NULL-ASSERT-UNLOCK");
+#else
+    TEST_ASSUME(false, "null_input_asserts requires RTOS_ASSERT_ENABLED");
+#endif
 }
 
 /* ── Case 9: lock_fires_lock_exit_hook ───────────────────────────────────── */
