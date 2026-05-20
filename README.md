@@ -167,12 +167,13 @@ kartos test -e test_scheduler_rr_suite --duration 10
 
 **Integration Test Suites**:
 
-- `test_mutex_suite` - Mutex ownership, blocking, and priority inheritance
-- `test_semaphore_suite` - Counting semaphore wait/signal cases
-- `test_queue_suite` - Queue blocking, wake, and ordering cases
+- `test_mutex_suite` - Mutex ownership, blocking, priority inheritance, NULL-input asserts, lock/unlock hook payload
+- `test_semaphore_suite` - Counting semaphore wait/signal cases, give/take hook payload, NULL-input asserts
+- `test_queue_suite` - Queue blocking, wake, ordering, send/receive/block-full/block-empty hook payload, NULL-input asserts
 - `test_event_group_suite` - Event group bit-wait cases
 - `test_notify_suite` - Task notification cases
-- `test_task_state_suite` - Task lifecycle state transitions
+- `test_task_state_suite` - Task lifecycle state transitions, NULL-input asserts, TASK_STATE + TICK hook observability
+- `test_tickless_idle_suite` - Tickless idle correctness; force-enables `RTOS_CONFIG_USE_TICKLESS_IDLE=1` regardless of board default
 
 **Benchmarks**:
 
@@ -199,7 +200,10 @@ The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc`
 | `upload` | `-e VARIANT` | Build + OpenOCD flash |
 | `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
 | `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
+| `test-all` | `--pattern GLOB`, `--duration SEC`, `--skip-host`, `--skip-board` | Run host tests + every on-board `test_*_suite`; aggregated verdict |
+| `host-test` | `--reconfigure`, `-v` | Build and run the pure-logic host unit tests (Unity + FFF) |
 | `configure` | | Re-run `cmake --preset <board>` |
+| `verbosity` | `LEVEL`, `-e VARIANT`, `--no-reset` | Live-patch `klog_verbosity` in `.noinit` RAM (FAULT…TRACE) |
 | `list` | | Print available boards and variant names |
 | `clean` | | Delete the board's build directory |
 
@@ -407,7 +411,7 @@ The STM32F446RE board config enables tickless idle by default ([boards/stm32f446
 - Any peripheral whose clock is gated by `WFI` (e.g. peripherals on a stopped bus clock in `STOP` mode) will not wake the CPU — the current port uses plain `WFI` (Sleep mode), not `Deep Sleep`, so AHB/APB peripherals continue to run.
 - Tick-driven profiling counters reflect wall-clock time correctly, but per-task CPU usage measured by counting ticks may show the idle task as "asleep" rather than "running" during suppressed windows.
 
-**Validation**: [tests/integration/test_tickless_idle.c](tests/integration/test_tickless_idle.c) sweeps `rtos_delay_ms()` across 1 ms–2000 ms windows and asserts both the kernel tick count and `rtos_port_get_uptime_us()` advance within ±(2 ticks + 1 % of requested delay).
+**Validation**: [tests/integration/test_tickless_idle_suite.c](tests/integration/test_tickless_idle_suite.c) runs five focused cases — basic 50 ms wake, direct SysTick CTRL/LOAD probe post-wake, drift across 20 back-to-back tickless cycles, a 3-second soak (regression test for the historical "tick freeze after ~2.6 s" bug), and microsecond-uptime monotonicity. The variant force-defines `RTOS_CONFIG_USE_TICKLESS_IDLE=1U` via `EXTRA_DEFINES` so the suite always exercises the suppress path regardless of the board default. Run with `kartos test -e test_tickless_idle_suite`.
 
 ### Event Groups
 
@@ -598,7 +602,7 @@ KARTOS/
 │       ├── profiling_demo/
 │       └── fpu_context_test/
 ├── tests/                 # Test suites (suite-per-binary, case-per-invariant)
-│   ├── framework/         # Suite runner, three-tier assertions, invariant table, watchdog, sync
+│   ├── framework/         # Suite runner, invariant table, watchdog, sync helpers, KASSERT catcher
 │   ├── integration/       # Sync primitive and scheduler suites (one binary per area)
 │   │   ├── test_mutex_suite.c
 │   │   ├── test_semaphore_suite.c
@@ -606,6 +610,7 @@ KARTOS/
 │   │   ├── test_event_group_suite.c
 │   │   ├── test_notify_suite.c
 │   │   ├── test_task_state_suite.c
+│   │   ├── test_tickless_idle_suite.c
 │   │   ├── test_scheduler_cooperative_suite.c
 │   │   ├── test_scheduler_rr_suite.c
 │   │   └── test_scheduler_preemptive_suite.c
@@ -840,4 +845,29 @@ ulog_error("Failed to read sensor: %d", error_code);
 
 ### Test Framework (`tests/framework/`)
 
-On-target tests use a suite-with-cases framework: each binary registers a suite of small focused cases via [tests/framework/test_suite.h](tests/framework/test_suite.h), declares per-case invariants via [tests/framework/test_invariants.h](tests/framework/test_invariants.h), and reports per-case `CASE_RESULT` lines plus a final `SUITE_RESULT` line. Three-tier assertions (`TEST_ASSERT`, `TEST_EXPECT`, `TEST_ASSUME`) live in [tests/framework/test_assert.h](tests/framework/test_assert.h); the watchdog macro `TEST_AWAIT_PHASE` in [tests/framework/test_watchdog.h](tests/framework/test_watchdog.h) converts hangs into named invariant failures. Verdict lines are written via polled-UART (bypassing the ulog ring buffer) so they survive even with interrupts disabled.
+#### Suite + case + invariant model
+
+Each on-board test binary registers a suite of small focused cases via [tests/framework/test_suite.h](tests/framework/test_suite.h) and declares per-case invariants via [tests/framework/test_invariants.h](tests/framework/test_invariants.h). The runner emits one tab-delimited `CASE_RESULT` line per case plus a final `SUITE_RESULT` line. Verdict lines are written via polled-UART (bypassing the ulog ring buffer) so they survive even with interrupts disabled.
+
+#### Three-tier assertions
+
+[tests/framework/test_assert.h](tests/framework/test_assert.h):
+
+- **`TEST_ASSERT(cond, inv_id)`** — hard fail; longjmps out of the case, suite continues
+- **`TEST_EXPECT(cond, inv_id)`** — soft fail; records the miss but the case keeps running (use from spawned tasks; never longjmps)
+- **`TEST_ASSUME(cond, reason)`** — precondition; failing this marks the case `SKIPPED`, not `FAILED`
+- **`TEST_ASSERT_KASSERT_FIRES(stmt, inv_id)`** — negative test; passes iff `RTOS_ASSERT*` fires inside `stmt`
+
+The watchdog macro `TEST_AWAIT_PHASE("phase", budget_ms, { ... })` in [tests/framework/test_watchdog.h](tests/framework/test_watchdog.h) converts hangs into named invariant failures (`INV-WATCHDOG:<phase>`).
+
+#### KASSERT catcher
+
+[tests/framework/test_kassert_catcher.{c,h}](tests/framework/test_kassert_catcher.c) provides a strong override of `rtos_assert_failed` (which is weakly linked in [src/utils/rtos_assert.c](src/utils/rtos_assert.c)). When `TEST_ASSERT_KASSERT_FIRES` arms a setjmp buffer, the catcher re-enables interrupts and longjmps back so the test can record the assert. Without an armed catcher it falls back to the production halt. Each sync primitive's `null_input_asserts` case (mutex, semaphore, queue, task_state) uses this to prove `RTOS_ASSERT_PARAM(... != NULL)` fires for every NULL-input entry point — debug builds halt on programmer error while release builds (`RTOS_ASSERT_ENABLED=0`) keep the documented `ERR_INVALID` return contract.
+
+#### Kernel test hooks
+
+When the project is built with `-DKARTOS_TEST_HOOKS=ON`, the kernel exposes a synchronous hook fire from key events (context switch, task state transition, tick, mutex boost/restore/lock/unlock, queue send/receive/block, sem give/take, notify, event group set/wait). Hook payloads are enqueued in a lock-free 64-entry ring and dispatched to registered callbacks by the `HookDrain` task. Hook-observability cases verify (a) the hook fires at the right moment and (b) the payload names the correct task/object — see `mutex:lock_fires_lock_exit_hook`, `preempt:ctx_switch_hook_fires_on_preempt`, `task_state:task_state_hook_fires_on_wake`, and `task_state:tick_hook_fires_monotonically` for canonical examples.
+
+#### Host-side tests (`tests/host/`)
+
+Pure-logic unit tests compiled with the host compiler. Each test executable links Unity + the framework fakes ([tests/host/fakes/fakes.c](tests/host/fakes/fakes.c) — FFF-backed stubs for port, scheduler, klog, and `rtos_assert_failed`) against exactly one production `.c` file under test. Run with `kartos host-test` or directly via `ctest --preset host`. Existing tests cover mutex list ordering, mutex PIP walker depth, queue ring buffer, and event-group bit matching.
