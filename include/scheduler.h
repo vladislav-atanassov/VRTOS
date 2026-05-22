@@ -3,228 +3,125 @@
 
 #include "rtos_types.h"
 
-/**
- * @file scheduler.h
- * @brief Enhanced Scheduler Interface Definition
- *
- * This file defines the vtable interface that all schedulers must implement.
- * This version includes scheduler-specific list management operations for
- * optimal performance and flexibility.
- */
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/* Forward declarations */
 typedef struct rtos_scheduler          rtos_scheduler_t;
 typedef struct rtos_scheduler_instance rtos_scheduler_instance_t;
 
-/* Scheduler Types */
 typedef enum
 {
-    RTOS_SCHEDULER_PREEMPTIVE_SP = 0, /**< Preemptive static priority-based Scheduler */
-    RTOS_SCHEDULER_COOPERATIVE   = 1, /**< Cooperative Scheduler */
-    RTOS_SCHEDULER_ROUND_ROBIN   = 2  /**< Round Robin Scheduler */
+    RTOS_SCHEDULER_PREEMPTIVE_SP = 0,
+    RTOS_SCHEDULER_COOPERATIVE   = 1,
+    RTOS_SCHEDULER_ROUND_ROBIN   = 2
 } rtos_scheduler_type_t;
 
-/* Deadline Types for EDF */
-typedef uint32_t rtos_deadline_t; /**< Task deadline in ticks */
-typedef uint32_t rtos_period_t;   /**< Task period in ticks */
-
-/**
- * @brief Enhanced scheduler interface vtable
- *
- * All scheduler implementations must provide these function pointers.
- * This version includes list management operations that are scheduler-specific.
- */
 struct rtos_scheduler
 {
-    /* =================== Core Scheduling Functions =================== */
-
-    /**
-     * @brief Initialize the scheduler
-     * @param instance Scheduler instance
-     * @return RTOS_SUCCESS if successful
-     */
+    /** @brief Initialize scheduler private state and bind it to the instance. */
     rtos_status_t (*init)(rtos_scheduler_instance_t *instance);
-
-    /**
-     * @brief Get next task to run
-     * @param instance Scheduler instance
-     * @return Next task to run, NULL if none
-     */
+    /** @brief Return the next task to run, or NULL if no task is ready. */
     rtos_task_handle_t (*get_next_task)(rtos_scheduler_instance_t *instance);
-
-    /**
-     * @brief Check if preemption is needed
-     * @param instance Scheduler instance
-     * @param new_task Newly ready task
-     * @return True if preemption needed
-     */
+    /** @brief Return true if new_task should preempt the currently running task. */
     bool (*should_preempt)(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task);
-
-    /**
-     * @brief Handle task completion/yield
-     * @param instance Scheduler instance
-     * @param completed_task Task that completed
-     */
+    /** @brief Notify the scheduler that completed_task has finished its time slice. */
     void (*task_completed)(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task);
 
-    /* =================== List Management Operations =================== */
-
-    /**
-     * @brief Add task to scheduler's ready list
-     * @param instance Scheduler instance
-     * @param task_handle Task to add
-     *
-     * This function should add the task to the scheduler's ready list
-     * using the appropriate ordering (priority for Preemptive static priority-based Scheduler,
-     * deadline for EDF).
-     */
+    /** @brief Add task_handle to the ready list. */
     void (*add_to_ready_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
-
-    /**
-     * @brief Remove task from scheduler's ready list
-     * @param instance Scheduler instance
-     * @param task_handle Task to remove
-     */
+    /** @brief Remove task_handle from the ready list. */
     void (*remove_from_ready_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
-
-    /**
-     * @brief Add task to scheduler's delayed/blocked list
-     * @param instance Scheduler instance
-     * @param task_handle Task to add
-     * @param delay_ticks Delay in ticks (0 = add to blocked list)
-     *
-     * This function handles both delayed tasks (delay > 0) and blocked tasks (delay = 0).
-     * The scheduler can use different lists for these as needed.
-     */
+    /** @brief Insert task_handle into the time-ordered delayed list to wake after delay_ticks. */
     void (*add_to_delayed_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle,
                                 rtos_tick_t delay_ticks);
-
-    /**
-     * @brief Remove task from scheduler's delayed/blocked list
-     * @param instance Scheduler instance
-     * @param task_handle Task to remove
-     */
+    /** @brief Remove task_handle from the delayed list (e.g. on timeout cancellation). */
     void (*remove_from_delayed_list)(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle);
-
-    /**
-     * @brief Update delayed tasks (called from tick handler)
-     * @param instance Scheduler instance
-     *
-     * This function should check for delayed tasks that are ready to run
-     * and move them from delayed list to ready list.
-     */
+    /** @brief Move all expired delayed tasks to the ready list. Called each tick. */
     void (*update_delayed_tasks)(rtos_scheduler_instance_t *instance);
-
-    /**
-     * @brief Get expected idle ticks
-     * @param instance Scheduler instance
-     * @return Number of ticks until the next delayed task is ready, or maximum uint32_t
-     */
+    /** @brief Return ticks until the next delayed task wakes, or 0xFFFFFFFF if none. */
     uint32_t (*get_expected_idle_ticks)(rtos_scheduler_instance_t *instance);
 
-    /* =================== Optional Debug/Statistics =================== */
-
-    /**
-     * @brief Get scheduler statistics (optional)
-     * @param instance Scheduler instance
-     * @param stats_buffer Buffer to fill with statistics
-     * @param buffer_size Size of statistics buffer
-     * @return Number of bytes written, 0 if not supported
-     */
+    /** @brief Fill stats_buffer with scheduler-specific statistics. Returns bytes written. */
     size_t (*get_statistics)(rtos_scheduler_instance_t *instance, void *stats_buffer, size_t buffer_size);
 };
 
-/**
- * @brief Scheduler instance structure
- *
- * Contains the vtable and instance-specific data
- */
 struct rtos_scheduler_instance
 {
-    const rtos_scheduler_t *vtable;       /**< Function pointer table */
-    rtos_scheduler_type_t   type;         /**< Scheduler type */
-    void                   *private_data; /**< Scheduler-specific data */
-    bool                    initialized;  /**< Initialization flag */
+    const rtos_scheduler_t *vtable;
+    rtos_scheduler_type_t   type;
+    void                   *private_data;
+    bool                    initialized;
 };
-
-/* =================== Public Scheduler Manager API =================== */
 
 extern rtos_scheduler_instance_t g_scheduler_instance;
 
 /**
- * @brief Initialize the scheduler subsystem
- * @param scheduler_type Type of scheduler to use
- * @return RTOS_SUCCESS if successful
+ * @brief Initialize the scheduler for the given type. Must be called once before the kernel starts.
+ * @param scheduler_type Scheduler algorithm to use.
+ * @return RTOS_SUCCESS or an error code.
  */
 rtos_status_t rtos_scheduler_init(rtos_scheduler_type_t scheduler_type);
 
 /**
- * @brief Get the current scheduler type
- * @return Current scheduler type
+ * @brief Return the type of the active scheduler.
+ * @return Active scheduler type.
  */
 rtos_scheduler_type_t rtos_scheduler_get_type(void);
 
-/* =================== Core Scheduling Operations =================== */
-
 /**
- * @brief Get the next task to run
- * @return Next task handle, NULL if none
+ * @brief Ask the scheduler for the next task to run.
+ * @return Handle of the selected task, or NULL if no task is ready.
  */
 rtos_task_handle_t rtos_scheduler_get_next_task(void);
 
 /**
- * @brief Check if preemption is needed
- * @param new_task Newly ready task
- * @return True if preemption needed
+ * @brief Ask the scheduler whether new_task should preempt the current task.
+ * @param new_task Candidate task that just became ready.
+ * @return true if a context switch should occur.
  */
 bool rtos_scheduler_should_preempt(rtos_task_handle_t new_task);
 
 /**
- * @brief Handle task completion/yield
- * @param completed_task Task that completed
+ * @brief Notify the scheduler that completed_task has finished its current run slice.
+ * @param completed_task Task that was just switched out.
  */
 void rtos_scheduler_task_completed(rtos_task_handle_t completed_task);
 
-/* =================== List Management Operations =================== */
-
 /**
- * @brief Add task to ready list via scheduler
- * @param task_handle Task to add
+ * @brief Add a task to the scheduler's ready list.
+ * @param task_handle Task to add.
  */
 void rtos_scheduler_add_to_ready_list(rtos_task_handle_t task_handle);
 
 /**
- * @brief Remove task from ready list via scheduler
- * @param task_handle Task to remove
+ * @brief Remove a task from the scheduler's ready list.
+ * @param task_handle Task to remove.
  */
 void rtos_scheduler_remove_from_ready_list(rtos_task_handle_t task_handle);
 
 /**
- * @brief Add task to delayed list via scheduler
- * @param task_handle Task to add
- * @param delay_ticks Delay in ticks
+ * @brief Add a task to the scheduler's time-ordered delayed list.
+ * @param task_handle Task to delay.
+ * @param delay_ticks Number of ticks until the task should wake.
  */
 void rtos_scheduler_add_to_delayed_list(rtos_task_handle_t task_handle, rtos_tick_t delay_ticks);
 
 /**
- * @brief Remove task from delayed list via scheduler
- * @param task_handle Task to remove
+ * @brief Remove a task from the scheduler's delayed list.
+ * @param task_handle Task to remove.
  */
 void rtos_scheduler_remove_from_delayed_list(rtos_task_handle_t task_handle);
 
 /**
- * @brief Update delayed tasks via scheduler
+ * @brief Move all expired delayed tasks to the ready list. Called from the tick handler.
  */
 void rtos_scheduler_update_delayed_tasks(void);
 
 /**
- * @brief Get expected idle ticks via scheduler
- * @return Number of ticks until the next delayed task is ready
+ * @brief Return the number of ticks until the next delayed task wakes.
+ * @return Ticks until next wake, or 0xFFFFFFFF if no tasks are delayed.
  */
 uint32_t rtos_scheduler_get_expected_idle_ticks(void);
 

@@ -93,7 +93,6 @@ static void cooperative_add_to_delayed_list_internal(rtos_task_handle_t task, rt
         return;
     }
 
-    /* Find insertion point (sorted by delay_until) */
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
@@ -164,7 +163,6 @@ static void cooperative_update_delayed_tasks_internal(void)
     rtos_tick_t current_tick = rtos_get_tick_count();
     rtos_tcb_t *task         = g_cooperative_data.delayed_list;
 
-    /* Check delayed tasks (list is time-sorted, so we can break early) */
     while (task != NULL)
     {
         rtos_tcb_t *next_task = task->next;
@@ -236,7 +234,6 @@ static rtos_task_handle_t cooperative_get_next_task(rtos_scheduler_instance_t *i
     return cooperative_get_next_ready();
 }
 
-/* Cooperative scheduler is non-preemptive: tasks run until they voluntarily yield or block */
 static bool cooperative_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
     return false;
@@ -249,18 +246,14 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
         return;
     }
 
-    /* no-op: cooperative tasks yield voluntarily */
     if (completed_task->state == RTOS_TASK_STATE_READY)
     {
-        /* Remove from current position and add to end for round-robin */
         cooperative_remove_from_ready_list_internal(completed_task);
         cooperative_add_to_ready_list_internal(completed_task);
 
         KLOGT("Sched/Co", "Rotate id=%u", completed_task->task_id);
     }
 }
-
-/* ========= Cooperative List Management Interface Implementation ========= */
 
 static void cooperative_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
@@ -338,7 +331,6 @@ static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, vo
         return 0;
     }
 
-    /* Simple statistics structure for cooperative scheduler */
     typedef struct
     {
         uint8_t     ready_count;
@@ -375,15 +367,3 @@ const rtos_scheduler_t cooperative_scheduler = {.init           = cooperative_in
                                                 .get_expected_idle_ticks  = cooperative_get_expected_idle_ticks,
 
                                                 .get_statistics = cooperative_get_statistics};
-
-/* =================== Public Helper Functions =================== */
-
-/**
- * @brief Get next ready task (public interface for kernel)
- * This function is used by the kernel when it needs direct access
- * to the next ready task without going through the scheduler interface.
- */
-rtos_tcb_t *rtos_task_get_next_ready_cooperative(void)
-{
-    return cooperative_get_next_ready();
-}

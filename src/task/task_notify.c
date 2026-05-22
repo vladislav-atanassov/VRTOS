@@ -18,7 +18,6 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
     switch (action)
     {
         case RTOS_NOTIFY_ACTION_NONE:
-            /* Just set pending, don't modify value */
             break;
 
         case RTOS_NOTIFY_ACTION_SET_BITS:
@@ -47,10 +46,8 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 
     KLOGD("Notify", "NotifySend id=%u act=%u", task->task_id, (uint32_t) action);
 
-    /* If target task is blocked waiting for a notification, wake it */
     if (task->state == RTOS_TASK_STATE_BLOCKED && task->blocked_on_type == RTOS_SYNC_TYPE_NOTIFICATION)
     {
-        /* Clear the blocking sentinel */
         task->blocked_on      = NULL;
         task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
@@ -90,7 +87,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
 
     KLOGD("Notify", "NotifyWait id=%u val=%u", current_task->task_id, current_task->notification_value);
 
-    /* Fast path: notification already pending */
     if (current_task->notification_pending)
     {
         if (value_out != NULL)
@@ -107,7 +103,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
         return RTOS_NOTIFY_OK;
     }
 
-    /* No notification pending — check if we should wait */
     if (timeout_ticks == RTOS_NOTIFY_NO_WAIT)
     {
         rtos_port_exit_critical();
@@ -126,7 +121,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
 
     if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
     {
-        /* Infinite wait - block without delay timeout */
         current_task->state = RTOS_TASK_STATE_BLOCKED;
         rtos_scheduler_remove_from_ready_list(current_task);
         rtos_port_exit_critical();
@@ -134,7 +128,6 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
     }
     else
     {
-        /* Timed wait - use kernel block with delay */
         rtos_port_exit_critical();
         rtos_kernel_task_block(current_task, timeout_ticks);
     }
@@ -178,7 +171,6 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
         return RTOS_NOTIFY_ERR_INVALID;
     }
 
-    /* Fast path: notification value > 0 */
     if (current_task->notification_value > 0)
     {
         if (clear_on_exit)
@@ -194,14 +186,12 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
         return RTOS_NOTIFY_OK;
     }
 
-    /* Value is 0 — check if we should wait */
     if (timeout_ticks == RTOS_NOTIFY_NO_WAIT)
     {
         rtos_port_exit_critical();
         return RTOS_NOTIFY_ERR_TIMEOUT;
     }
 
-    /* Block: self-pointer sentinel */
     current_task->blocked_on      = current_task;
     current_task->blocked_on_type = RTOS_SYNC_TYPE_NOTIFICATION;
 

@@ -5,13 +5,8 @@
 
 #include <stddef.h>
 
-/* Global list head */
 rtos_timer_t *g_active_timers = NULL;
 
-/**
- * Helper to comparison time with wraparound handling
- * Returns true if t1 is "before" t2
- */
 static bool time_before(rtos_tick_t t1, rtos_tick_t t2)
 {
     return ((int32_t) (t1 - t2) < 0);
@@ -26,7 +21,6 @@ void timer_insert_active_list(rtos_timer_t *timer)
         return;
     }
 
-    /* Check if we should be at head */
     if (time_before(timer->expiry_time, g_active_timers->expiry_time))
     {
         timer->next     = g_active_timers;
@@ -34,19 +28,16 @@ void timer_insert_active_list(rtos_timer_t *timer)
         return;
     }
 
-    /* Find insertion point */
     rtos_timer_t *current = g_active_timers;
     while (current->next != NULL)
     {
         if (time_before(timer->expiry_time, current->next->expiry_time))
         {
-            /* Insert before next */
             break;
         }
         current = current->next;
     }
 
-    /* Insert after current */
     timer->next   = current->next;
     current->next = timer;
 }
@@ -91,8 +82,6 @@ void rtos_timer_tick(void)
 
     rtos_tick_t current_tick = rtos_get_tick_count();
 
-    /* Process all expired timers */
-    /* Note: Since list is sorted, we just check head until not expired */
     while (g_active_timers != NULL)
     {
         /* Check if expired (expiry <= current) using signed comparison for wraparound */
@@ -100,9 +89,8 @@ void rtos_timer_tick(void)
         {
             rtos_timer_t *expired = g_active_timers;
 
-            /* Remove from list */
             g_active_timers = expired->next;
-            expired->next   = NULL; /* Detach */
+            expired->next   = NULL;
 
             /* Execute callback outside critical section for reduced latency */
             rtos_port_exit_critical_from_isr(saved_priority);
@@ -112,13 +100,11 @@ void rtos_timer_tick(void)
                 expired->callback((void *) expired, expired->parameter);
             }
 
-            /* Re-enter critical section for list manipulation */
             saved_priority = rtos_port_enter_critical_from_isr();
 
-            /* Handle Auto-Reload */
             if (expired->mode == RTOS_TIMER_AUTO_RELOAD)
             {
-                /**
+                /*
                  * Calculate next expiry using expiry_time + period to avoid drift.
                  * If callback took longer than one period, catch up by advancing
                  * expiry_time until it's in the future to prevent repeated fires.
@@ -129,12 +115,10 @@ void rtos_timer_tick(void)
                     expired->expiry_time += expired->period;
                 } while ((int32_t) (expired->expiry_time - now) <= 0);
 
-                /* Re-insert into sorted active list */
                 timer_insert_active_list(expired);
             }
             else
             {
-                /* One-shot: mark inactive */
                 expired->active = false;
             }
         }

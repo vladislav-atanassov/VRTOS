@@ -57,7 +57,6 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
     }
     else
     {
-        /* Task is at head - update head pointer */
         g_round_robin_data.ready_list = task->next;
     }
 
@@ -67,7 +66,6 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
     }
     else
     {
-        /* Task is at tail - update tail pointer */
         g_round_robin_data.ready_list_tail = task->prev;
     }
 
@@ -103,7 +101,6 @@ static void round_robin_add_to_delayed_list_internal(rtos_task_handle_t task, rt
         return;
     }
 
-    /* Find insertion point (sorted by delay_until - earliest first) */
     rtos_tcb_t *current = *list_head;
     rtos_tcb_t *prev    = NULL;
 
@@ -150,7 +147,6 @@ static void round_robin_remove_from_delayed_list_internal(rtos_task_handle_t tas
     }
     else
     {
-        /* Task is at head */
         *list_head = task->next;
     }
 
@@ -175,7 +171,6 @@ static void round_robin_update_delayed_tasks_internal(void)
     rtos_tick_t current_tick = rtos_get_tick_count();
     rtos_tcb_t *task         = g_round_robin_data.delayed_list;
 
-    /* Check delayed tasks (list is time-sorted, so we can break early) */
     while (task != NULL)
     {
         rtos_tcb_t *next_task = task->next;
@@ -257,9 +252,6 @@ static rtos_task_handle_t round_robin_get_next_task(rtos_scheduler_instance_t *i
     return next;
 }
 
-/**
- * Priority-aware round-robin preemption
- */
 static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos_task_handle_t new_task)
 {
     if (instance == NULL || new_task == NULL)
@@ -315,10 +307,6 @@ static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos
     return false;
 }
 
-/**
- * When a task yields or its time slice expires, rotate it to the end
- * of the ready queue to give other tasks a turn.
- */
 static void round_robin_task_completed(rtos_scheduler_instance_t *instance, rtos_task_handle_t completed_task)
 {
     if (instance == NULL || completed_task == NULL)
@@ -326,21 +314,17 @@ static void round_robin_task_completed(rtos_scheduler_instance_t *instance, rtos
         return;
     }
 
-    /* Rotate to next task */
     if (completed_task->state == RTOS_TASK_STATE_READY)
     {
         round_robin_remove_from_ready_list_internal(completed_task);
         round_robin_add_to_ready_list_internal(completed_task);
 
-        /* Reset time slice for next task */
         g_round_robin_data.slice_remaining = RTOS_TIME_SLICE_TICKS;
         g_round_robin_data.current_task    = NULL;
 
         KLOGT("Sched/RR", "Rotate id=%u", completed_task->task_id);
     }
 }
-
-/* ========= Round Robin List Management Interface Implementation ========= */
 
 static void round_robin_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
 {
@@ -418,7 +402,6 @@ static size_t round_robin_get_statistics(rtos_scheduler_instance_t *instance, vo
         return 0;
     }
 
-    /* Statistics structure for round robin scheduler */
     typedef struct
     {
         uint8_t     ready_count;
@@ -457,16 +440,3 @@ const rtos_scheduler_t round_robin_scheduler = {.init           = round_robin_in
                                                 .get_expected_idle_ticks  = round_robin_get_expected_idle_ticks,
 
                                                 .get_statistics = round_robin_get_statistics};
-
-/* =================== Public Helper Functions =================== */
-
-/**
- * @brief Get next ready task (public interface for kernel)
- *
- * This function is used by the kernel when it needs direct access
- * to the next ready task without going through the scheduler interface.
- */
-rtos_tcb_t *rtos_task_get_next_ready_round_robin(void)
-{
-    return round_robin_get_next_ready();
-}

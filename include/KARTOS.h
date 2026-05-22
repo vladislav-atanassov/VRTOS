@@ -3,13 +3,6 @@
 
 #include "rtos_types.h"
 
-/**
- * @file KARTOS.h
- * @brief Main RTOS API Header
- *
- * This is the main header file that applications should include to use the RTOS.
- */
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -43,16 +36,14 @@ rtos_status_t rtos_start_scheduler(void);
 rtos_tick_t rtos_get_tick_count(void);
 
 /**
- * @brief Delay the current task for specified number of ticks
- *
- * @param ticks Number of ticks to delay
+ * @brief Block the calling task for the specified number of ticks.
+ * @param ticks Number of ticks to delay. 0 returns immediately.
  */
 void rtos_delay_ticks(rtos_tick_t ticks);
 
 /**
- * @brief Delay the current task for specified number of milliseconds
- *
- * @param ms Number of milliseconds to delay
+ * @brief Block the calling task for approximately the given number of milliseconds.
+ * @param ms Milliseconds to delay (rounded up to the nearest tick).
  */
 void rtos_delay_ms(uint32_t ms);
 
@@ -67,9 +58,7 @@ void rtos_delay_ms(uint32_t ms);
 void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increment);
 
 /**
- * @brief Force a task yield (context switch)
- *
- * This function forces the scheduler to run and potentially switch tasks.
+ * @brief Yield the CPU to allow the scheduler to select the next task.
  */
 void rtos_yield(void);
 

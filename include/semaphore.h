@@ -3,29 +3,16 @@
 
 #include "rtos_types.h"
 
-/**
- * @file semaphore.h
- * @brief Counting Semaphore API
- *
- * Provides counting semaphores for task synchronization.
- * Binary semaphores can be created by setting max_count = 1.
- */
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-/* Forward declaration for TCB */
 struct rtos_task_control_block;
 
-/* Semaphore wait timeout values */
 #define RTOS_SEM_MAX_WAIT ((rtos_tick_t) 0xFFFFFFFFU)
 #define RTOS_SEM_NO_WAIT  ((rtos_tick_t) 0U)
 
-/**
- * @brief Semaphore status codes
- */
 typedef enum
 {
     RTOS_SEM_OK           = RTOS_SUCCESS,
@@ -34,51 +21,48 @@ typedef enum
     RTOS_SEM_ERR_OVERFLOW = RTOS_ERROR_GENERAL
 } rtos_sem_status_t;
 
-/**
- * @brief Semaphore structure
- */
 typedef struct rtos_semaphore
 {
-    uint32_t                        count;        /**< Current count */
-    uint32_t                        max_count;    /**< Maximum count (0 = unlimited) */
-    struct rtos_task_control_block *waiting_list; /**< Head of waiting task list (priority-ordered) */
+    uint32_t                        count;
+    uint32_t                        max_count;    /* 0 = unlimited, 1 = binary */
+    struct rtos_task_control_block *waiting_list; /* priority-ordered */
 } rtos_semaphore_t;
 
 /**
- * @brief Initialize a semaphore
- * @param sem Pointer to semaphore structure
- * @param initial_count Initial count value
- * @param max_count Maximum count (0 = unlimited, 1 = binary semaphore)
- * @return RTOS_SEM_OK on success
+ * @brief Initialize a semaphore.
+ * @param sem Pointer to the semaphore object (must not be NULL).
+ * @param initial_count Initial count value.
+ * @param max_count Maximum count. 0 = unlimited, 1 = binary semaphore.
+ * @return RTOS_SEM_OK on success, error code otherwise.
  */
 rtos_sem_status_t rtos_semaphore_init(rtos_semaphore_t *sem, uint32_t initial_count, uint32_t max_count);
 
 /**
- * @brief Wait on a semaphore (decrements count or blocks)
- * @param sem Pointer to semaphore
- * @param timeout_ticks Timeout in ticks (0 = no wait, RTOS_SEM_MAX_WAIT = forever)
- * @return RTOS_SEM_OK if acquired, RTOS_SEM_ERR_TIMEOUT if timed out
+ * @brief Decrement the semaphore count, blocking if the count is zero.
+ * @param sem Pointer to the semaphore.
+ * @param timeout_ticks Maximum ticks to wait. RTOS_SEM_NO_WAIT returns immediately.
+ * @return RTOS_SEM_OK on success, RTOS_SEM_ERR_TIMEOUT if the count was not available in time.
  */
 rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout_ticks);
 
 /**
- * @brief Signal a semaphore (increments count or wakes waiter)
- * @param sem Pointer to semaphore
- * @return RTOS_SEM_OK on success, RTOS_SEM_ERR_OVERFLOW if at max
+ * @brief Increment the semaphore count, unblocking the highest-priority waiter if any.
+ * @param sem Pointer to the semaphore.
+ * @return RTOS_SEM_OK on success, RTOS_SEM_ERR_OVERFLOW if max_count would be exceeded.
  */
 rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem);
 
 /**
- * @brief Try to acquire semaphore without blocking
- * @param sem Pointer to semaphore
- * @return RTOS_SEM_OK if acquired, RTOS_SEM_ERR_TIMEOUT if not available
+ * @brief Try to decrement the semaphore count without blocking.
+ * @param sem Pointer to the semaphore.
+ * @return RTOS_SEM_OK if the count was available, RTOS_SEM_ERR_TIMEOUT otherwise.
  */
 rtos_sem_status_t rtos_semaphore_try_wait(rtos_semaphore_t *sem);
 
 /**
- * @brief Get current semaphore count
- * @param sem Pointer to semaphore
- * @return Current count value
+ * @brief Return the current semaphore count.
+ * @param sem Pointer to the semaphore.
+ * @return Current count value.
  */
 uint32_t rtos_semaphore_get_count(rtos_semaphore_t *sem);
 

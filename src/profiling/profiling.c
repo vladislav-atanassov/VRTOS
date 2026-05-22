@@ -10,13 +10,8 @@
 
 void rtos_profiling_init(void)
 {
-    /* Enable TRCENA in DEMCR to allow DWT usage */
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-
-    /* Reset Cycle Counter */
     DWT->CYCCNT = 0;
-
-    /* Enable Cycle Counter in DWT_CTRL */
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
@@ -109,7 +104,6 @@ void rtos_profiling_print_stat(rtos_profile_stat_t *stat)
         return;
     }
 
-    /* Capture values atomically for consistent snapshot */
     rtos_port_enter_critical();
 
     const char *name         = stat->name != NULL ? stat->name : "unnamed";
@@ -122,7 +116,6 @@ void rtos_profiling_print_stat(rtos_profile_stat_t *stat)
 
     uint32_t avg_cycles = total_cycles / count;
 
-    /* Convert to microseconds for human-readable output */
     uint32_t min_us = cycles_to_us(min_cycles);
     uint32_t max_us = cycles_to_us(max_cycles);
     uint32_t avg_us = cycles_to_us(avg_cycles);
@@ -175,7 +168,6 @@ void rtos_profiling_report_system_stats(void)
 
 void rtos_profiling_reset_system_stats(void)
 {
-    /* No-op when profiling is disabled */
 }
 
 #endif /* RTOS_PROFILING_SYSTEM_ENABLED */

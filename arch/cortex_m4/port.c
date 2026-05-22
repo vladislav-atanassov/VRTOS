@@ -21,7 +21,7 @@ static uint32_t g_fpu_lazy_scratch[18] __attribute__((aligned(8)));
 rtos_status_t rtos_port_init(void)
 {
 #if PORT_HAS_FPU
-    /**
+    /*
      * Enable lazy FPU context stacking.
      * ASPEN: Automatic State Preservation ENable — hardware reserves FPU
      *        stack space on exception entry when FPU was in use.
@@ -47,7 +47,6 @@ rtos_status_t rtos_port_init(void)
 
 void rtos_port_start_systick(void)
 {
-    /* Calculate reload value for desired tick rate */
     uint32_t reload_value = RTOS_CYCLES_PER_TICK - 1;
 
     if (SysTick_Config(reload_value) != 0)
@@ -73,7 +72,7 @@ uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t ta
     *--stack_ptr = 0;                            /* R1 */
     *--stack_ptr = (uint32_t) parameter;         /* R0 (task parameter) */
 
-    /**
+    /*
      * EXC_RETURN value — saved/restored per-task so each task carries its
      * own FPU-usage indication in bit 4.  Initial value = 0xFFFFFFFD:
      * thread mode, PSP, no FPU frame.
@@ -148,7 +147,7 @@ void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
     __ISB();
 }
 
-/**
+/*
  * Combine the millisecond-granularity kernel tick with the SysTick countdown
  * register to produce a microsecond uptime.
  *
@@ -194,7 +193,6 @@ void rtos_port_yield(void)
 
     SCB->ICSR |= SCB_ICSR_PENDSVSET_Msk;
 
-    /* Memory barrier to ensure write completes */
     __DSB();
     __ISB();
 }
@@ -209,7 +207,7 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
     __ISB();
 
 #if PORT_HAS_FPU
-    /**
+    /*
      * Clear the FPCA bit in CONTROL register to prevent the SVC exception
      * frame from including stale FPU state that may have been used before
      * the scheduler was started.
@@ -229,7 +227,6 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 
     KLOGE("Port", "StartFail");
 
-    /* Should never reach here */
     while (1)
     {
     }
@@ -364,9 +361,9 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     const uint32_t systick_ctrl_stopped = SysTick_CTRL_CLKSOURCE_Msk
                                         | SysTick_CTRL_TICKINT_Msk;
 
-    uint32_t reload_value;
-    uint32_t sleep_ticks;
-    uint32_t complete_tick_periods;
+    uint32_t       reload_value;
+    uint32_t       sleep_ticks;
+    uint32_t       complete_tick_periods;
     const uint32_t cycles_per_tick = RTOS_CYCLES_PER_TICK;
 
     __disable_irq();
@@ -390,18 +387,12 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
         sleep_ticks = max_sleep_ticks;
     }
 
-    /* Set SysTick LOAD to new sleep duration */
     reload_value  = (sleep_ticks * cycles_per_tick) - 1;
     SysTick->LOAD = reload_value;
     SysTick->VAL  = 0;
-
-    /* Restart SysTick at the long reload */
     SysTick->CTRL = systick_ctrl_running;
 
-    /* Sleep */
     __asm volatile("wfi");
-
-    /* Wake Up */
 
     /* Snapshot CTRL (reading clears COUNTFLAG), then stop SysTick to read VAL safely. */
     uint32_t ctrl = SysTick->CTRL;
@@ -409,15 +400,12 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
 
     uint32_t val = SysTick->VAL;
 
-    /* Did SysTick already fire and set the COUNTFLAG? */
     if ((ctrl & SysTick_CTRL_COUNTFLAG_Msk) != 0)
     {
-        /* It fired, meaning the full sleep period elapsed. */
         complete_tick_periods = sleep_ticks;
     }
     else
     {
-        /* Woken up by an external interrupt early */
         uint32_t cycles_slept = reload_value - val;
         complete_tick_periods = cycles_slept / cycles_per_tick;
     }

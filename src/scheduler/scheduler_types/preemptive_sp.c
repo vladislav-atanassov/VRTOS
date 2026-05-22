@@ -21,7 +21,6 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
     rtos_priority_t priority  = task->priority;
     rtos_tcb_t    **list_head = &g_preemptive_sp_data.ready_lists[priority];
 
-    /* Add to end of priority list (FIFO within same priority) */
     task->next = NULL;
     task->prev = NULL;
 
@@ -162,7 +161,6 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
     rtos_tick_t current_tick = rtos_get_tick_count();
     rtos_tcb_t *task         = g_preemptive_sp_data.delayed_list;
 
-    /* Check delayed tasks (list is time-sorted, so we can break early) */
     while (task != NULL)
     {
         rtos_tcb_t *next_task = task->next;
@@ -198,7 +196,7 @@ static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
     /* Use bitmask to quickly find highest priority with ready tasks */
     if (g_preemptive_sp_data.ready_priorities == 0)
     {
-        return NULL; /* No ready tasks */
+        return NULL;
     }
 
     for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--)
@@ -209,7 +207,7 @@ static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
         }
     }
 
-    return NULL; /* Shouldn't reach here if bitmask is correct */
+    return NULL;
 }
 
 static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
@@ -246,7 +244,6 @@ static bool preemptive_sp_should_preempt(rtos_scheduler_instance_t *instance, rt
         return false;
     }
 
-    /* Preempt if new task has higher priority */
     return (new_task != g_kernel.current_task && new_task->priority > g_kernel.current_task->priority);
 }
 
@@ -256,8 +253,6 @@ static void preemptive_sp_task_completed(rtos_scheduler_instance_t *instance, rt
     {
         return;
     }
-
-    /* no-op: state management is handled by the kernel */
 }
 
 static void preemptive_sp_add_to_ready_list(rtos_scheduler_instance_t *instance, rtos_task_handle_t task_handle)
@@ -379,13 +374,11 @@ static size_t preemptive_sp_get_statistics(rtos_scheduler_instance_t *instance, 
 }
 
 const rtos_scheduler_t preemptive_sp_scheduler = {
-    /* Core scheduling functions */
     .init           = preemptive_sp_init,
     .get_next_task  = preemptive_sp_get_next_task,
     .should_preempt = preemptive_sp_should_preempt,
     .task_completed = preemptive_sp_task_completed,
 
-    /* List management operations */
     .add_to_ready_list        = preemptive_sp_add_to_ready_list,
     .remove_from_ready_list   = preemptive_sp_remove_from_ready_list,
     .add_to_delayed_list      = preemptive_sp_add_to_delayed_list,
@@ -393,10 +386,4 @@ const rtos_scheduler_t preemptive_sp_scheduler = {
     .update_delayed_tasks     = preemptive_sp_update_delayed_tasks,
     .get_expected_idle_ticks  = preemptive_sp_get_expected_idle_ticks,
 
-    /* Optional statistics */
     .get_statistics = preemptive_sp_get_statistics};
-
-rtos_tcb_t *rtos_task_get_highest_priority_ready(void)
-{
-    return preemptive_sp_get_highest_priority_ready();
-}

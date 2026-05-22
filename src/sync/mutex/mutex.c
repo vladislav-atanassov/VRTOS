@@ -94,32 +94,27 @@ static rtos_tcb_t *mutex_pop_highest_priority_waiter(rtos_mutex_t *m)
 
 static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter)
 {
-    /**
-     * Transitive Priority Inheritance:
-     * Walk the chain of mutex owners and boost them if necessary.
-     */
+    /* Transitive priority inheritance: walk the chain of mutex owners and boost
+     * each one whose effective priority is below the waiter's. */
     rtos_tcb_t     *current_task = waiter;
     rtos_tcb_t     *target_task  = m->owner;
     rtos_priority_t boost_prio   = waiter->priority;
 
-    /* Safety counter to prevent infinite loops (deadlocks) */
+    /* Safety counter to prevent infinite loops on deadlock cycles */
     uint32_t       safety_ctr = 0;
     const uint32_t max_depth  = 16;
 
     while (target_task != NULL && safety_ctr < max_depth)
     {
-        /* If target has lower priority than current boost priority, boost it */
         if (target_task->priority < boost_prio)
         {
             KLOGD("Mutex", "MutexBoost id=%u prio=%u", target_task->task_id, boost_prio);
 
-            /*
-             * If the boosted task is currently in the READY list it is stored
+            /* If the boosted task is currently in the READY list it is stored
              * in the bucket indexed by its old priority.  Changing the priority
              * field alone would leave the task in the wrong bucket, causing the
              * scheduler to either miss it or to corrupt the list on the next
-             * remove.  Re-insert it at the new priority level.
-             */
+             * remove.  Re-insert it at the new priority level. */
             if (target_task->state == RTOS_TASK_STATE_READY)
             {
                 rtos_scheduler_remove_from_ready_list(target_task);
@@ -145,7 +140,6 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
             }
         }
 
-        /* Check if target is blocked on another MUTEX */
         if (target_task->state == RTOS_TASK_STATE_BLOCKED && target_task->blocked_on_type == RTOS_SYNC_TYPE_MUTEX &&
             target_task->blocked_on != NULL)
         {
@@ -155,7 +149,6 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
         }
         else
         {
-            /* Not blocked on a mutex, end of chain */
             break;
         }
 
@@ -217,9 +210,6 @@ static void mutex_restore_priority(rtos_tcb_t *task)
     }
 }
 
-/**
- * @brief Initialize a mutex
- */
 rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
 {
     if (m == NULL)
@@ -240,9 +230,6 @@ rtos_mutex_status_t rtos_mutex_init(rtos_mutex_t *m)
     return RTOS_MUTEX_OK;
 }
 
-/**
- * @brief Lock/acquire a mutex
- */
 rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 {
     RTOS_ASSERT_PARAM(m != NULL);
@@ -261,7 +248,6 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         return RTOS_MUTEX_ERR_INVALID;
     }
 
-    /* Fast path: mutex is free */
     if (m->owner == NULL)
     {
         m->owner                      = current_task;
@@ -314,7 +300,6 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     }
     else
     {
-        /* Timed wait - use kernel block with delay */
         rtos_port_exit_critical();
         rtos_kernel_task_block(current_task, timeout_ticks);
     }
@@ -343,9 +328,6 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     return RTOS_MUTEX_OK;
 }
 
-/**
- * @brief Unlock/release a mutex
- */
 void rtos_mutex_remove_task_from_wait(void *mutex_ptr, rtos_tcb_t *task)
 {
     mutex_remove_from_waiting_list((rtos_mutex_t *) mutex_ptr, task);
@@ -363,7 +345,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
 
     rtos_tcb_t *current_task = rtos_task_get_current();
 
-    /* Only owner can unlock */
     if (m->owner != current_task)
     {
         rtos_port_exit_critical();
@@ -380,7 +361,6 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
         return RTOS_MUTEX_OK;
     }
 
-    /* Full unlock - remove from held list, then restore priority */
     RTOS_TEST_HOOK_FIRE(RTOS_HOOK_MUTEX_UNLOCK, {
         _ctx_.u.mutex_unlock.mutex  = m;
         _ctx_.u.mutex_unlock.caller = current_task;
@@ -388,17 +368,12 @@ rtos_mutex_status_t rtos_mutex_unlock(rtos_mutex_t *m)
     mutex_remove_from_held_list(current_task, m);
     mutex_restore_priority(current_task);
 
-    /* If priority changed and task is in ready list, re-insert at correct bucket */
-    if (current_task->state == RTOS_TASK_STATE_RUNNING || current_task->state == RTOS_TASK_STATE_READY)
+    if (current_task->state == RTOS_TASK_STATE_READY)
     {
-        if (current_task->state == RTOS_TASK_STATE_READY)
-        {
-            rtos_scheduler_remove_from_ready_list(current_task);
-            rtos_scheduler_add_to_ready_list(current_task);
-        }
+        rtos_scheduler_remove_from_ready_list(current_task);
+        rtos_scheduler_add_to_ready_list(current_task);
     }
 
-    /* Transfer ownership to highest priority waiter */
     rtos_tcb_t *waiter = mutex_pop_highest_priority_waiter(m);
     if (waiter != NULL)
     {

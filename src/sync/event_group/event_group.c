@@ -1,8 +1,3 @@
-/*******************************************************************************
- * File: src/sync/event_group/event_group.c
- * Description: Event Group (Event Flags) implementation
- ******************************************************************************/
-
 #include "event_group.h"
 
 #include "KARTOS.h"
@@ -12,11 +7,6 @@
 #include "task_priv.h"
 #include "test_hooks_priv.h"
 
-/* =================== Static Helpers =================== */
-
-/**
- * @brief Check if the wait condition is met
- */
 static bool eg_condition_met(uint32_t current_bits, uint32_t wait_bits, uint8_t wait_all)
 {
     if (wait_all)
@@ -29,9 +19,6 @@ static bool eg_condition_met(uint32_t current_bits, uint32_t wait_bits, uint8_t 
     }
 }
 
-/**
- * @brief Insert a task into the event group's priority-ordered waiting list
- */
 static void eg_add_to_waiting_list(rtos_event_group_t *eg, rtos_tcb_t *task, uint32_t bits_to_wait, uint8_t wait_all,
                                    uint8_t clear_on_exit)
 {
@@ -70,9 +57,6 @@ static void eg_add_to_waiting_list(rtos_event_group_t *eg, rtos_tcb_t *task, uin
     }
 }
 
-/**
- * @brief Remove a task from the event group's waiting list
- */
 static void eg_remove_from_waiting_list(rtos_event_group_t *eg, rtos_tcb_t *task)
 {
     if (eg->waiting_list == NULL || task == NULL)
@@ -102,15 +86,9 @@ static void eg_remove_from_waiting_list(rtos_event_group_t *eg, rtos_tcb_t *task
     task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 }
 
-/**
- * @brief Core set_bits logic shared between task and ISR variants
- *
- * Must be called inside a critical section. Builds a wake list of tasks
- * whose conditions are satisfied, applies deferred clear-on-exit, and
- * returns the wake list head. Caller is responsible for calling
- * rtos_kernel_task_unblock() on each task in the wake list after
- * exiting the critical section.
- */
+/* Must be called inside a critical section. Builds a wake list of tasks whose
+ * conditions are satisfied, applies deferred clear-on-exit, and returns the
+ * wake list head. Caller unblocks each task after exiting the critical section. */
 static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to_set)
 {
     eg->bits |= bits_to_set;
@@ -138,7 +116,6 @@ static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to
                 bits_to_clear |= orig_wait_bits;
             }
 
-            /* Remove from waiting list */
             if (prev == NULL)
             {
                 eg->waiting_list = next;
@@ -151,7 +128,6 @@ static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to
             current->blocked_on      = NULL;
             current->blocked_on_type = RTOS_SYNC_TYPE_NONE;
 
-            /* Chain onto wake list */
             current->next_waiting = wake_list;
             wake_list             = current;
 
@@ -166,13 +142,11 @@ static rtos_tcb_t *eg_set_bits_internal(rtos_event_group_t *eg, uint32_t bits_to
         current = next;
     }
 
-    /* Deferred clear: apply after all waiters have been checked */
+    /* Deferred clear: applied after all waiters have been checked */
     eg->bits &= ~bits_to_clear;
 
     return wake_list;
 }
-
-/* =================== Public API =================== */
 
 rtos_eg_status_t rtos_event_group_init(rtos_event_group_t *eg)
 {
@@ -205,7 +179,6 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
 
     KLOGD("EventGrp", "EgWait want=0x%x have=0x%x", bits_to_wait, eg->bits);
 
-    /* Fast path: condition already met */
     if (eg_condition_met(eg->bits, bits_to_wait, (uint8_t) wait_all))
     {
         if (bits_out != NULL)
@@ -247,7 +220,6 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
     }
     else
     {
-        /* Timed wait — use kernel block with delay */
         rtos_port_exit_critical();
         rtos_kernel_task_block(current_task, timeout_ticks);
     }
@@ -291,7 +263,6 @@ rtos_eg_status_t rtos_event_group_set_bits(rtos_event_group_t *eg, uint32_t bits
 
     rtos_port_exit_critical();
 
-    /* Unblock all woken tasks outside critical section */
     while (wake_list != NULL)
     {
         rtos_tcb_t *task   = wake_list;
@@ -316,7 +287,6 @@ rtos_eg_status_t rtos_event_group_set_bits_from_isr(rtos_event_group_t *eg, uint
 
     rtos_port_exit_critical_from_isr(saved);
 
-    /* Unblock all woken tasks outside ISR critical section */
     while (wake_list != NULL)
     {
         rtos_tcb_t *task   = wake_list;
@@ -359,8 +329,6 @@ uint32_t rtos_event_group_get_bits(rtos_event_group_t *eg)
 
     return bits;
 }
-
-/* =================== Task-Delete Cleanup =================== */
 
 void rtos_event_group_remove_task_from_wait(void *eg_ptr, rtos_tcb_t *task)
 {

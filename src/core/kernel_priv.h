@@ -9,10 +9,9 @@
 /* Kernel States */
 typedef enum
 {
-    RTOS_KERNEL_STATE_INACTIVE = 0, /**< Kernel not initialized */
-    RTOS_KERNEL_STATE_READY,        /**< Kernel initialized but not started */
-    RTOS_KERNEL_STATE_RUNNING,      /**< Kernel running */
-    RTOS_KERNEL_STATE_SUSPENDED     /**< Kernel suspended */
+    RTOS_KERNEL_STATE_INACTIVE = 0,
+    RTOS_KERNEL_STATE_READY,
+    RTOS_KERNEL_STATE_RUNNING,
 } rtos_kernel_state_t;
 
 /* Kernel Control Block */
