@@ -3,23 +3,6 @@
 
 #include "timer.h"
 
-#include <stdbool.h>
-
-
-/* Internal Timer Structure */
-struct rtos_timer
-{
-    const char           *name;
-    rtos_tick_t           period;
-    rtos_tick_t           expiry_time; /* Absolute tick count for next expiry */
-    rtos_timer_mode_t     mode;
-    rtos_timer_callback_t callback;
-    void                 *parameter;
-    bool                  active;
-
-    struct rtos_timer *next; /* Next timer in active list */
-};
-
 /* Global pointer to the list of active timers (sorted by expiry) */
 extern rtos_timer_t *g_active_timers;
 

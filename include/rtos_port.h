@@ -3,107 +3,88 @@
 
 #include "rtos_types.h"
 
-/**
- * @file rtos_port.h
- * @brief RTOS Porting Layer Interface
- *
- * This file defines the interface between the RTOS core and the hardware platform.
- * To add support for a new chip, see docs/porting_guide.md.
- */
-
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
 /**
- * @brief Initialize the porting layer
- *
- * @return RTOS_SUCCESS if successful, error code otherwise
+ * @brief Initialize the hardware port layer (NVIC priorities, FPU, etc.).
+ * @return RTOS_SUCCESS or an error code.
  */
 rtos_status_t rtos_port_init(void);
 
 /**
- * @brief Start the system tick timer
+ * @brief Start the SysTick timer at the configured tick rate.
  */
 void rtos_port_start_systick(void);
 
 /**
- * @brief Start the first task
- *
- * This function should never return.
+ * @brief Load the first task and enter thread mode. Never returns.
  */
 void rtos_port_start_first_task(void);
 
 /**
- * @brief Initialize task stack
- *
- * @param stack_top Top of the stack memory
- * @param task_function Task function to execute
- * @param parameter Parameter to pass to task function
- * @return Initial stack pointer value
+ * @brief Initialize the exception frame for a new task stack.
+ * @param stack_top Pointer to the top (highest address) of the allocated stack block.
+ * @param task_function Task entry point.
+ * @param parameter Argument passed to task_function.
+ * @return Updated stack pointer after pushing the initial frame.
  */
 uint32_t *rtos_port_init_task_stack(uint32_t *stack_top, rtos_task_function_t task_function, void *parameter);
 
 /**
- * @brief Enter critical section
- * 
- * Disables interrupts at or below kernel priority level.
- * Critical (priority 0x00-0x70) interrupts can still occur.
+ * @brief Raise BASEPRI to mask task-level interrupts.
+ * Priority-0 (critical hardware) IRQs can still preempt.
  */
 void rtos_port_enter_critical(void);
 
 /**
- * @brief Exit critical section
+ * @brief Restore BASEPRI to 0, re-enabling task-level interrupts.
  */
 void rtos_port_exit_critical(void);
 
 /**
- * @brief Enter critical section from ISR
- * 
- * For use in ISR context. Returns saved BASEPRI value.
- * 
- * @return Previous BASEPRI value (for restore)
+ * @brief ISR-safe critical section entry. Returns saved BASEPRI for later restoration.
+ * @return Saved BASEPRI value to pass to rtos_port_exit_critical_from_isr().
  */
 uint32_t rtos_port_enter_critical_from_isr(void);
 
 /**
- * @brief Exit critical section from ISR
- * 
- * @param saved_priority Value returned from enter_critical_from_isr
+ * @brief ISR-safe critical section exit. Restores the saved BASEPRI value.
+ * @param saved_priority Value returned by rtos_port_enter_critical_from_isr().
  */
 void rtos_port_exit_critical_from_isr(uint32_t saved_priority);
 
 /**
- * @brief Force a context switch
+ * @brief Trigger a PendSV exception to request a context switch.
  */
 void rtos_port_yield(void);
 
 /**
- * @brief System tick interrupt handler
- *
- * This function should be called from the SysTick interrupt handler.
+ * @brief SysTick interrupt handler. Advances the tick counter and drives the scheduler.
  */
 void rtos_port_systick_handler(void);
 
 /**
- * @brief Get monotonic uptime in microseconds
- *
- * Combines the kernel tick count (ms resolution) with the SysTick countdown
- * register to derive sub-tick precision. Wraps every ~71 minutes.
- *
- * Safe to call from ISR or task context.
- *
- * @return Microseconds since boot (uint32_t, wraps at ~71min 35s)
+ * @brief Return a microsecond-resolution uptime timestamp.
+ * Combines the tick count (ms resolution) with the SysTick countdown for sub-tick precision.
+ * Wraps at ~71 minutes. Safe to call from ISR or task context.
+ * @return Microseconds since boot.
  */
 uint32_t rtos_port_get_uptime_us(void);
 
 /**
- * @brief Enter tickless idle sleep mode
- *
- * @param expected_idle_ticks Expected duration of idle period in ticks
+ * @brief Stop SysTick, sleep for up to expected_idle_ticks, then restore the tick count.
+ * @param expected_idle_ticks Maximum number of ticks the CPU may sleep.
  */
 void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks);
+
+/**
+ * @brief Return true if the caller is executing in interrupt/handler mode.
+ * Use to assert against use of task-context-only APIs (e.g. rtos_malloc) from ISRs.
+ */
+bool rtos_port_in_isr(void);
 
 #ifdef __cplusplus
 }

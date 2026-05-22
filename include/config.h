@@ -83,6 +83,14 @@
 #define RTOS_TOTAL_HEAP_SIZE (16384U) /**< Total heap size for task stacks */
 #endif
 
+/* Minimum block size for the dual-ended heap allocator. A block split that
+ * would leave a remainder smaller than this threshold is suppressed (the
+ * whole free block is handed out instead). Must be >= sizeof(heap header)
+ * + a useful payload. 16 bytes = 8-byte header + 8-byte minimum payload. */
+#ifndef RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE
+#define RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE (16U)
+#endif
+
 /* ======================== Logging Configuration ========================= */
 
 /* UART baud rate for logging output. Must match the serial monitor speed. */

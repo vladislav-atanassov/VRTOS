@@ -12,10 +12,11 @@ struct rtos_mutex; /* forward declaration for held-mutex tracking */
 typedef struct rtos_task_control_block
 {
     /* Stack management */
-    uint32_t         *stack_pointer; /**< Current stack pointer */
-    uint32_t         *stack_base;    /**< Base of task stack */
-    uint32_t         *stack_top;     /**< Top of task stack */
-    rtos_stack_size_t stack_size;    /**< Stack size in bytes */
+    uint32_t         *stack_pointer;   /**< Current stack pointer */
+    uint32_t         *stack_base;      /**< Base of task stack */
+    uint32_t         *stack_top;       /**< Top of task stack */
+    rtos_stack_size_t stack_size;      /**< Stack size in bytes */
+    uint8_t           stack_is_static; /**< 1 = caller owns stack memory (no free on delete) */
 
     /* Task identification */
     rtos_task_id_t task_id; /**< Unique task identifier */

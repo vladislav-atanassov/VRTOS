@@ -22,9 +22,6 @@ rtos_kernel_cb_t g_kernel = {.state               = RTOS_KERNEL_STATE_INACTIVE,
  * exactly one definition; missing it is a link-time error. */
 extern const rtos_scheduler_type_t kernel_scheduler_choice;
 
-/**
- * @brief Initialize the RTOS system
- */
 rtos_status_t rtos_init(void)
 {
     rtos_status_t status;
@@ -35,11 +32,10 @@ rtos_status_t rtos_init(void)
     }
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-    /* Initialize profiling before anything else */
     rtos_profiling_init();
 #endif
 
-    /* Initialize kernel logger (uses DWT for timestamps, so after profiling init) */
+    /* Initialize kernel logger after profiling (uses DWT for timestamps) */
     klog_init();
 
     g_kernel.state               = RTOS_KERNEL_STATE_INACTIVE;
@@ -79,9 +75,6 @@ rtos_status_t rtos_init(void)
     return RTOS_SUCCESS;
 }
 
-/**
- * @brief Start the RTOS scheduler
- */
 rtos_status_t rtos_start_scheduler(void)
 {
     if (g_kernel.state != RTOS_KERNEL_STATE_READY)
@@ -97,7 +90,6 @@ rtos_status_t rtos_start_scheduler(void)
 
     g_kernel.current_task = g_kernel.next_task;
 
-    /* Validate state transition: first task must be READY before we promote it */
     if (g_kernel.current_task->state != RTOS_TASK_STATE_READY)
     {
         return RTOS_ERROR_INVALID_STATE;
@@ -114,17 +106,11 @@ rtos_status_t rtos_start_scheduler(void)
     return RTOS_ERROR_GENERAL;
 }
 
-/**
- * @brief Get current tick count
- */
 rtos_tick_t rtos_get_tick_count(void)
 {
     return g_kernel.tick_count;
 }
 
-/**
- * @brief Delay current task for specified ticks
- */
 void rtos_delay_ticks(rtos_tick_t ticks)
 {
     if (ticks == 0)
@@ -146,22 +132,16 @@ void rtos_delay_ticks(rtos_tick_t ticks)
     rtos_yield();
 }
 
-/**
- * @brief Delay current task for specified milliseconds
- */
 void rtos_delay_ms(uint32_t ms)
 {
     rtos_tick_t ticks = ms / RTOS_TICK_PERIOD_MS;
     if (ticks == 0)
     {
-        ticks = 1; /* Minimum delay of 1 tick */
+        ticks = 1;
     }
     rtos_delay_ticks(ticks);
 }
 
-/**
- * @brief Delay a task until a specified time
- */
 void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increment)
 {
     if (prev_wake_time == NULL || time_increment == 0)
@@ -200,18 +180,12 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
     }
 }
 
-/**
- * @brief Force task yield
- */
 void rtos_yield(void)
 {
     KLOGT("Kernel", "Yield from=%s", (uint32_t) rtos_get_current_task_name());
     rtos_port_yield();
 }
 
-/**
- * @brief System tick handler (called by port layer)
- */
 void rtos_kernel_tick_handler(void)
 {
     RTOS_SYS_PROFILE_START(tick);
@@ -245,9 +219,6 @@ void rtos_kernel_tick_handler(void)
     RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
 }
 
-/**
- * @brief Step system tick forward (used by tickless idle)
- */
 void rtos_kernel_step_tick(uint32_t ticks_slept)
 {
     if (ticks_slept == 0)
@@ -260,14 +231,12 @@ void rtos_kernel_step_tick(uint32_t ticks_slept)
     g_kernel.tick_count += ticks_slept;
     rtos_port_exit_critical();
 
-    /* Process software timers that may have expired during sleep */
     rtos_timer_tick();
 
     if (g_kernel.state == RTOS_KERNEL_STATE_RUNNING && g_scheduler_instance.initialized)
     {
         rtos_port_enter_critical();
 
-        /* Move newly expired tasks to ready list */
         rtos_scheduler_update_delayed_tasks();
 
         rtos_task_handle_t next_task = rtos_scheduler_get_next_task();
@@ -282,9 +251,6 @@ void rtos_kernel_step_tick(uint32_t ticks_slept)
     }
 }
 
-/**
- * @brief Context switch handler (called by scheduler)
- */
 void rtos_kernel_switch_context(void)
 {
     if (g_kernel.scheduler_suspended > 0)
@@ -316,7 +282,9 @@ void rtos_kernel_switch_context(void)
         rtos_scheduler_remove_from_ready_list(g_kernel.next_task);
 
 #if RTOS_PROFILING_SYSTEM_ENABLED
-        /* Measure scheduling latency: time from READY to actually running */
+        /* Only track scheduling latency for tasks above idle priority.
+         * Priority-0 tasks (e.g. log flush) naturally wait for all others,
+         * producing high but expected latency that skews the aggregate. */
         if (g_kernel.next_task->ready_timestamp != 0)
         {
             uint32_t latency = rtos_profiling_get_cycles() - g_kernel.next_task->ready_timestamp;
@@ -324,7 +292,7 @@ void rtos_kernel_switch_context(void)
             g_kernel.next_task->ready_timestamp = 0;
         }
 
-        /* Record full PendSV duration captured in ASM */
+        /* Full PendSV duration captured in assembly */
         if (g_pendsv_cycles != 0)
         {
             rtos_profiling_record(&g_prof_pendsv_full, g_pendsv_cycles);
@@ -360,19 +328,12 @@ void rtos_kernel_switch_context(void)
     RTOS_SYS_PROFILE_END(ctx_switch, &g_prof_context_switch);
 }
 
-/**
- * @brief Validate state transition and log/assert on invalid
- * @param task Task being transitioned
- * @param new_state Target state
- * @return true if transition is valid, false otherwise
- *
- * Valid transitions:
+/* Valid state transitions:
  *   READY     -> RUNNING, SUSPENDED, DELETED
  *   RUNNING   -> READY, BLOCKED, SUSPENDED, DELETED
  *   BLOCKED   -> READY, SUSPENDED, DELETED
  *   SUSPENDED -> READY, DELETED
- *   DELETED   -> (none)
- */
+ *   DELETED   -> (none) */
 bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state)
 {
     if (task == NULL)
@@ -405,7 +366,7 @@ bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t 
             break;
 
         case RTOS_TASK_STATE_DELETED:
-            valid = false; /* Cannot transition from DELETED */
+            valid = false;
             break;
 
         default:
@@ -421,9 +382,6 @@ bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t 
     return valid;
 }
 
-/**
- * @brief Move task to ready state
- */
 void rtos_kernel_task_ready(rtos_task_handle_t task)
 {
     if (task == NULL)
@@ -477,10 +435,7 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
     rtos_port_exit_critical();
 }
 
-/**
- * @brief Move task to blocked state
- * @param delay_ticks Ticks to delay (0 = indefinite)
- */
+/* delay_ticks = 0 means indefinite block (no delayed-list entry) */
 void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 {
     if (task == NULL)
@@ -531,9 +486,6 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
     rtos_port_exit_critical();
 }
 
-/**
- * @brief Unblock a task
- */
 void rtos_kernel_task_unblock(rtos_task_handle_t task)
 {
     if (task == NULL || task->state != RTOS_TASK_STATE_BLOCKED)

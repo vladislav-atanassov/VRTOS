@@ -10,6 +10,7 @@ DEFINE_FAKE_VOID_FUNC(rtos_port_enter_critical);
 DEFINE_FAKE_VOID_FUNC(rtos_port_exit_critical);
 DEFINE_FAKE_VALUE_FUNC(uint32_t, rtos_port_enter_critical_from_isr);
 DEFINE_FAKE_VOID_FUNC(rtos_port_exit_critical_from_isr, uint32_t);
+DEFINE_FAKE_VALUE_FUNC(bool, rtos_port_in_isr);
 
 DEFINE_FAKE_VALUE_FUNC(rtos_task_handle_t, rtos_task_get_current);
 
@@ -30,16 +31,8 @@ volatile uint8_t klog_verbosity = 0; /* below KLOG_LEVEL_FAULT (0) — every cal
 /* Concrete kernel control block — queue.c reads g_kernel.current_task. */
 rtos_kernel_cb_t g_kernel;
 
-/* Pass-through heap. The bump allocator in production doesn't free; we do. */
-void *rtos_malloc(size_t size)
-{
-    return malloc(size);
-}
-
-void rtos_free(void *ptr)
-{
-    free(ptr);
-}
+/* Heap pass-throughs live in heap_passthrough.c so that tests which link the
+ * real src/core/memory.c (e.g. test_heap_stress) can omit them. */
 
 void host_init_tcb(rtos_tcb_t *tcb, rtos_task_id_t id, rtos_priority_t priority)
 {
@@ -56,6 +49,7 @@ void host_reset_all_fakes(void)
     RESET_FAKE(rtos_port_exit_critical);
     RESET_FAKE(rtos_port_enter_critical_from_isr);
     RESET_FAKE(rtos_port_exit_critical_from_isr);
+    RESET_FAKE(rtos_port_in_isr);
     RESET_FAKE(rtos_task_get_current);
     RESET_FAKE(rtos_scheduler_add_to_ready_list);
     RESET_FAKE(rtos_scheduler_remove_from_ready_list);

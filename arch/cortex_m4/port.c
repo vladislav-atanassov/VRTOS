@@ -147,6 +147,11 @@ void rtos_port_exit_critical_from_isr(uint32_t saved_priority)
     __ISB();
 }
 
+bool rtos_port_in_isr(void)
+{
+    return __get_IPSR() != 0U;
+}
+
 /*
  * Combine the millisecond-granularity kernel tick with the SysTick countdown
  * register to produce a microsecond uptime.

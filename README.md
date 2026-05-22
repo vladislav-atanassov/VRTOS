@@ -24,7 +24,7 @@ A modular, educational Real-Time Operating System (RTOS) implementation for the 
 - **Task Management** - Dynamic creation, suspend/resume, delete with automatic mutex cleanup
 - **Timing Services** - System tick with 1ms resolution, `rtos_delay_ms()` and `rtos_delay_until()`
 - **Cortex-M4 Optimization** - Context switching with lazy FPU stacking
-- **Memory Management** - Static bump allocator with stack overflow detection (canary values)
+- **Memory Management** - Bi-directional dual-ended heap with first-fit allocation, adjacent-block coalescing, cooperative gap pull-back, per-side diagnostics (free/min-ever/largest-block), and static-allocation variants for task/timer/queue
 - **Profiling Support** - DWT cycle counter-based profiling for WCET analysis
 - **Comprehensive Logging** - Zero-allocation, ISR-safe deferred kernel logger (KLog) and user-facing string logger (ULog)
 
@@ -174,6 +174,7 @@ kartos test -e test_scheduler_rr_suite --duration 10
 - `test_notify_suite` - Task notification cases
 - `test_task_state_suite` - Task lifecycle state transitions, NULL-input asserts, TASK_STATE + TICK hook observability
 - `test_tickless_idle_suite` - Tickless idle correctness; force-enables `RTOS_CONFIG_USE_TICKLESS_IDLE=1` regardless of board default
+- `test_heap_allocator_suite` - Dual-ended heap cases: routing, gap pull-back, coalescing, fragmentation visibility, cross-heap collision, static-create bypass, dynamic-delete reclaim
 
 **Benchmarks**:
 
@@ -377,6 +378,11 @@ rtos_timer_create("MyTimer", 1000, RTOS_TIMER_AUTO_RELOAD,
 rtos_timer_start(timer);
 rtos_timer_change_period(timer, 500);
 rtos_timer_stop(timer);
+rtos_timer_delete(timer);
+
+rtos_timer_t my_timer;
+rtos_timer_create_static(&my_timer, "MyTimer", 1000, RTOS_TIMER_AUTO_RELOAD,
+                         callback, param, &timer);
 ```
 
 > **Warning**: Timer callbacks execute in **ISR context** (SysTick handler). They must not call blocking RTOS APIs (`rtos_mutex_lock`, `rtos_semaphore_wait`, `rtos_delay_ms`, etc.). Use ISR-safe APIs only (e.g. `rtos_event_group_set_bits_from_isr`, `rtos_task_notify`).
@@ -467,29 +473,86 @@ rtos_task_notify_wait(0x00, 0xFF, &value, 1000);
 **API**:
 
 ```c
+// Dynamic create — stack allocated from RTOS_HEAP_HIGH
+rtos_task_create(fn, "Task", 1024, NULL, prio, &handle);
+
+// Static create — caller owns the stack buffer (must be 8-byte aligned)
+static uint32_t stack[256] __attribute__((aligned(8)));
+rtos_task_create_static(fn, "Task", stack, sizeof(stack), NULL, prio, &handle);
+
 // Suspend and resume
 rtos_task_suspend(task_handle);  // NULL = self-suspend
 rtos_task_resume(task_handle);
 
-// Delete (automatically releases held mutexes)
+// Delete — releases held mutexes; dynamic stacks freed to heap (self-delete
+// defers the free to the idle task); static stacks untouched
 rtos_task_delete(task_handle);   // NULL = self-delete
 ```
 
 ## Memory Management
 
-**Current Implementation**: Bump allocator (simple, predictable)
+**Implementation**: Bi-directional dual-ended heap — two independent first-fit allocators with adjacent-block coalescing share one backing buffer and grow toward each other from opposite ends.
 
-- Static heap: configurable via `RTOS_TOTAL_HEAP_SIZE` (default 16 KB; STM32F446RE board config overrides to 8 KB)
-- 8-byte alignment for all allocations
-- No deallocation (suitable for static task creation)
-- Stack overflow detection via canary values (`0xC0DEC0DE`)
+```text
+[LH region][ ...... shared gap ...... ][HH region]
+ ^        ^                            ^         ^
+ 0    lh_top                       hh_bot    HEAP_SIZE
+```
+
+- **`RTOS_HEAP_LOW`** — small/short-lived control blocks (timer CB, queue CB). Grows up from the buffer start.
+- **`RTOS_HEAP_HIGH`** — large/long-lived buffers (task stacks, queue item storage). Grows down from the buffer end.
+- **Shared gap** — unallocated memory available to either side. When a freed block sits at its side's high-water mark, the mark pulls back and the memory returns to the gap, so the two heaps cooperate rather than over-reserving.
+
+This clusters allocations by lifetime and size class, reducing fragmentation versus a single unified pool while keeping the implementation simple (~500 LoC, ~150-line free path).
+
+**Public API** ([include/memory.h](include/memory.h)):
+
+```c
+// Allocate from a specific side
+void *rtos_malloc_from(rtos_heap_id_t heap, size_t size);
+
+// Convenience wrapper — defaults to RTOS_HEAP_LOW
+void *rtos_malloc(size_t size);
+
+// Side is inferred from the pointer; coalesces neighbours; pulls back the mark
+void rtos_free(void *ptr);
+
+// Diagnostics: per-side (LOW/HIGH) or aggregate (BOTH)
+size_t rtos_memory_get_free_size(rtos_heap_id_t heap);
+size_t rtos_memory_get_min_ever_free_size(rtos_heap_id_t heap);
+size_t rtos_memory_get_largest_free_block(rtos_heap_id_t heap);
+```
+
+**Static-allocation variants** (skip the heap entirely; caller owns storage):
+
+```c
+rtos_task_create_static(fn, name, stack_buf, stack_size, param, prio, &handle);
+rtos_timer_create_static(&timer_buf, name, period, mode, cb, param, &handle);
+rtos_queue_create_static(&queue_buf, item_buf, count, item_size, &handle);
+```
+
+Each object tracks an `is_static` flag so the corresponding `_delete` skips the free for caller-owned storage. Dynamic-create paths route to the appropriate side automatically (task stack → HIGH, timer CB → LOW, queue CB → LOW, queue item buffer → HIGH).
+
+**Properties**:
+
+- 8-byte aligned allocations (AAPCS)
+- 8-byte block header overhead per allocation; `RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE` (default 16) governs split-vs-take-whole at allocation
+- Thread-safe via the kernel critical section
+- Asserts on ISR-context use (heap is task-context-only), double-free, bad pointers
+- O(N) per side over free-list length on alloc/free; free lists stay short in practice because adjacent blocks coalesce on free and boundary blocks pull back to the gap
 
 **Stack Management**:
 
-- Dynamic stack allocation from heap
-- Canary value at stack bottom
-- Stack checking via `rtos_task_check_stack()`
-- Per-task configurable stack sizes
+- Dynamic stacks via `rtos_task_create` allocate from the HIGH heap; reclaimed by `rtos_task_delete`. Self-delete defers the free to the idle task (the doomed task is still running on the stack — freeing it from inside would let PendSV clobber the freed memory during the context switch).
+- Static stacks via `rtos_task_create_static` never touch the heap.
+- Canary value (`0xC0DEC0DE`) at stack bottom; check via `rtos_task_check_stack()`.
+
+**Config**:
+
+- `RTOS_TOTAL_HEAP_SIZE` — total pool size (default 16 KB; STM32F401RE board overrides to 12 KB)
+- `RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE` — minimum residual to justify splitting a free block (default 16 bytes)
+
+**Validation**: The on-board [test_heap_allocator_suite](tests/integration/test_heap_allocator_suite.c) covers 21 cases (routing, coalescing, gap pull-back, fragmentation visibility, cross-heap collision, static bypass, dynamic delete reclaim). The host-side [test_heap_stress](tests/host/tests/test_heap_stress.c) runs 5,000-200,000 iterations of random alloc/free against the production allocator with per-operation invariant checking and unique-pattern corruption detection (ASAN/UBSAN-enabled on Linux/macOS).
 
 ## Profiling Support
 
@@ -565,7 +628,7 @@ KARTOS/
 ├── src/
 │   ├── core/              # Kernel core
 │   │   ├── kernel.c       # Kernel initialization and tick
-│   │   └── memory.c       # Bump allocator
+│   │   └── memory.c       # Bi-directional dual-ended heap allocator
 │   ├── scheduler/         # Scheduler implementations
 │   │   ├── scheduler.c    # Scheduler manager
 │   │   └── scheduler_types/
@@ -665,10 +728,11 @@ and uncomment the values you need to override. See [docs/porting_guide.md](docs/
 #define RTOS_CONFIG_USE_TICKLESS_IDLE               (0U)  // 1 to enable tickless idle
 #define RTOS_CONFIG_EXPECTED_IDLE_TIME_BEFORE_SLEEP (5U)  // ticks; below this, stay ticking
 
-/* Memory */
-#define RTOS_TOTAL_HEAP_SIZE         (16384U)  // 16KB heap (STM32F446RE overrides to 8KB)
-#define RTOS_DEFAULT_TASK_STACK_SIZE (1024U)   // 1KB default
-#define RTOS_MINIMUM_TASK_STACK_SIZE (256U)    // 256B minimum
+/* Memory — dual-ended heap (LOW grows up, HIGH grows down, shared gap in the middle) */
+#define RTOS_TOTAL_HEAP_SIZE              (16384U)  // 16KB pool
+#define RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE   (16U)     // split threshold (must be multiple of 8)
+#define RTOS_DEFAULT_TASK_STACK_SIZE      (1024U)   // 1KB default
+#define RTOS_MINIMUM_TASK_STACK_SIZE      (256U)    // 256B minimum
 
 /* Logging */
 #define RTOS_UART_BAUD_RATE (921600U)  // UART baud rate for log output
@@ -870,4 +934,4 @@ When the project is built with `-DKARTOS_TEST_HOOKS=ON`, the kernel exposes a sy
 
 #### Host-side tests (`tests/host/`)
 
-Pure-logic unit tests compiled with the host compiler. Each test executable links Unity + the framework fakes ([tests/host/fakes/fakes.c](tests/host/fakes/fakes.c) — FFF-backed stubs for port, scheduler, klog, and `rtos_assert_failed`) against exactly one production `.c` file under test. Run with `kartos host-test` or directly via `ctest --preset host`. Existing tests cover mutex list ordering, mutex PIP walker depth, queue ring buffer, and event-group bit matching.
+Pure-logic unit tests compiled with the host compiler. Each test executable links Unity + the framework fakes ([tests/host/fakes/fakes.c](tests/host/fakes/fakes.c) — FFF-backed stubs for port, scheduler, klog, and `rtos_assert_failed`) against exactly one production `.c` file under test. Run with `kartos host-test` or directly via `ctest --preset host`. Existing tests cover mutex list ordering, mutex PIP walker depth, queue ring buffer, event-group bit matching, and a randomized stress test for the dual-ended heap allocator ([tests/host/tests/test_heap_stress.c](tests/host/tests/test_heap_stress.c) — 5,000+ iterations of random alloc/free against the production allocator with overlap, alignment, and unique-pattern corruption checks; sanitizer-instrumented where supported). The `OWN_HEAP` CMake flag on `add_kartos_host_test()` lets a test that links real `memory.c` opt out of the libc-passthrough heap stubs ([tests/host/fakes/heap_passthrough.c](tests/host/fakes/heap_passthrough.c)).

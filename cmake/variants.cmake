@@ -79,6 +79,12 @@ add_kartos_variant(test_tickless_idle_suite
     EXTRA_DEFINES RTOS_MAX_TASKS=24
                   RTOS_CONFIG_USE_TICKLESS_IDLE=1U)
 
+add_kartos_variant(test_heap_allocator_suite
+    SOURCE        "${CMAKE_SOURCE_DIR}/tests/integration/test_heap_allocator_suite.c"
+    SCHEDULER     RTOS_SCHEDULER_PREEMPTIVE_SP
+    EXTRA_LIBS    kartos::test_framework
+    EXTRA_DEFINES RTOS_MAX_TASKS=24)
+
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 
 add_kartos_variant(bench_context_switch

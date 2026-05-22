@@ -3,11 +3,6 @@
 
 #include "rtos_types.h"
 
-/**
- * @file mutex.h
- * @brief Mutex definitions
- */
-
 #define RTOS_MAX_WAIT ((rtos_tick_t) (-1))
 #define RTOS_NO_WAIT  ((rtos_tick_t) (0))
 
@@ -32,7 +27,7 @@ typedef struct rtos_mutex
     rtos_tcb_t         *owner;        /* current owner TCB (NULL if unlocked) */
     rtos_tcb_t         *waiting_list; /* singly-linked list of waiting TCBs (uses tcb->next_waiting) */
     struct rtos_mutex  *next_held;    /* next mutex in owner's held-mutex chain */
-    uint8_t             lock_count;   /* recursion depth for owner (future use) */
+    uint8_t             lock_count;   /* recursion depth (1 = normal lock, >1 = re-entered by same owner) */
 } rtos_mutex_t;
 
 /**

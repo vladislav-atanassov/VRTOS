@@ -101,58 +101,116 @@ static rtos_tcb_t *queue_pop_highest_priority_waiter(rtos_tcb_t **list_head)
     return task;
 }
 
-static rtos_status_t rtos_queue_init(rtos_queue_t *queue, uint32_t item_count, uint32_t item_size)
+static void queue_init_common(rtos_queue_t *queue, void *item_storage, uint32_t item_count, uint32_t item_size,
+                              bool buffer_is_static, bool cb_is_static)
 {
-    if (queue == NULL || item_count == 0 || item_size == 0)
-    {
-        return RTOS_ERROR_INVALID_PARAM;
-    }
-
-    queue->buffer = rtos_malloc(item_count * item_size);
-    if (queue->buffer == NULL)
-    {
-        KLOGE("Queue", "AllocFail");
-        return RTOS_ERROR_NO_MEMORY;
-    }
-
+    queue->buffer             = item_storage;
     queue->item_size          = item_size;
     queue->length             = item_count;
     queue->count              = 0;
-    queue->read_ptr           = queue->buffer;
-    queue->write_ptr          = queue->buffer;
+    queue->read_ptr           = item_storage;
+    queue->write_ptr          = item_storage;
     queue->sender_wait_list   = NULL;
     queue->receiver_wait_list = NULL;
-
-    KLOGD("Queue", "QueueInit count=%u size=%u", item_count, item_size);
-
-    return RTOS_SUCCESS;
+    queue->buffer_is_static   = buffer_is_static;
+    queue->cb_is_static       = cb_is_static;
 }
 
 rtos_status_t rtos_queue_create(rtos_queue_handle_t *queue_handle, uint32_t item_count, uint32_t item_size)
 {
     RTOS_ASSERT_PARAM(queue_handle != NULL);
-    if (queue_handle == NULL)
+    if (queue_handle == NULL || item_count == 0 || item_size == 0)
     {
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    rtos_queue_t *queue = (rtos_queue_t *) rtos_malloc(sizeof(rtos_queue_t));
+    rtos_queue_t *queue = (rtos_queue_t *) rtos_malloc_from(RTOS_HEAP_LOW, sizeof(rtos_queue_t));
     if (queue == NULL)
     {
         KLOGE("Queue", "AllocFail");
         return RTOS_ERROR_NO_MEMORY;
     }
 
-    rtos_status_t status = rtos_queue_init(queue, item_count, item_size);
-    if (status != RTOS_SUCCESS)
+    void *buffer = rtos_malloc_from(RTOS_HEAP_HIGH, item_count * item_size);
+    if (buffer == NULL)
     {
         rtos_free(queue);
-        return status;
+        KLOGE("Queue", "BufAllocFail");
+        return RTOS_ERROR_NO_MEMORY;
     }
+
+    queue_init_common(queue, buffer, item_count, item_size, false, false);
 
     *queue_handle = queue;
     KLOGI("Queue", "QueueCreate count=%u size=%u", item_count, item_size);
 
+    return RTOS_SUCCESS;
+}
+
+rtos_status_t rtos_queue_create_static(rtos_queue_t *queue_buffer, void *item_storage, uint32_t item_count,
+                                       uint32_t item_size, rtos_queue_handle_t *queue_handle)
+{
+    if (queue_buffer == NULL || item_storage == NULL || queue_handle == NULL || item_count == 0 || item_size == 0)
+    {
+        return RTOS_ERROR_INVALID_PARAM;
+    }
+
+    queue_init_common(queue_buffer, item_storage, item_count, item_size, true, true);
+
+    *queue_handle = queue_buffer;
+    KLOGI("Queue", "QueueCreateStatic count=%u size=%u", item_count, item_size);
+
+    return RTOS_SUCCESS;
+}
+
+rtos_status_t rtos_queue_delete(rtos_queue_handle_t queue_handle)
+{
+    if (queue_handle == NULL)
+    {
+        return RTOS_ERROR_INVALID_PARAM;
+    }
+
+    rtos_queue_t *queue = (rtos_queue_t *) queue_handle;
+
+    rtos_port_enter_critical();
+
+    /* Wake every waiter so no task is left blocked on a dead queue.
+     * blocked_on is cleared by the pop helper; the woken task will observe
+     * the queue's count/length as it was at wake time. Callers using
+     * rtos_queue_delete() must ensure no producer/consumer is mid-call. */
+    while (queue->sender_wait_list != NULL)
+    {
+        rtos_tcb_t *sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
+        if (sender != NULL)
+        {
+            rtos_kernel_task_unblock(sender);
+        }
+    }
+    while (queue->receiver_wait_list != NULL)
+    {
+        rtos_tcb_t *receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
+        if (receiver != NULL)
+        {
+            rtos_kernel_task_unblock(receiver);
+        }
+    }
+
+    bool free_buffer = !queue->buffer_is_static;
+    bool free_cb     = !queue->cb_is_static;
+    void *buffer     = queue->buffer;
+
+    rtos_port_exit_critical();
+
+    if (free_buffer && buffer != NULL)
+    {
+        rtos_free(buffer);
+    }
+    if (free_cb)
+    {
+        rtos_free(queue);
+    }
+
+    KLOGI("Queue", "QueueDelete");
     return RTOS_SUCCESS;
 }
 

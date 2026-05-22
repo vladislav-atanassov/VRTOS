@@ -15,6 +15,7 @@
 #include "fff.h"
 
 #include "kernel_priv.h"
+#include "memory.h"
 #include "rtos_types.h"
 #include "task_priv.h"
 
@@ -30,6 +31,9 @@ DECLARE_FAKE_VOID_FUNC(rtos_port_enter_critical);
 DECLARE_FAKE_VOID_FUNC(rtos_port_exit_critical);
 DECLARE_FAKE_VALUE_FUNC(uint32_t, rtos_port_enter_critical_from_isr);
 DECLARE_FAKE_VOID_FUNC(rtos_port_exit_critical_from_isr, uint32_t);
+/* Returns false by default — host is never in interrupt context. Tests that
+ * exercise ISR-only paths can set return_val to true before calling. */
+DECLARE_FAKE_VALUE_FUNC(bool, rtos_port_in_isr);
 
 DECLARE_FAKE_VALUE_FUNC(rtos_task_handle_t, rtos_task_get_current);
 
@@ -58,7 +62,9 @@ DECLARE_FAKE_VOID_FUNC(klog_write, int, const char *, const char *, uint16_t, co
                        uint32_t, uint32_t, uint32_t, uint32_t);
 extern volatile uint8_t klog_verbosity;
 
-/* Heap: pass-through to libc malloc/free so tests can actually allocate buffers. */
+/* Heap: pass-through to libc malloc/free so tests can actually allocate buffers.
+ * Side hint is ignored on host — there is no dual-ended split. */
+void *rtos_malloc_from(rtos_heap_id_t heap, size_t size);
 void *rtos_malloc(size_t size);
 void  rtos_free(void *ptr);
 

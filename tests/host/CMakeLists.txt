@@ -48,16 +48,26 @@ target_compile_options(host_fakes PRIVATE -Wall -Wextra -Wno-unused-parameter)
 # add_kartos_host_test(NAME <test_name>
 #                     SOURCES <test.c> [<more.c>...]
 #                     PRODUCTION <path-to-src.c>
-#                     [EXPOSE_STATICS])
+#                     [EXPOSE_STATICS]
+#                     [OWN_HEAP])
 #
 # EXPOSE_STATICS adds `-Dstatic=` to the production file's compile flags so
 # that file-scope static helpers become extern. The production .c is added
 # as a per-target source rather than linked from a library so the override
 # applies only to its TU.
+#
+# OWN_HEAP omits the libc-pass-through heap stubs (heap_passthrough.c). Use
+# when PRODUCTION is src/core/memory.c — the test binary brings the real
+# allocator and the stubs would collide.
 function(add_kartos_host_test)
-    cmake_parse_arguments(_T "EXPOSE_STATICS" "NAME;PRODUCTION" "SOURCES" ${ARGN})
+    cmake_parse_arguments(_T "EXPOSE_STATICS;OWN_HEAP" "NAME;PRODUCTION" "SOURCES" ${ARGN})
 
-    add_executable(${_T_NAME} ${_T_SOURCES} ${_T_PRODUCTION})
+    set(_extra_sources "")
+    if(NOT _T_OWN_HEAP)
+        list(APPEND _extra_sources fakes/heap_passthrough.c)
+    endif()
+
+    add_executable(${_T_NAME} ${_T_SOURCES} ${_T_PRODUCTION} ${_extra_sources})
 
     target_link_libraries(${_T_NAME} PRIVATE unity host_fakes)
 
@@ -94,3 +104,21 @@ add_kartos_host_test(
     NAME       test_event_group_match
     SOURCES    tests/test_event_group_match.c
     PRODUCTION ${KARTOS_ROOT}/src/sync/event_group/event_group.c)
+
+# ── Heap stress: randomized alloc/free with ASAN/UBSAN ──────────────────
+# This binary opts in to sanitizers (when supported) because its main value
+# over the on-board suite is catching header-smashing / use-after-free that
+# only sanitizers surface reliably. The sanitizers add link-time deps so we
+# only switch them on for this one target.
+add_kartos_host_test(
+    NAME       test_heap_stress
+    SOURCES    tests/test_heap_stress.c
+    PRODUCTION ${KARTOS_ROOT}/src/core/memory.c
+    OWN_HEAP)
+
+if(NOT WIN32)
+    target_compile_options(test_heap_stress PRIVATE
+        -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(test_heap_stress PRIVATE
+        -fsanitize=address,undefined)
+endif()
