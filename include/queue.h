@@ -64,6 +64,32 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
 /* timeout_ticks: 0=non-blocking, RTOS_MAX_DELAY=forever */
 rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer, rtos_tick_t timeout_ticks);
 
+/**
+ * @brief ISR-context counterpart of rtos_queue_send(). Never blocks; returns
+ *        RTOS_ERROR_FULL if no slot is available. Wakes the highest-priority
+ *        waiting receiver via the ISR-safe unblock path.
+ *
+ * Must only be called from interrupt context.
+ *
+ * @param queue_handle Handle of the queue to send to.
+ * @param item_ptr     Pointer to the item to copy into the queue (item_size bytes).
+ * @return RTOS_SUCCESS or an error code.
+ */
+rtos_status_t rtos_queue_send_from_isr(rtos_queue_handle_t queue_handle, const void *item_ptr);
+
+/**
+ * @brief ISR-context counterpart of rtos_queue_receive(). Never blocks;
+ *        returns RTOS_ERROR_EMPTY if the queue has no items. Wakes the
+ *        highest-priority waiting sender via the ISR-safe unblock path.
+ *
+ * Must only be called from interrupt context.
+ *
+ * @param queue_handle Handle of the queue to receive from.
+ * @param buffer       Output buffer of at least item_size bytes.
+ * @return RTOS_SUCCESS or an error code.
+ */
+rtos_status_t rtos_queue_receive_from_isr(rtos_queue_handle_t queue_handle, void *buffer);
+
 uint32_t rtos_queue_messages_waiting(rtos_queue_handle_t queue_handle);
 uint32_t rtos_queue_spaces_available(rtos_queue_handle_t queue_handle);
 bool     rtos_queue_is_full(rtos_queue_handle_t queue_handle);

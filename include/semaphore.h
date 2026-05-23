@@ -53,6 +53,21 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
 rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem);
 
 /**
+ * @brief ISR-context counterpart of rtos_semaphore_signal(). Uses an ISR-local
+ *        critical section (does NOT touch the task-context nesting counter)
+ *        and pends PendSV directly so a higher-priority wake happens after
+ *        the ISR tail-chains out.
+ *
+ *        Must only be called from interrupt context; calling from a task
+ *        leaves PendSV pended without elevating BASEPRI and may delay the
+ *        switch indefinitely.
+ *
+ * @param sem Pointer to the semaphore.
+ * @return RTOS_SEM_OK on success, RTOS_SEM_ERR_OVERFLOW if max_count would be exceeded.
+ */
+rtos_sem_status_t rtos_semaphore_signal_from_isr(rtos_semaphore_t *sem);
+
+/**
  * @brief Try to decrement the semaphore count without blocking.
  * @param sem Pointer to the semaphore.
  * @return RTOS_SEM_OK if the count was available, RTOS_SEM_ERR_TIMEOUT otherwise.

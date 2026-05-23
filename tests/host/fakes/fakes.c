@@ -19,6 +19,7 @@ DEFINE_FAKE_VOID_FUNC(rtos_scheduler_remove_from_ready_list, rtos_task_handle_t)
 
 DEFINE_FAKE_VOID_FUNC(rtos_kernel_task_block, rtos_task_handle_t, rtos_tick_t);
 DEFINE_FAKE_VOID_FUNC(rtos_kernel_task_unblock, rtos_task_handle_t);
+DEFINE_FAKE_VOID_FUNC(rtos_kernel_task_unblock_from_isr, rtos_task_handle_t);
 
 DEFINE_FAKE_VOID_FUNC(rtos_yield);
 
@@ -55,6 +56,7 @@ void host_reset_all_fakes(void)
     RESET_FAKE(rtos_scheduler_remove_from_ready_list);
     RESET_FAKE(rtos_kernel_task_block);
     RESET_FAKE(rtos_kernel_task_unblock);
+    RESET_FAKE(rtos_kernel_task_unblock_from_isr);
     RESET_FAKE(rtos_yield);
     RESET_FAKE(rtos_assert_failed);
     RESET_FAKE(klog_write);

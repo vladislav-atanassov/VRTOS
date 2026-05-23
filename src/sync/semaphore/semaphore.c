@@ -1,6 +1,7 @@
 #include "semaphore.h"
 
 #include "KARTOS.h"
+#include "kernel_priv.h"   /* rtos_kernel_task_unblock_from_isr */
 #include "klog.h"
 #include "rtos_assert.h"
 #include "rtos_port.h"
@@ -194,6 +195,27 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
     return RTOS_SEM_OK;
 }
 
+/* Caller MUST hold a critical section. */
+static rtos_tcb_t *sem_signal_locked(rtos_semaphore_t *sem, rtos_sem_status_t *status_out)
+{
+    rtos_tcb_t *waiter = sem_pop_highest_priority_waiter(sem);
+    if (waiter != NULL)
+    {
+        *status_out = RTOS_SEM_OK;
+        return waiter;
+    }
+
+    if (sem->max_count != 0 && sem->count >= sem->max_count)
+    {
+        *status_out = RTOS_SEM_ERR_OVERFLOW;
+        return NULL;
+    }
+
+    sem->count++;
+    *status_out = RTOS_SEM_OK;
+    return NULL;
+}
+
 rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
 {
     RTOS_ASSERT_PARAM(sem != NULL);
@@ -204,34 +226,59 @@ rtos_sem_status_t rtos_semaphore_signal(rtos_semaphore_t *sem)
 
     rtos_port_enter_critical();
 
-    /* Check for waiting tasks first */
-    rtos_tcb_t *waiter = sem_pop_highest_priority_waiter(sem);
+    rtos_sem_status_t status;
+    rtos_tcb_t       *waiter = sem_signal_locked(sem, &status);
     if (waiter != NULL)
     {
-        /* Wake the highest priority waiter instead of incrementing count */
         KLOGD("Semaphore", "SemWake id=%u", waiter->task_id);
         RTOS_TEST_HOOK_FIRE(RTOS_HOOK_SEM_GIVE, {
             _ctx_.u.prim.primitive = sem;
             _ctx_.u.prim.caller    = rtos_task_get_current();
         });
-
         rtos_kernel_task_unblock(waiter);
         rtos_port_exit_critical();
-        return RTOS_SEM_OK;
+        return status;
     }
 
-    if (sem->max_count != 0 && sem->count >= sem->max_count)
-    {
-        rtos_port_exit_critical();
-        KLOGE("Semaphore", "SemOverflow count=%u max=%u", sem->count, sem->max_count);
-        return RTOS_SEM_ERR_OVERFLOW;
-    }
-
-    sem->count++;
     rtos_port_exit_critical();
 
-    KLOGD("Semaphore", "SemSignal count=%u", sem->count);
-    return RTOS_SEM_OK;
+    if (status == RTOS_SEM_ERR_OVERFLOW)
+    {
+        KLOGE("Semaphore", "SemOverflow count=%u max=%u", sem->count, sem->max_count);
+    }
+    else
+    {
+        KLOGD("Semaphore", "SemSignal count=%u", sem->count);
+    }
+    return status;
+}
+
+rtos_sem_status_t rtos_semaphore_signal_from_isr(rtos_semaphore_t *sem)
+{
+    if (sem == NULL)
+    {
+        return RTOS_SEM_ERR_INVALID;
+    }
+
+    uint32_t          saved  = rtos_port_enter_critical_from_isr();
+    rtos_sem_status_t status;
+    rtos_tcb_t       *waiter = sem_signal_locked(sem, &status);
+    if (waiter != NULL)
+    {
+        RTOS_TEST_HOOK_FIRE(RTOS_HOOK_SEM_GIVE, {
+            _ctx_.u.prim.primitive = sem;
+            _ctx_.u.prim.caller    = NULL; /* ISR has no caller TCB */
+        });
+        rtos_kernel_task_unblock_from_isr(waiter);
+    }
+    rtos_port_exit_critical_from_isr(saved);
+
+    /* klog_write is documented ISR-safe (see klog.h). */
+    if (status == RTOS_SEM_ERR_OVERFLOW)
+    {
+        KLOGE("Semaphore", "SemOverflowISR");
+    }
+    return status;
 }
 
 rtos_sem_status_t rtos_semaphore_try_wait(rtos_semaphore_t *sem)

@@ -214,6 +214,36 @@ rtos_status_t rtos_queue_delete(rtos_queue_handle_t queue_handle)
     return RTOS_SUCCESS;
 }
 
+/* Caller MUST hold a critical section. */
+static rtos_tcb_t *queue_send_copy_locked(rtos_queue_t *queue, const void *item_ptr)
+{
+    memcpy(queue->write_ptr, item_ptr, queue->item_size);
+
+    queue->write_ptr = (uint8_t *) queue->write_ptr + queue->item_size;
+    if ((uint8_t *) queue->write_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
+    {
+        queue->write_ptr = queue->buffer;
+    }
+    queue->count++;
+
+    return queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
+}
+
+/* Caller MUST hold a critical section. */
+static rtos_tcb_t *queue_receive_copy_locked(rtos_queue_t *queue, void *buffer)
+{
+    memcpy(buffer, queue->read_ptr, queue->item_size);
+
+    queue->read_ptr = (uint8_t *) queue->read_ptr + queue->item_size;
+    if ((uint8_t *) queue->read_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
+    {
+        queue->read_ptr = queue->buffer;
+    }
+    queue->count--;
+
+    return queue_pop_highest_priority_waiter(&queue->sender_wait_list);
+}
+
 rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item_ptr, rtos_tick_t timeout_ticks)
 {
     RTOS_ASSERT_PARAM(queue_handle != NULL);
@@ -294,16 +324,8 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
     }
 
 copy_data:
-    memcpy(queue->write_ptr, item_ptr, queue->item_size);
-
-    /* Advance write pointer (circular buffer) */
-    queue->write_ptr = (uint8_t *) queue->write_ptr + queue->item_size;
-    if ((uint8_t *) queue->write_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
-    {
-        queue->write_ptr = queue->buffer; /* Wrap around */
-    }
-
-    queue->count++;
+{
+    rtos_tcb_t *waiting_receiver = queue_send_copy_locked(queue, item_ptr);
 
     KLOGD("Queue", "QueueSend count=%u", queue->count);
     RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_SEND, {
@@ -311,18 +333,15 @@ copy_data:
         _ctx_.u.prim.caller    = g_kernel.current_task;
     });
 
-    rtos_tcb_t *waiting_receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
     if (waiting_receiver != NULL)
     {
         KLOGD("Queue", "QueueWakeRecv id=%u", waiting_receiver->task_id);
-
         rtos_kernel_task_unblock(waiting_receiver);
-        rtos_port_exit_critical();
-        return RTOS_SUCCESS;
     }
 
     rtos_port_exit_critical();
     return RTOS_SUCCESS;
+}
 }
 
 rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer, rtos_tick_t timeout_ticks)
@@ -405,16 +424,8 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
     }
 
 copy_data:
-    memcpy(buffer, queue->read_ptr, queue->item_size);
-
-    /* Advance read pointer (circular buffer) */
-    queue->read_ptr = (uint8_t *) queue->read_ptr + queue->item_size;
-    if ((uint8_t *) queue->read_ptr >= (uint8_t *) queue->buffer + (queue->length * queue->item_size))
-    {
-        queue->read_ptr = queue->buffer; /* Wrap around */
-    }
-
-    queue->count--;
+{
+    rtos_tcb_t *waiting_sender = queue_receive_copy_locked(queue, buffer);
 
     KLOGD("Queue", "QueueRecv count=%u", queue->count);
     RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_RECEIVE, {
@@ -422,17 +433,80 @@ copy_data:
         _ctx_.u.prim.caller    = g_kernel.current_task;
     });
 
-    rtos_tcb_t *waiting_sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
     if (waiting_sender != NULL)
     {
         KLOGD("Queue", "QueueWakeSend id=%u", waiting_sender->task_id);
-
         rtos_kernel_task_unblock(waiting_sender);
-        rtos_port_exit_critical();
-        return RTOS_SUCCESS;
     }
 
     rtos_port_exit_critical();
+    return RTOS_SUCCESS;
+}
+}
+
+rtos_status_t rtos_queue_send_from_isr(rtos_queue_handle_t queue_handle, const void *item_ptr)
+{
+    if (queue_handle == NULL || item_ptr == NULL)
+    {
+        return RTOS_ERROR_INVALID_PARAM;
+    }
+
+    rtos_queue_t *queue = (rtos_queue_t *) queue_handle;
+
+    uint32_t saved = rtos_port_enter_critical_from_isr();
+
+    if (queue->count >= queue->length)
+    {
+        rtos_port_exit_critical_from_isr(saved);
+        return RTOS_ERROR_FULL;
+    }
+
+    rtos_tcb_t *waiting_receiver = queue_send_copy_locked(queue, item_ptr);
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_SEND, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = NULL; /* ISR */
+    });
+
+    if (waiting_receiver != NULL)
+    {
+        rtos_kernel_task_unblock_from_isr(waiting_receiver);
+    }
+
+    rtos_port_exit_critical_from_isr(saved);
+    return RTOS_SUCCESS;
+}
+
+rtos_status_t rtos_queue_receive_from_isr(rtos_queue_handle_t queue_handle, void *buffer)
+{
+    if (queue_handle == NULL || buffer == NULL)
+    {
+        return RTOS_ERROR_INVALID_PARAM;
+    }
+
+    rtos_queue_t *queue = (rtos_queue_t *) queue_handle;
+
+    uint32_t saved = rtos_port_enter_critical_from_isr();
+
+    if (queue->count == 0)
+    {
+        rtos_port_exit_critical_from_isr(saved);
+        return RTOS_ERROR_EMPTY;
+    }
+
+    rtos_tcb_t *waiting_sender = queue_receive_copy_locked(queue, buffer);
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_QUEUE_RECEIVE, {
+        _ctx_.u.prim.primitive = queue;
+        _ctx_.u.prim.caller    = NULL; /* ISR */
+    });
+
+    if (waiting_sender != NULL)
+    {
+        rtos_kernel_task_unblock_from_isr(waiting_sender);
+    }
+
+    rtos_port_exit_critical_from_isr(saved);
     return RTOS_SUCCESS;
 }
 

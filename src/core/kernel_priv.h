@@ -34,5 +34,6 @@ void rtos_kernel_tick_handler(void);
 void rtos_kernel_switch_context(void);
 bool rtos_kernel_validate_transition(rtos_task_handle_t task, rtos_task_state_t new_state);
 void rtos_kernel_step_tick(uint32_t ticks_slept);
+void rtos_kernel_task_unblock_from_isr(rtos_task_handle_t task);
 
 #endif /* KERNEL_PRIV_H */

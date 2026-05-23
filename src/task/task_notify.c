@@ -1,10 +1,51 @@
 #include "KARTOS.h"
+#include "kernel_priv.h"   /* rtos_kernel_task_unblock_from_isr */
 #include "klog.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task.h"
 #include "task_priv.h"
 #include "test_hooks_priv.h"
+
+/* Caller MUST hold a critical section. */
+static bool task_notify_locked(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action,
+                                rtos_notify_status_t *status_out)
+{
+    switch (action)
+    {
+        case RTOS_NOTIFY_ACTION_NONE:
+            break;
+        case RTOS_NOTIFY_ACTION_SET_BITS:
+            task->notification_value |= value;
+            break;
+        case RTOS_NOTIFY_ACTION_INCREMENT:
+            task->notification_value++;
+            break;
+        case RTOS_NOTIFY_ACTION_OVERWRITE:
+            task->notification_value = value;
+            break;
+        default:
+            *status_out = RTOS_NOTIFY_ERR_INVALID;
+            return false;
+    }
+
+    task->notification_pending = 1;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_NOTIFY_SEND, {
+        _ctx_.u.notify.task  = task;
+        _ctx_.u.notify.value = task->notification_value;
+    });
+
+    *status_out = RTOS_NOTIFY_OK;
+
+    if (task->state == RTOS_TASK_STATE_BLOCKED && task->blocked_on_type == RTOS_SYNC_TYPE_NOTIFICATION)
+    {
+        task->blocked_on      = NULL;
+        task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
+        return true;
+    }
+    return false;
+}
 
 rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action)
 {
@@ -15,44 +56,20 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 
     rtos_port_enter_critical();
 
-    switch (action)
+    rtos_notify_status_t status;
+    bool                 needs_wake = task_notify_locked(task, value, action, &status);
+
+    if (status != RTOS_NOTIFY_OK)
     {
-        case RTOS_NOTIFY_ACTION_NONE:
-            break;
-
-        case RTOS_NOTIFY_ACTION_SET_BITS:
-            task->notification_value |= value;
-            break;
-
-        case RTOS_NOTIFY_ACTION_INCREMENT:
-            task->notification_value++;
-            break;
-
-        case RTOS_NOTIFY_ACTION_OVERWRITE:
-            task->notification_value = value;
-            break;
-
-        default:
-            rtos_port_exit_critical();
-            return RTOS_NOTIFY_ERR_INVALID;
+        rtos_port_exit_critical();
+        return status;
     }
-
-    task->notification_pending = 1;
-
-    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_NOTIFY_SEND, {
-        _ctx_.u.notify.task  = task;
-        _ctx_.u.notify.value = task->notification_value;
-    });
 
     KLOGD("Notify", "NotifySend id=%u act=%u", task->task_id, (uint32_t) action);
 
-    if (task->state == RTOS_TASK_STATE_BLOCKED && task->blocked_on_type == RTOS_SYNC_TYPE_NOTIFICATION)
+    if (needs_wake)
     {
-        task->blocked_on      = NULL;
-        task->blocked_on_type = RTOS_SYNC_TYPE_NONE;
-
         KLOGD("Notify", "NotifyWake id=%u val=%u", task->task_id, task->notification_value);
-
         rtos_port_exit_critical();
         rtos_kernel_task_unblock(task);
         return RTOS_NOTIFY_OK;
@@ -65,6 +82,31 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 rtos_notify_status_t rtos_task_notify_give(rtos_task_handle_t task)
 {
     return rtos_task_notify(task, 0, RTOS_NOTIFY_ACTION_INCREMENT);
+}
+
+rtos_notify_status_t rtos_task_notify_from_isr(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action)
+{
+    if (task == NULL)
+    {
+        return RTOS_NOTIFY_ERR_INVALID;
+    }
+
+    uint32_t             saved      = rtos_port_enter_critical_from_isr();
+    rtos_notify_status_t status;
+    bool                 needs_wake = task_notify_locked(task, value, action, &status);
+
+    if (status == RTOS_NOTIFY_OK && needs_wake)
+    {
+        rtos_kernel_task_unblock_from_isr(task);
+    }
+
+    rtos_port_exit_critical_from_isr(saved);
+    return status;
+}
+
+rtos_notify_status_t rtos_task_notify_give_from_isr(rtos_task_handle_t task)
+{
+    return rtos_task_notify_from_isr(task, 0, RTOS_NOTIFY_ACTION_INCREMENT);
 }
 
 rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t exit_clear_bits, uint32_t *value_out,

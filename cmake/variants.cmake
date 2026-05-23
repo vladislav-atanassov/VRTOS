@@ -98,6 +98,12 @@ add_kartos_variant(test_scheduler_suspend_suite
     EXTRA_INCLUDES "${CMAKE_SOURCE_DIR}/src/core" # kernel_priv.h — observe g_kernel.scheduler_suspended
     EXTRA_DEFINES  RTOS_MAX_TASKS=24)
 
+add_kartos_variant(test_isr_safe_suite
+    SOURCE        "${CMAKE_SOURCE_DIR}/tests/integration/test_isr_safe_suite.c"
+    SCHEDULER     RTOS_SCHEDULER_PREEMPTIVE_SP
+    EXTRA_LIBS    kartos::test_framework
+    EXTRA_DEFINES RTOS_MAX_TASKS=24)
+
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 
 add_kartos_variant(bench_context_switch

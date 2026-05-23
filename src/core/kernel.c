@@ -564,19 +564,84 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
     rtos_port_exit_critical();
 }
 
-void rtos_kernel_task_unblock(rtos_task_handle_t task)
+/* Shared inner unblock body. Caller MUST hold a critical section */
+static bool kernel_task_unblock_locked(rtos_task_handle_t task)
 {
     if (task == NULL || task->state != RTOS_TASK_STATE_BLOCKED)
     {
-        return;
+        return false;
     }
+
+    rtos_scheduler_remove_from_delayed_list(task);
+
+    if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_READY))
+    {
+        return false;
+    }
+
+#if RTOS_TEST_HOOKS_ENABLED
+    rtos_task_state_t _old_state = task->state;
+#endif
+    task->state = RTOS_TASK_STATE_READY;
+
+    RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TASK_STATE, {
+        _ctx_.u.task_state.task      = task;
+        _ctx_.u.task_state.old_state = (uint8_t) _old_state;
+        _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_READY;
+    });
+
+#if RTOS_PROFILING_SYSTEM_ENABLED
+    if (task->priority > 0)
+    {
+        task->ready_timestamp = rtos_profiling_get_cycles();
+    }
+#endif
+
+    rtos_scheduler_add_to_ready_list(task);
 
     KLOGT("Kernel", "TaskUnblock name=%s", (uint32_t) task->name);
 
-    /* rtos_kernel_task_ready() enters/exits its own critical section and may
-     * call rtos_yield() on the preemption path.  Wrapping an additional
-     * critical section here would keep BASEPRI elevated across the yield,
-     * preventing PendSV from firing.  Delegate entirely. */
-    rtos_scheduler_remove_from_delayed_list(task);
-    rtos_kernel_task_ready(task);
+    if (g_kernel.state != RTOS_KERNEL_STATE_RUNNING)
+    {
+        return false;
+    }
+    return rtos_scheduler_should_preempt(task);
+}
+
+void rtos_kernel_task_unblock(rtos_task_handle_t task)
+{
+    rtos_port_enter_critical();
+    bool need_yield = kernel_task_unblock_locked(task);
+    if (need_yield)
+    {
+        if (g_kernel.scheduler_suspended > 0)
+        {
+            g_kernel.yield_pending = true;
+            rtos_port_exit_critical();
+            return;
+        }
+        rtos_port_exit_critical();
+        rtos_yield();
+        return;
+    }
+    rtos_port_exit_critical();
+}
+
+void rtos_kernel_task_unblock_from_isr(rtos_task_handle_t task)
+{
+    uint32_t saved      = rtos_port_enter_critical_from_isr();
+    bool     need_yield = kernel_task_unblock_locked(task);
+
+    if (need_yield)
+    {
+        if (g_kernel.scheduler_suspended > 0)
+        {
+            g_kernel.yield_pending = true;
+        }
+        else
+        {
+            rtos_port_yield();
+        }
+    }
+    rtos_port_exit_critical_from_isr(saved);
 }

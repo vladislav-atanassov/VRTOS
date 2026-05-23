@@ -156,6 +156,20 @@ rtos_notify_status_t rtos_task_notify(rtos_task_handle_t task, uint32_t value, r
 rtos_notify_status_t rtos_task_notify_give(rtos_task_handle_t task);
 
 /**
+ * @brief ISR-context counterpart of rtos_task_notify(). Uses an ISR-local
+ *        critical section and pends PendSV directly so a higher-priority
+ *        wake happens after the ISR tail-chains out.
+ *
+ * Must only be called from interrupt context.
+ */
+rtos_notify_status_t rtos_task_notify_from_isr(rtos_task_handle_t task, uint32_t value, rtos_notify_action_t action);
+
+/**
+ * @brief ISR-context counterpart of rtos_task_notify_give(). See rtos_task_notify_from_isr().
+ */
+rtos_notify_status_t rtos_task_notify_give_from_isr(rtos_task_handle_t task);
+
+/**
  * @brief Wait for a notification, optionally clearing bits on entry and exit.
  * @param entry_clear_bits Bits cleared in notification_value before checking pending state.
  * @param exit_clear_bits  Bits cleared in notification_value after successful receive.
