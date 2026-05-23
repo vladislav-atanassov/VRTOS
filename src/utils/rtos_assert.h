@@ -39,19 +39,11 @@ void rtos_assert_failed(const char *file, uint32_t line, const char *func, const
  */
 #define RTOS_ASSERT_PARAM(expr) RTOS_ASSERT(expr)
 
-/**
- * @brief Critical assertion that should never fail
- *
- * @param expr Expression to evaluate
- */
-#define RTOS_ASSERT_CRITICAL(expr) RTOS_ASSERT(expr)
-
 #else /* RTOS_ASSERT_ENABLED */
 
 /* Assertions disabled - define as empty macros */
-#define RTOS_ASSERT(expr)          ((void) 0)
-#define RTOS_ASSERT_PARAM(expr)    ((void) 0)
-#define RTOS_ASSERT_CRITICAL(expr) ((void) 0)
+#define RTOS_ASSERT(expr)       ((void) 0)
+#define RTOS_ASSERT_PARAM(expr) ((void) 0)
 
 #endif /* RTOS_ASSERT_ENABLED */
 
