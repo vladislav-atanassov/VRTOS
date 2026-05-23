@@ -3,6 +3,7 @@
 #include "kernel_priv.h"
 #include "klog.h"
 #include "memory.h"
+#include "port_common.h"
 #include "profiling.h"
 #include "rtos_hooks.h"
 #include "rtos_port.h"
@@ -269,6 +270,18 @@ void rtos_kernel_switch_context(void)
 
     if (g_kernel.current_task != NULL)
     {
+#if RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH
+        /* Verify the outgoing task's canary before handing the CPU to anyone
+         * else — a corrupted word at stack_base means the task wrote past the
+         * low end of its stack. The application hook decides what to do
+         * (halt, log, kill the task); the kernel just reports. */
+        if (g_kernel.current_task->stack_base != NULL &&
+            *g_kernel.current_task->stack_base != PORT_STACK_CANARY_VALUE)
+        {
+            rtos_application_stack_overflow_hook(g_kernel.current_task);
+        }
+#endif
+
         if (g_kernel.current_task->state == RTOS_TASK_STATE_RUNNING)
         {
             g_kernel.current_task->state = RTOS_TASK_STATE_READY;

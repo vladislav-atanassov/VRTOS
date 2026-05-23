@@ -199,6 +199,61 @@ TEST_CASE(hooks, stack_overflow_hook_fires_on_canary_corrupt)
     rtos_task_delete(victim);
 }
 
+/* ── Case 5: stack_overflow_hook_fires_on_context_switch ─────────────────── */
+/*
+ * MR-7 — the kernel verifies the outgoing task's canary inside
+ * rtos_kernel_switch_context. Have a lower-priority victim corrupt its own
+ * canary and then block (rtos_delay_ms), which triggers a context switch
+ * with the corrupted task still as g_kernel.current_task. The hook must fire
+ * with the victim handle.
+ */
+static volatile bool s_auto_victim_ran = false;
+
+static void auto_overflow_victim_body(void *_)
+{
+    (void) _;
+    /* Wipe our own canary, then block. The delay's yield is the context
+     * switch that the kernel's MR-7 check has to catch. */
+    s_victim_stack[0]  = 0U;
+    s_auto_victim_ran  = true;
+    rtos_delay_ms(1000);
+    /* If the runner doesn't delete us in time we just loop here harmlessly;
+     * the canary has been restored by the case before any further switch. */
+    for (;;)
+    {
+        rtos_delay_ms(1000);
+    }
+}
+
+TEST_CASE(hooks, stack_overflow_hook_fires_on_context_switch)
+{
+    TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-VICTIM-RAN",   1);
+    TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-HOOK-FIRES",   1);
+    TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-HOOK-TASK",    1);
+
+    s_auto_victim_ran = false;
+
+    rtos_task_handle_t victim = NULL;
+    TEST_ASSERT(rtos_task_create_static(auto_overflow_victim_body, "VICAuto",
+                                        s_victim_stack, sizeof(s_victim_stack), NULL, 6U,
+                                        &victim) == RTOS_SUCCESS,
+                "INV-HOOK-AUTO-STACK-HOOK-FIRES");
+
+    uint32_t before = s_stack_overflow_calls;
+
+    /* Block the runner so the victim (P6) can run, corrupt, and block. */
+    rtos_delay_ms(20);
+
+    TEST_EXPECT(s_auto_victim_ran == true,                  "INV-HOOK-AUTO-STACK-VICTIM-RAN");
+    TEST_EXPECT(s_stack_overflow_calls > before,            "INV-HOOK-AUTO-STACK-HOOK-FIRES");
+    TEST_EXPECT(s_last_overflow_task == victim,             "INV-HOOK-AUTO-STACK-HOOK-TASK");
+
+    /* Restore the canary before any further context switch so we don't keep
+     * tripping the check during cleanup. */
+    s_victim_stack[0] = PORT_STACK_CANARY_VALUE;
+    rtos_task_delete(victim);
+}
+
 /* ── Suite registration ──────────────────────────────────────────────────── */
 
 static const test_case_t *const g_hooks_cases[] = {
@@ -206,6 +261,7 @@ static const test_case_t *const g_hooks_cases[] = {
     &TEST_CASE_REF(hooks, idle_hook_fires_when_blocked),
     &TEST_CASE_REF(hooks, malloc_failed_hook_fires_on_oom),
     &TEST_CASE_REF(hooks, stack_overflow_hook_fires_on_canary_corrupt),
+    &TEST_CASE_REF(hooks, stack_overflow_hook_fires_on_context_switch),
 };
 
 TEST_SUITE_DEFINE(hooks, g_hooks_cases, .before = hooks_before);

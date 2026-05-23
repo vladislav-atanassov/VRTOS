@@ -108,4 +108,16 @@
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 #endif
 
+/* Verify the per-task stack canary on every context switch. Adds one
+ * load + compare on the outgoing task before it is re-readied; on mismatch
+ * the application stack-overflow hook (rtos_hooks.h) fires with the offending
+ * task handle. Requires RTOS_ENABLE_STACK_OVERFLOW_CHECK to do anything. */
+#ifndef RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH
+#if RTOS_ENABLE_STACK_OVERFLOW_CHECK
+#define RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH (1U)
+#else
+#define RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH (0U)
+#endif
+#endif
+
 #endif /* RTOS_CONFIG_H */
