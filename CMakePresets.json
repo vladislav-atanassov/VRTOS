@@ -18,7 +18,8 @@
       "inherits": "_base",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "KARTOS_BOARD": "stm32f446re_nucleo"
+        "KARTOS_BOARD": "stm32f446re_nucleo",
+        "KARTOS_TEST_HOOKS": "ON"
       }
     },
     {
@@ -28,7 +29,8 @@
       "inherits": "_base",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "KARTOS_BOARD": "stm32f401re_nucleo"
+        "KARTOS_BOARD": "stm32f401re_nucleo",
+        "KARTOS_TEST_HOOKS": "ON"
       }
     }
   ],
