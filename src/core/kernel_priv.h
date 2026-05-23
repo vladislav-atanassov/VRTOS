@@ -21,7 +21,8 @@ typedef struct
     rtos_task_handle_t  next_task;           /**< Next task to run */
     rtos_kernel_state_t state;               /**< Current kernel state */
     rtos_tick_t         tick_count;          /**< System tick counter */
-    uint8_t             scheduler_suspended; /**< Scheduler suspension counter */
+    uint8_t             scheduler_suspended; /**< Nested suspend count; 0 = active */
+    bool                yield_pending;       /**< Switch was deferred during suspension */
 } rtos_kernel_cb_t;
 RTOS_STATIC_ASSERT(offsetof(rtos_kernel_cb_t, current_task) == 0, "current_task at wrong offset in kernel_cb_t");
 

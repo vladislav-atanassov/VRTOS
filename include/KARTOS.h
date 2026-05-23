@@ -62,6 +62,28 @@ void rtos_delay_until(rtos_tick_t *const prev_wake_time, rtos_tick_t time_increm
  */
 void rtos_yield(void);
 
+/**
+ * @brief Suspend task switching. Nestable: pair every call with
+ *        rtos_scheduler_resume(). Tick counting, timer expiry, and
+ *        delayed-list wake-ups continue to run; only the context-switch
+ *        side-effect is deferred until the matching resume.
+ *
+ * The currently running task keeps the CPU until it voluntarily exits this
+ * region. Do NOT call blocking RTOS APIs (rtos_delay_*, rtos_mutex_lock with
+ * non-zero timeout, etc.) while suspended — nothing else can run to wake the
+ * caller, and the system will hang.
+ */
+void rtos_scheduler_suspend(void);
+
+/**
+ * @brief Pair a prior rtos_scheduler_suspend(). When the nesting count drops
+ *        to zero, any context switch that was deferred during the suspended
+ *        region runs now.
+ * @return true if a deferred switch was fired by this call, false otherwise
+ *         (still nested, or no switch was pending).
+ */
+bool rtos_scheduler_resume(void);
+
 #ifdef __cplusplus
 }
 #endif

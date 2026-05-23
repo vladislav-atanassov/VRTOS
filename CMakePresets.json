@@ -59,6 +59,7 @@
     { "name": "test_tickless_idle_suite",           "configurePreset": "stm32f446re_nucleo", "targets": ["test_tickless_idle_suite"] },
     { "name": "test_heap_allocator_suite",          "configurePreset": "stm32f446re_nucleo", "targets": ["test_heap_allocator_suite"] },
     { "name": "test_hooks_suite",                   "configurePreset": "stm32f446re_nucleo", "targets": ["test_hooks_suite"] },
+    { "name": "test_scheduler_suspend_suite",       "configurePreset": "stm32f446re_nucleo", "targets": ["test_scheduler_suspend_suite"] },
 
     { "name": "bench_context_switch",          "configurePreset": "stm32f446re_nucleo", "targets": ["bench_context_switch"] },
     { "name": "bench_mutex",                   "configurePreset": "stm32f446re_nucleo", "targets": ["bench_mutex"] },
@@ -82,6 +83,7 @@
     { "name": "flash-test_tickless_idle_suite",         "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_tickless_idle_suite"] },
     { "name": "flash-test_heap_allocator_suite",        "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_heap_allocator_suite"] },
     { "name": "flash-test_hooks_suite",                 "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_hooks_suite"] },
+    { "name": "flash-test_scheduler_suspend_suite",     "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_scheduler_suspend_suite"] },
 
     { "name": "flash-bench_context_switch",    "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_context_switch"] },
     { "name": "flash-bench_mutex",             "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_mutex"] },

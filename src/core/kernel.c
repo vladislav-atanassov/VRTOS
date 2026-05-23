@@ -17,7 +17,8 @@ rtos_kernel_cb_t g_kernel = {.state               = RTOS_KERNEL_STATE_INACTIVE,
                              .tick_count          = 0,
                              .current_task        = NULL,
                              .next_task           = NULL,
-                             .scheduler_suspended = 0};
+                             .scheduler_suspended = 0,
+                             .yield_pending       = false};
 
 /* Scheduler choice for this binary, supplied by a per-variant TU generated
  * by add_kartos_variant() (cmake/kartos_add_variant.cmake). Each ELF gets
@@ -45,6 +46,7 @@ rtos_status_t rtos_init(void)
     g_kernel.current_task        = NULL;
     g_kernel.next_task           = NULL;
     g_kernel.scheduler_suspended = 0;
+    g_kernel.yield_pending       = false;
 
     rtos_memory_init();
 
@@ -212,13 +214,26 @@ void rtos_kernel_tick_handler(void)
         {
             KLOGT("Kernel", "TickPreempt next=%s tick=%u", (uint32_t) (next_task ? next_task->name : "none"),
                   g_kernel.tick_count);
-            rtos_port_exit_critical();
-            RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
-            rtos_yield();
-            return;
+            /* Tick advances and delayed tasks still wake, but the actual
+             * context switch is deferred until rtos_scheduler_resume() drops
+             * the suspend count back to zero. */
+            if (g_kernel.scheduler_suspended > 0)
+            {
+                g_kernel.yield_pending = true;
+                rtos_port_exit_critical();
+            }
+            else
+            {
+                rtos_port_exit_critical();
+                RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
+                rtos_yield();
+                return;
+            }
         }
-
-        rtos_port_exit_critical();
+        else
+        {
+            rtos_port_exit_critical();
+        }
     }
     RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
 }
@@ -246,6 +261,12 @@ void rtos_kernel_step_tick(uint32_t ticks_slept)
         rtos_task_handle_t next_task = rtos_scheduler_get_next_task();
         if (rtos_scheduler_should_preempt(next_task))
         {
+            if (g_kernel.scheduler_suspended > 0)
+            {
+                g_kernel.yield_pending = true;
+                rtos_port_exit_critical();
+                return;
+            }
             rtos_port_exit_critical();
             rtos_yield();
             return;
@@ -442,6 +463,14 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
     {
         if (rtos_scheduler_should_preempt(task))
         {
+            /* Suspended → record that a switch is needed and let the running
+             * task continue. rtos_scheduler_resume() drains this. */
+            if (g_kernel.scheduler_suspended > 0)
+            {
+                g_kernel.yield_pending = true;
+                rtos_port_exit_critical();
+                return;
+            }
             rtos_port_exit_critical();
             rtos_yield();
             return;
@@ -449,6 +478,39 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
     }
 
     rtos_port_exit_critical();
+}
+
+void rtos_scheduler_suspend(void)
+{
+    rtos_port_enter_critical();
+    /* uint8_t overflow at 256 would silently re-enable the scheduler. The
+     * cap is far beyond any sane nesting depth, so trip an assert instead
+     * of letting the count wrap. */
+    RTOS_ASSERT(g_kernel.scheduler_suspended < 0xFFU);
+    g_kernel.scheduler_suspended++;
+    rtos_port_exit_critical();
+}
+
+bool rtos_scheduler_resume(void)
+{
+    bool fired = false;
+
+    rtos_port_enter_critical();
+
+    RTOS_ASSERT(g_kernel.scheduler_suspended > 0U);
+    g_kernel.scheduler_suspended--;
+
+    if (g_kernel.scheduler_suspended == 0U && g_kernel.yield_pending)
+    {
+        g_kernel.yield_pending = false;
+        fired                  = true;
+        rtos_port_exit_critical();
+        rtos_yield();
+        return fired;
+    }
+
+    rtos_port_exit_critical();
+    return fired;
 }
 
 /* delay_ticks = 0 means indefinite block (no delayed-list entry) */
