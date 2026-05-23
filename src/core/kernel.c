@@ -4,6 +4,7 @@
 #include "klog.h"
 #include "memory.h"
 #include "profiling.h"
+#include "rtos_hooks.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task.h"
@@ -194,6 +195,8 @@ void rtos_kernel_tick_handler(void)
     RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TICK, {
         _ctx_.u.tick_val = g_kernel.tick_count;
     });
+
+    rtos_application_tick_hook(g_kernel.tick_count);
 
     rtos_timer_tick();
 

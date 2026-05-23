@@ -26,6 +26,7 @@
 #include "config.h"
 #include "klog.h"
 #include "rtos_assert.h"
+#include "rtos_hooks.h"
 #include "rtos_port.h"
 
 #include <stdbool.h>
@@ -249,6 +250,7 @@ void *rtos_malloc_from(rtos_heap_id_t heap, size_t size)
     if (want > RTOS_TOTAL_HEAP_SIZE)
     {
         KLOGE("Mem", "AllocTooLarge want=%u", (unsigned) want);
+        rtos_application_malloc_failed_hook(size, heap);
         return NULL;
     }
 
@@ -267,6 +269,7 @@ void *rtos_malloc_from(rtos_heap_id_t heap, size_t size)
         rtos_port_exit_critical();
         KLOGE("Mem", "AllocFail heap=%u want=%u gap=%u lh=%u hh=%u", (unsigned) heap, (unsigned) want,
               (unsigned) g_gap_bytes, (unsigned) g_lh.free_bytes, (unsigned) g_hh.free_bytes);
+        rtos_application_malloc_failed_hook(size, heap);
         return NULL;
     }
 

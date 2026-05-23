@@ -13,6 +13,7 @@ set(_K ${CMAKE_CURRENT_SOURCE_DIR})
 option(KARTOS_TEST_HOOKS "Compile kernel test-hook instrumentation (test configurations only)" OFF)
 
 add_library(kartos_kernel STATIC
+    ${_K}/core/hooks.c
     ${_K}/core/kernel.c
     ${_K}/core/memory.c
     ${_K}/logging/klog.c

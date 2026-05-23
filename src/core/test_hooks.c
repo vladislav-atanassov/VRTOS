@@ -71,7 +71,15 @@ void rtos_test_hook_drain_task(void *arg)
             s_read              = (s_read + 1U) % RING_SIZE;
             dispatch(&ctx);
         }
-        rtos_yield();
+        /* Block (rather than yield) when the ring is empty. Yielding at P1
+         * would re-enter the run queue immediately and starve every lower-
+         * priority task — including IDLE, which prevents the idle hook from
+         * ever firing and breaks any test that depends on the system
+         * actually reaching idle. Sleeping one tick caps dispatch latency
+         * at 1 ms while letting P0 tasks run during the gap. The ring is
+         * 64 entries deep, so up to one tick's worth of bursty events
+         * survive the wait without overflow. */
+        rtos_delay_ticks(1U);
     }
 }
 

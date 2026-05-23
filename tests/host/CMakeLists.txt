@@ -67,6 +67,12 @@ function(add_kartos_host_test)
         list(APPEND _extra_sources fakes/heap_passthrough.c)
     endif()
 
+    # Application-hook weak defaults: added per-target rather than via the
+    # host_fakes archive because weak symbols inside .a members don't reliably
+    # pull the .o on GNU ld — undefined refs from the production .c would
+    # link-fail. Direct-include guarantees the defaults are present.
+    list(APPEND _extra_sources ${KARTOS_ROOT}/src/core/hooks.c)
+
     add_executable(${_T_NAME} ${_T_SOURCES} ${_T_PRODUCTION} ${_extra_sources})
 
     target_link_libraries(${_T_NAME} PRIVATE unity host_fakes)

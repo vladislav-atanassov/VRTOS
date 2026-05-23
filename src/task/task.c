@@ -7,6 +7,7 @@
 #include "mutex.h"
 #include "port_common.h"
 #include "rtos_assert.h"
+#include "rtos_hooks.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task_priv.h"
@@ -360,6 +361,8 @@ __attribute__((__noreturn__)) void rtos_task_idle_function(void *param)
             }
         }
 
+        rtos_application_idle_hook();
+
         handle_idle_sleep();
         handle_idle_yield();
     }
@@ -375,6 +378,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
             if (*task_handle->stack_base != PORT_STACK_CANARY_VALUE)
             {
                 KLOGE("Task", "StackOverflow id=%u", task_handle->task_id);
+                rtos_application_stack_overflow_hook(task_handle);
                 return true;
             }
         }
@@ -390,6 +394,7 @@ bool rtos_task_check_stack(rtos_task_handle_t task_handle)
             if (*task->stack_base != PORT_STACK_CANARY_VALUE)
             {
                 KLOGE("Task", "StackOverflow id=%u", task->task_id);
+                rtos_application_stack_overflow_hook(task);
                 overflow_found = true;
             }
         }
