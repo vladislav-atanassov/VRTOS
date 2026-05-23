@@ -2,6 +2,7 @@
 #define RTOS_HOOKS_H
 
 #include "memory.h"     /* rtos_heap_id_t */
+#include "mutex.h"      /* rtos_mutex_t */
 #include "rtos_types.h" /* rtos_tick_t, rtos_task_handle_t */
 
 #include <stddef.h>
@@ -53,6 +54,16 @@ void rtos_application_stack_overflow_hook(rtos_task_handle_t task);
  * @param heap           The heap side the request targeted.
  */
 void rtos_application_malloc_failed_hook(size_t requested_size, rtos_heap_id_t heap);
+
+/**
+ * @brief Called from rtos_mutex_lock() when acquiring `mutex` would close a
+ *        cycle in the wait-for graph. The lock attempt is aborted and the
+ *        caller receives RTOS_MUTEX_ERR_DEADLOCK; the hook runs first so the
+ *        application can log, halt, or record diagnostics.
+ * @param waiter The task that tried to lock the mutex.
+ * @param mutex  The mutex whose acquisition would close the cycle.
+ */
+void rtos_application_deadlock_hook(rtos_task_handle_t waiter, rtos_mutex_t *mutex);
 
 #ifdef __cplusplus
 }

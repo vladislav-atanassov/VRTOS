@@ -40,3 +40,9 @@ KARTOS_HOOK_WEAK void rtos_application_malloc_failed_hook(size_t requested_size,
     (void) requested_size;
     (void) heap;
 }
+
+KARTOS_HOOK_WEAK void rtos_application_deadlock_hook(rtos_task_handle_t waiter, rtos_mutex_t *mutex)
+{
+    (void) waiter;
+    (void) mutex;
+}

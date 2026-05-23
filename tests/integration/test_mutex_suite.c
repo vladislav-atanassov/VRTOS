@@ -16,11 +16,25 @@
 #include "KARTOS.h"
 #include "config.h"
 #include "mutex.h"
+#include "rtos_hooks.h"
 #include "task.h"
 
 #if RTOS_TEST_HOOKS_ENABLED
 #include "rtos_test_hooks.h"
 #endif
+
+/* Strong override of the weak application deadlock hook so cases can
+ * verify the hook payload. Default is no-op; this records the last call. */
+static volatile uint32_t           s_deadlock_hook_calls;
+static volatile rtos_task_handle_t s_last_deadlock_waiter;
+static volatile void              *s_last_deadlock_mutex;
+
+void rtos_application_deadlock_hook(rtos_task_handle_t waiter, rtos_mutex_t *mutex)
+{
+    s_deadlock_hook_calls++;
+    s_last_deadlock_waiter = waiter;
+    s_last_deadlock_mutex  = (void *) mutex;
+}
 
 /* ── Priority / stack constants ─────────────────────────────────────────── */
 
@@ -80,6 +94,9 @@ static void mutex_before(void)
     g_low_task         = NULL;
     g_mid_task         = NULL;
     g_high_task        = NULL;
+    s_deadlock_hook_calls  = 0U;
+    s_last_deadlock_waiter = NULL;
+    s_last_deadlock_mutex  = NULL;
 #if RTOS_TEST_HOOKS_ENABLED
     test_signal_init(&g_boost_observed);
     test_signal_init(&g_restore_observed);
@@ -209,6 +226,26 @@ static void task_trans_hi(void *_)
     (void) _;
     test_phase_wait(&g_phases, PHASE_M2_HELD, true, false, RTOS_EG_MAX_WAIT);
     rtos_mutex_lock(&g_m2, RTOS_MAX_WAIT);          /* blocks → boosts Mid→P4, Lo→P4 */
+    rtos_mutex_unlock(&g_m2);
+    test_signal_post(&g_case_done);
+    rtos_task_delete(NULL);
+}
+
+/* ── Deadlock worker ─────────────────────────────────────────────────────── */
+/*
+ * Locks g_m2 first, then unconditionally tries to lock g_m. Used by the
+ * cycle-detection case: when the runner holds g_m and this worker holds g_m2
+ * + blocks on g_m, the wait-for graph is W→g_m→Runner→g_m2→W. The runner's
+ * subsequent attempt to lock g_m2 must observe the cycle and return
+ * RTOS_MUTEX_ERR_DEADLOCK instead of joining the deadlock.
+ */
+static void task_deadlock_worker(void *_)
+{
+    (void) _;
+    rtos_mutex_lock(&g_m2, RTOS_MAX_WAIT);
+    rtos_mutex_lock(&g_m,  RTOS_MAX_WAIT); /* blocks on g_m held by runner */
+    /* On wake: we own both. Release in reverse order and signal done. */
+    rtos_mutex_unlock(&g_m);
     rtos_mutex_unlock(&g_m2);
     test_signal_post(&g_case_done);
     rtos_task_delete(NULL);
@@ -573,6 +610,90 @@ TEST_CASE(mutex, unlock_fires_unlock_hook)
 #endif
 }
 
+/* ── Case 11: lock_detects_deadlock_cycle ────────────────────────────────── */
+/*
+ * Runner holds g_m, worker holds g_m2 and blocks on g_m → wait-for graph is
+ * Runner→...→Runner once Runner tries to lock g_m2. The cycle check inside
+ * rtos_mutex_lock must observe this before adding Runner to g_m2's wait list
+ * and return RTOS_MUTEX_ERR_DEADLOCK. The application deadlock hook must
+ * also fire with (runner, &g_m2) as payload.
+ */
+TEST_CASE(mutex, lock_detects_deadlock_cycle)
+{
+    TEST_INV_DECLARE("INV-MUTEX-DEADLOCK-RETURN",  1);
+    TEST_INV_DECLARE("INV-MUTEX-DEADLOCK-HOOK",    3);
+
+    rtos_task_handle_t runner = rtos_task_get_current();
+
+    /* Runner takes m1. */
+    TEST_ASSERT(rtos_mutex_lock(&g_m, RTOS_MAX_WAIT) == RTOS_MUTEX_OK,
+                "INV-MUTEX-DEADLOCK-RETURN");
+
+    /* Worker takes m2 and blocks on m1. */
+    TEST_ASSERT(rtos_task_create(task_deadlock_worker, "TLW", STK, NULL,
+                                 PRIO_MID, &g_mid_task) == RTOS_SUCCESS,
+                "INV-MUTEX-DEADLOCK-RETURN");
+
+    /* Wait until the worker is parked on m1 (the only thing it ever blocks
+     * on). Polling with a small delay keeps the runner higher-priority than
+     * the worker for the rest of the case. */
+    TEST_AWAIT_PHASE("worker-blocked-on-m1", 2000, {
+        while (rtos_task_get_state(g_mid_task) != RTOS_TASK_STATE_BLOCKED)
+        {
+            rtos_delay_ms(2);
+        }
+    });
+
+    /* Cycle is now closed: Runner→m2→Worker→m1→Runner. Locking m2 must
+     * detect it and refuse the lock; the hook must fire with the offending
+     * mutex and the runner as waiter. */
+    rtos_mutex_status_t st = rtos_mutex_lock(&g_m2, RTOS_MAX_WAIT);
+    TEST_EXPECT(st == RTOS_MUTEX_ERR_DEADLOCK, "INV-MUTEX-DEADLOCK-RETURN");
+
+    TEST_EXPECT(s_deadlock_hook_calls == 1U,         "INV-MUTEX-DEADLOCK-HOOK");
+    TEST_EXPECT(s_last_deadlock_waiter == runner,    "INV-MUTEX-DEADLOCK-HOOK");
+    TEST_EXPECT(s_last_deadlock_mutex == (void *) &g_m2,
+                "INV-MUTEX-DEADLOCK-HOOK");
+
+    /* Break the deadlock: dropping m1 hands it to the worker, which then
+     * unwinds its locks and signals completion. */
+    rtos_mutex_unlock(&g_m);
+    TEST_AWAIT_PHASE("cleanup", 2000, {
+        test_signal_wait(&g_case_done, RTOS_SEM_MAX_WAIT);
+    });
+}
+
+/* ── Case 12: recursive_lock_saturates_with_recursion_status ─────────────── */
+/*
+ * lock_count is uint8_t. The 256th nested lock by the same owner has nowhere
+ * to go and must return the dedicated RTOS_MUTEX_ERR_RECURSION (previously
+ * collapsed into RTOS_MUTEX_ERR_GENERAL), so callers can tell saturation
+ * apart from other failures.
+ */
+TEST_CASE(mutex, recursive_lock_saturates_with_recursion_status)
+{
+    TEST_INV_DECLARE("INV-MUTEX-RECURSION-SATURATES", 1);
+
+    /* First lock + 254 recursive locks → lock_count saturates at 255. */
+    TEST_ASSERT(rtos_mutex_lock(&g_m, RTOS_MAX_WAIT) == RTOS_MUTEX_OK,
+                "INV-MUTEX-RECURSION-SATURATES");
+    for (int i = 0; i < 254; i++)
+    {
+        TEST_ASSERT(rtos_mutex_lock(&g_m, RTOS_MAX_WAIT) == RTOS_MUTEX_OK,
+                    "INV-MUTEX-RECURSION-SATURATES");
+    }
+
+    /* 256th attempt: lock_count is already 255 → dedicated error code. */
+    TEST_EXPECT(rtos_mutex_lock(&g_m, RTOS_MAX_WAIT) == RTOS_MUTEX_ERR_RECURSION,
+                "INV-MUTEX-RECURSION-SATURATES");
+
+    /* Cleanup: 255 unlocks to fully release the mutex. */
+    for (int i = 0; i < 255; i++)
+    {
+        rtos_mutex_unlock(&g_m);
+    }
+}
+
 /* ── Suite registration ──────────────────────────────────────────────────── */
 
 static const test_case_t *const g_mutex_cases[] = {
@@ -586,6 +707,8 @@ static const test_case_t *const g_mutex_cases[] = {
     &TEST_CASE_REF(mutex, null_input_asserts),
     &TEST_CASE_REF(mutex, lock_fires_lock_exit_hook),
     &TEST_CASE_REF(mutex, unlock_fires_unlock_hook),
+    &TEST_CASE_REF(mutex, lock_detects_deadlock_cycle),
+    &TEST_CASE_REF(mutex, recursive_lock_saturates_with_recursion_status),
 };
 
 TEST_SUITE_DEFINE(mutex, g_mutex_cases,

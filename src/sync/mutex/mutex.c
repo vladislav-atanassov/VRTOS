@@ -1,9 +1,11 @@
 #include "mutex.h"
 
 #include "KARTOS.h"
+#include "config.h"      /* RTOS_MAX_TASKS — bound for chain-walk loops */
 #include "kernel_priv.h"
 #include "klog.h"
 #include "rtos_assert.h"
+#include "rtos_hooks.h"
 #include "rtos_port.h"
 #include "scheduler.h"
 #include "task.h"
@@ -92,29 +94,59 @@ static rtos_tcb_t *mutex_pop_highest_priority_waiter(rtos_mutex_t *m)
     return task;
 }
 
+/* Walk the wait-for graph starting at `m->owner` and return true if the chain
+ * leads back to `waiter` — i.e. granting `waiter -> m` would close a cycle.
+ *
+ * Pre-condition (maintained by this very check rejecting cycle-closing locks):
+ * the graph before adding the new edge is acyclic, so the walk is bounded by
+ * the number of tasks. RTOS_MAX_TASKS+1 is a defensive cap: a correct kernel
+ * never hits it; if a bug introduced an undetected cycle earlier, this still
+ * terminates and reports deadlock instead of hanging the caller. */
+static bool mutex_would_deadlock(const rtos_mutex_t *m, const rtos_tcb_t *waiter)
+{
+    const rtos_tcb_t *cur   = m->owner;
+    uint32_t          guard = 0U;
+
+    while (cur != NULL && guard <= RTOS_MAX_TASKS)
+    {
+        if (cur == waiter)
+        {
+            return true;
+        }
+        if (cur->state != RTOS_TASK_STATE_BLOCKED ||
+            cur->blocked_on_type != RTOS_SYNC_TYPE_MUTEX ||
+            cur->blocked_on == NULL)
+        {
+            return false;
+        }
+        cur = ((const rtos_mutex_t *) cur->blocked_on)->owner;
+        guard++;
+    }
+    /* Guard tripped — treat as suspected cycle. */
+    return cur != NULL;
+}
+
 static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter)
 {
     /* Transitive priority inheritance: walk the chain of mutex owners and boost
-     * each one whose effective priority is below the waiter's. */
-    rtos_tcb_t     *current_task = waiter;
-    rtos_tcb_t     *target_task  = m->owner;
-    rtos_priority_t boost_prio   = waiter->priority;
+     * each one whose effective priority is below the waiter's. The walk is
+     * bounded by the cycle-free invariant; RTOS_MAX_TASKS is a belt-and-
+     * suspenders cap so a corrupted graph never spins forever here. */
+    rtos_tcb_t     *target_task = m->owner;
+    rtos_priority_t boost_prio  = waiter->priority;
+    uint32_t        guard       = 0U;
 
-    /* Safety counter to prevent infinite loops on deadlock cycles */
-    uint32_t       safety_ctr = 0;
-    const uint32_t max_depth  = 16;
-
-    while (target_task != NULL && safety_ctr < max_depth)
+    while (target_task != NULL && guard <= RTOS_MAX_TASKS)
     {
         if (target_task->priority < boost_prio)
         {
             KLOGD("Mutex", "MutexBoost id=%u prio=%u", target_task->task_id, boost_prio);
 
             /* If the boosted task is currently in the READY list it is stored
-             * in the bucket indexed by its old priority.  Changing the priority
+             * in the bucket indexed by its old priority. Changing the priority
              * field alone would leave the task in the wrong bucket, causing the
              * scheduler to either miss it or to corrupt the list on the next
-             * remove.  Re-insert it at the new priority level. */
+             * remove. Re-insert it at the new priority level. */
             if (target_task->state == RTOS_TASK_STATE_READY)
             {
                 rtos_scheduler_remove_from_ready_list(target_task);
@@ -130,34 +162,24 @@ static void mutex_apply_priority_inheritance(rtos_mutex_t *m, rtos_tcb_t *waiter
                 _ctx_.u.mutex_boost.new_prio = boost_prio;
             });
         }
-        else
+        else if (target_task->priority > boost_prio)
         {
-            /* Target already at/above boost_prio. Carry its effective priority
-             * forward so we do not under-boost further owners in the chain. */
-            if (target_task->priority > boost_prio)
-            {
-                boost_prio = target_task->priority;
-            }
+            /* Carry the higher effective priority forward so we do not
+             * under-boost further owners in the chain. */
+            boost_prio = target_task->priority;
         }
 
         if (target_task->state == RTOS_TASK_STATE_BLOCKED && target_task->blocked_on_type == RTOS_SYNC_TYPE_MUTEX &&
             target_task->blocked_on != NULL)
         {
-            rtos_mutex_t *next_mutex = (rtos_mutex_t *) target_task->blocked_on;
-            current_task             = target_task;
-            target_task              = next_mutex->owner;
+            target_task = ((rtos_mutex_t *) target_task->blocked_on)->owner;
         }
         else
         {
             break;
         }
 
-        safety_ctr++;
-    }
-
-    if (safety_ctr >= max_depth)
-    {
-        KLOGE("Mutex", "MutexDeadlock depth=%u max=%u", safety_ctr, max_depth);
+        guard++;
     }
 }
 
@@ -277,7 +299,7 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
         {
             rtos_port_exit_critical();
             KLOGE("Mutex", "MutexMaxRecursion id=%u", current_task->task_id);
-            return RTOS_MUTEX_ERR_GENERAL;
+            return RTOS_MUTEX_ERR_RECURSION;
         }
     }
 
@@ -285,6 +307,17 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
     {
         rtos_port_exit_critical();
         return RTOS_MUTEX_ERR_TIMEOUT;
+    }
+
+    /* Reject locks that would close a cycle before we either boost owners or
+     * add ourselves to the wait list — neither operation is safe on a cyclic
+     * graph, and the caller would otherwise hang here forever. */
+    if (mutex_would_deadlock(m, current_task))
+    {
+        rtos_port_exit_critical();
+        KLOGE("Mutex", "MutexDeadlock id=%u", current_task->task_id);
+        rtos_application_deadlock_hook(current_task, m);
+        return RTOS_MUTEX_ERR_DEADLOCK;
     }
 
     mutex_apply_priority_inheritance(m, current_task);
