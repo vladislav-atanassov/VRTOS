@@ -13,8 +13,9 @@ extern const rtos_scheduler_t preemptive_sp_scheduler;
 
 typedef struct
 {
-    rtos_tcb_t *ready_lists[RTOS_MAX_TASK_PRIORITIES]; /**< Ready lists per priority */
-    rtos_tcb_t *delayed_list;                          /**< Time-sorted delayed list */
+    rtos_tcb_t *ready_lists[RTOS_MAX_TASK_PRIORITIES];      /**< Ready list head per priority */
+    rtos_tcb_t *ready_lists_tail[RTOS_MAX_TASK_PRIORITIES]; /**< Ready list tail per priority (O(1) append) */
+    rtos_tcb_t *delayed_list;                               /**< Time-sorted delayed list */
     uint8_t     ready_priorities; /**< Bitmask of priorities with ready tasks */
 } preemptive_sp_private_data_t;
 

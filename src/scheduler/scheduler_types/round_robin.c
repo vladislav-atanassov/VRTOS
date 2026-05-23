@@ -9,35 +9,39 @@
 
 #include <string.h>
 
-round_robin_private_data_t g_round_robin_data = {.ready_list      = NULL,
-                                                 .ready_list_tail = NULL,
-                                                 .delayed_list    = NULL,
-                                                 .current_task    = NULL,
-                                                 .slice_remaining = 0,
-                                                 .ready_count     = 0,
-                                                 .delayed_count   = 0};
+round_robin_private_data_t g_round_robin_data = {.ready_lists      = {NULL},
+                                                 .ready_lists_tail = {NULL},
+                                                 .delayed_list     = NULL,
+                                                 .current_task     = NULL,
+                                                 .slice_remaining  = 0,
+                                                 .ready_priorities = 0,
+                                                 .ready_count      = 0,
+                                                 .delayed_count    = 0};
 
 static void round_robin_add_to_ready_list_internal(rtos_task_handle_t task)
 {
-    if (task == NULL)
+    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
     {
         return;
     }
 
-    task->next = NULL;
-    task->prev = NULL;
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_round_robin_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_round_robin_data.ready_lists_tail[priority];
 
-    if (g_round_robin_data.ready_list == NULL)
+    task->next = NULL;
+    task->prev = *tail; /* NULL when the bucket is empty */
+
+    if (*head == NULL)
     {
-        g_round_robin_data.ready_list      = task;
-        g_round_robin_data.ready_list_tail = task;
+        *head = task;
+        g_round_robin_data.ready_priorities |= (uint8_t) (1U << priority);
     }
     else
     {
-        g_round_robin_data.ready_list_tail->next = task;
-        task->prev                               = g_round_robin_data.ready_list_tail;
-        g_round_robin_data.ready_list_tail       = task;
+        (*tail)->next = task;
     }
+    *tail = task;
 
     g_round_robin_data.ready_count++;
 
@@ -46,10 +50,14 @@ static void round_robin_add_to_ready_list_internal(rtos_task_handle_t task)
 
 static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
 {
-    if (task == NULL || g_round_robin_data.ready_list == NULL)
+    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
     {
         return;
     }
+
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_round_robin_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_round_robin_data.ready_lists_tail[priority];
 
     if (task->prev != NULL)
     {
@@ -57,7 +65,7 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
     }
     else
     {
-        g_round_robin_data.ready_list = task->next;
+        *head = task->next;
     }
 
     if (task->next != NULL)
@@ -66,7 +74,13 @@ static void round_robin_remove_from_ready_list_internal(rtos_task_handle_t task)
     }
     else
     {
-        g_round_robin_data.ready_list_tail = task->prev;
+        /* Removing the tail; predecessor (or NULL if bucket now empty) becomes the new tail. */
+        *tail = task->prev;
+    }
+
+    if (*head == NULL)
+    {
+        g_round_robin_data.ready_priorities &= (uint8_t) ~(1U << priority);
     }
 
     task->next = NULL;
@@ -203,15 +217,14 @@ static void round_robin_update_delayed_tasks_internal(void)
 
 static rtos_task_handle_t round_robin_get_next_ready(void)
 {
-    rtos_tcb_t *best = NULL;
-    for (rtos_tcb_t *t = g_round_robin_data.ready_list; t != NULL; t = t->next)
+    uint32_t mask = g_round_robin_data.ready_priorities;
+    if (mask == 0U)
     {
-        if (best == NULL || t->priority > best->priority)
-        {
-            best = t;
-        }
+        return NULL;
     }
-    return best;
+    /* CLZ-based O(1) lookup of the highest-priority non-empty bucket. */
+    uint32_t priority = 31U - (uint32_t) __builtin_clz(mask);
+    return g_round_robin_data.ready_lists[priority];
 }
 
 static rtos_status_t round_robin_init(rtos_scheduler_instance_t *instance)
@@ -221,13 +234,14 @@ static rtos_status_t round_robin_init(rtos_scheduler_instance_t *instance)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    g_round_robin_data.ready_list      = NULL;
-    g_round_robin_data.ready_list_tail = NULL;
-    g_round_robin_data.delayed_list    = NULL;
-    g_round_robin_data.current_task    = NULL;
-    g_round_robin_data.slice_remaining = RTOS_TIME_SLICE_TICKS;
-    g_round_robin_data.ready_count     = 0;
-    g_round_robin_data.delayed_count   = 0;
+    memset(g_round_robin_data.ready_lists, 0, sizeof(g_round_robin_data.ready_lists));
+    memset(g_round_robin_data.ready_lists_tail, 0, sizeof(g_round_robin_data.ready_lists_tail));
+    g_round_robin_data.delayed_list     = NULL;
+    g_round_robin_data.current_task     = NULL;
+    g_round_robin_data.slice_remaining  = RTOS_TIME_SLICE_TICKS;
+    g_round_robin_data.ready_priorities = 0;
+    g_round_robin_data.ready_count      = 0;
+    g_round_robin_data.delayed_count    = 0;
 
     instance->private_data = &g_round_robin_data;
 
@@ -277,18 +291,9 @@ static bool round_robin_should_preempt(rtos_scheduler_instance_t *instance, rtos
         return false;
     }
 
-    /* Equal priority: only advance the slice on the tick-driven path. */
-    rtos_tcb_t *first_at_prio = NULL;
-    for (rtos_tcb_t *t = g_round_robin_data.ready_list; t != NULL; t = t->next)
-    {
-        if (t->priority == new_task->priority)
-        {
-            first_at_prio = t;
-            break;
-        }
-    }
-
-    if (new_task != first_at_prio)
+    /* Equal priority: only advance the slice on the tick-driven path.
+     * O(1) head lookup of the bucket the new_task lives in. */
+    if (new_task != g_round_robin_data.ready_lists[new_task->priority])
     {
         return false;
     }
@@ -316,6 +321,7 @@ static void round_robin_task_completed(rtos_scheduler_instance_t *instance, rtos
 
     if (completed_task->state == RTOS_TASK_STATE_READY)
     {
+        /* Rotate within the task's priority bucket: pop from head, append at tail. */
         round_robin_remove_from_ready_list_internal(completed_task);
         round_robin_add_to_ready_list_internal(completed_task);
 

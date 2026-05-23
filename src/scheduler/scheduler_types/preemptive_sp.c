@@ -9,7 +9,7 @@
 #include <string.h>
 
 preemptive_sp_private_data_t g_preemptive_sp_data = {
-    .ready_lists = {NULL}, .delayed_list = NULL, .ready_priorities = 0};
+    .ready_lists = {NULL}, .ready_lists_tail = {NULL}, .delayed_list = NULL, .ready_priorities = 0};
 
 static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
 {
@@ -18,27 +18,23 @@ static void preemptive_sp_add_to_ready_list_internal(rtos_task_handle_t task)
         return;
     }
 
-    rtos_priority_t priority  = task->priority;
-    rtos_tcb_t    **list_head = &g_preemptive_sp_data.ready_lists[priority];
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_preemptive_sp_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_preemptive_sp_data.ready_lists_tail[priority];
 
     task->next = NULL;
-    task->prev = NULL;
+    task->prev = *tail; /* NULL when the bucket is empty */
 
-    if (*list_head == NULL)
+    if (*head == NULL)
     {
-        *list_head = task;
-        g_preemptive_sp_data.ready_priorities |= (1U << priority);
+        *head = task;
+        g_preemptive_sp_data.ready_priorities |= (uint8_t) (1U << priority);
     }
     else
     {
-        rtos_tcb_t *current = *list_head;
-        while (current->next != NULL)
-        {
-            current = current->next;
-        }
-        current->next = task;
-        task->prev    = current;
+        (*tail)->next = task;
     }
+    *tail = task;
 
     KLOGT("Sched/SP", "Ready id=%u prio=%u", task->task_id, priority);
 }
@@ -50,8 +46,9 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
         return;
     }
 
-    rtos_priority_t priority  = task->priority;
-    rtos_tcb_t    **list_head = &g_preemptive_sp_data.ready_lists[priority];
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_preemptive_sp_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_preemptive_sp_data.ready_lists_tail[priority];
 
     if (task->prev != NULL)
     {
@@ -59,18 +56,23 @@ static void preemptive_sp_remove_from_ready_list_internal(rtos_task_handle_t tas
     }
     else
     {
-        *list_head = task->next;
+        *head = task->next;
     }
 
     if (task->next != NULL)
     {
         task->next->prev = task->prev;
     }
+    else
+    {
+        /* Removing the tail; the predecessor (or NULL if list now empty) becomes the new tail. */
+        *tail = task->prev;
+    }
 
     /* Clear priority bit if no more tasks at this priority */
-    if (*list_head == NULL)
+    if (*head == NULL)
     {
-        g_preemptive_sp_data.ready_priorities &= ~(1U << priority);
+        g_preemptive_sp_data.ready_priorities &= (uint8_t) ~(1U << priority);
     }
 
     task->next = NULL;
@@ -193,21 +195,17 @@ static void preemptive_sp_update_delayed_tasks_internal(void)
 
 static rtos_task_handle_t preemptive_sp_get_highest_priority_ready(void)
 {
-    /* Use bitmask to quickly find highest priority with ready tasks */
-    if (g_preemptive_sp_data.ready_priorities == 0)
+    uint32_t mask = g_preemptive_sp_data.ready_priorities;
+    if (mask == 0U)
     {
         return NULL;
     }
 
-    for (int8_t priority = RTOS_MAX_TASK_PRIORITIES - 1; priority >= 0; priority--)
-    {
-        if (g_preemptive_sp_data.ready_priorities & (1U << priority))
-        {
-            return g_preemptive_sp_data.ready_lists[priority];
-        }
-    }
-
-    return NULL;
+    /* Highest set bit = highest priority. __builtin_clz lowers to a single
+     * CLZ instruction on Cortex-M, giving O(1) lookup regardless of how many
+     * priority levels are configured. */
+    uint32_t priority = 31U - (uint32_t) __builtin_clz(mask);
+    return g_preemptive_sp_data.ready_lists[priority];
 }
 
 static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
@@ -218,6 +216,7 @@ static rtos_status_t preemptive_sp_init(rtos_scheduler_instance_t *instance)
     }
 
     memset(g_preemptive_sp_data.ready_lists, 0, sizeof(g_preemptive_sp_data.ready_lists));
+    memset(g_preemptive_sp_data.ready_lists_tail, 0, sizeof(g_preemptive_sp_data.ready_lists_tail));
     g_preemptive_sp_data.delayed_list     = NULL;
     g_preemptive_sp_data.ready_priorities = 0;
 

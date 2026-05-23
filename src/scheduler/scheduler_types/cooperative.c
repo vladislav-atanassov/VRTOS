@@ -7,33 +7,37 @@
 
 #include <string.h>
 
-cooperative_private_data_t g_cooperative_data = {
-    .ready_list = NULL, .delayed_list = NULL, .ready_count = 0, .delayed_count = 0};
+cooperative_private_data_t g_cooperative_data = {.ready_lists      = {NULL},
+                                                 .ready_lists_tail = {NULL},
+                                                 .delayed_list     = NULL,
+                                                 .ready_priorities = 0,
+                                                 .ready_count      = 0,
+                                                 .delayed_count    = 0};
 
 static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 {
-    if (task == NULL)
+    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
     {
         return;
     }
 
-    task->next = NULL;
-    task->prev = NULL;
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_cooperative_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_cooperative_data.ready_lists_tail[priority];
 
-    if (g_cooperative_data.ready_list == NULL)
+    task->next = NULL;
+    task->prev = *tail; /* NULL when the bucket is empty */
+
+    if (*head == NULL)
     {
-        g_cooperative_data.ready_list = task;
+        *head = task;
+        g_cooperative_data.ready_priorities |= (uint8_t) (1U << priority);
     }
     else
     {
-        rtos_tcb_t *current = g_cooperative_data.ready_list;
-        while (current->next != NULL)
-        {
-            current = current->next;
-        }
-        current->next = task;
-        task->prev    = current;
+        (*tail)->next = task;
     }
+    *tail = task;
 
     g_cooperative_data.ready_count++;
 
@@ -42,10 +46,14 @@ static void cooperative_add_to_ready_list_internal(rtos_task_handle_t task)
 
 static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
 {
-    if (task == NULL || g_cooperative_data.ready_list == NULL)
+    if (task == NULL || task->priority >= RTOS_MAX_TASK_PRIORITIES)
     {
         return;
     }
+
+    rtos_priority_t priority = task->priority;
+    rtos_tcb_t    **head     = &g_cooperative_data.ready_lists[priority];
+    rtos_tcb_t    **tail     = &g_cooperative_data.ready_lists_tail[priority];
 
     if (task->prev != NULL)
     {
@@ -53,12 +61,22 @@ static void cooperative_remove_from_ready_list_internal(rtos_task_handle_t task)
     }
     else
     {
-        g_cooperative_data.ready_list = task->next;
+        *head = task->next;
     }
 
     if (task->next != NULL)
     {
         task->next->prev = task->prev;
+    }
+    else
+    {
+        /* Removing the tail; predecessor (or NULL if bucket now empty) becomes the new tail. */
+        *tail = task->prev;
+    }
+
+    if (*head == NULL)
+    {
+        g_cooperative_data.ready_priorities &= (uint8_t) ~(1U << priority);
     }
 
     task->next = NULL;
@@ -195,15 +213,14 @@ static void cooperative_update_delayed_tasks_internal(void)
 
 static rtos_task_handle_t cooperative_get_next_ready(void)
 {
-    rtos_tcb_t *best = NULL;
-    for (rtos_tcb_t *t = g_cooperative_data.ready_list; t != NULL; t = t->next)
+    uint32_t mask = g_cooperative_data.ready_priorities;
+    if (mask == 0U)
     {
-        if (best == NULL || t->priority > best->priority)
-        {
-            best = t;
-        }
+        return NULL;
     }
-    return best;
+    /* CLZ-based O(1) lookup of the highest-priority non-empty bucket. */
+    uint32_t priority = 31U - (uint32_t) __builtin_clz(mask);
+    return g_cooperative_data.ready_lists[priority];
 }
 
 static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
@@ -213,10 +230,12 @@ static rtos_status_t cooperative_init(rtos_scheduler_instance_t *instance)
         return RTOS_ERROR_INVALID_PARAM;
     }
 
-    g_cooperative_data.ready_list    = NULL;
-    g_cooperative_data.delayed_list  = NULL;
-    g_cooperative_data.ready_count   = 0;
-    g_cooperative_data.delayed_count = 0;
+    memset(g_cooperative_data.ready_lists, 0, sizeof(g_cooperative_data.ready_lists));
+    memset(g_cooperative_data.ready_lists_tail, 0, sizeof(g_cooperative_data.ready_lists_tail));
+    g_cooperative_data.delayed_list     = NULL;
+    g_cooperative_data.ready_priorities = 0;
+    g_cooperative_data.ready_count      = 0;
+    g_cooperative_data.delayed_count    = 0;
 
     instance->private_data = &g_cooperative_data;
 
@@ -248,6 +267,7 @@ static void cooperative_task_completed(rtos_scheduler_instance_t *instance, rtos
 
     if (completed_task->state == RTOS_TASK_STATE_READY)
     {
+        /* Rotate within the task's priority bucket: pop from head, append at tail. */
         cooperative_remove_from_ready_list_internal(completed_task);
         cooperative_add_to_ready_list_internal(completed_task);
 
@@ -349,7 +369,7 @@ static size_t cooperative_get_statistics(rtos_scheduler_instance_t *instance, vo
     stats->ready_count        = g_cooperative_data.ready_count;
     stats->delayed_count      = g_cooperative_data.delayed_count;
     stats->current_tick       = rtos_get_tick_count();
-    stats->current_ready_task = g_cooperative_data.ready_list;
+    stats->current_ready_task = cooperative_get_next_ready();
 
     return sizeof(cooperative_stats_t);
 }
