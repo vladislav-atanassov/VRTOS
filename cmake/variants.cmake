@@ -104,6 +104,12 @@ add_kartos_variant(test_isr_safe_suite
     EXTRA_LIBS    kartos::test_framework
     EXTRA_DEFINES RTOS_MAX_TASKS=24)
 
+add_kartos_variant(test_timer_task_suite
+    SOURCE        "${CMAKE_SOURCE_DIR}/tests/integration/test_timer_task_suite.c"
+    SCHEDULER     RTOS_SCHEDULER_PREEMPTIVE_SP
+    EXTRA_LIBS    kartos::test_framework
+    EXTRA_DEFINES RTOS_MAX_TASKS=24)
+
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 
 add_kartos_variant(bench_context_switch

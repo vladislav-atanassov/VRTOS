@@ -92,13 +92,9 @@ void rtos_timer_tick(void)
             g_active_timers = expired->next;
             expired->next   = NULL;
 
-            /* Execute callback outside critical section for reduced latency */
             rtos_port_exit_critical_from_isr(saved_priority);
 
-            if (expired->callback != NULL)
-            {
-                expired->callback((void *) expired, expired->parameter);
-            }
+            rtos_timer_dispatch_from_isr(expired);
 
             saved_priority = rtos_port_enter_critical_from_isr();
 

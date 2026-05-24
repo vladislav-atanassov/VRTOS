@@ -33,6 +33,7 @@ add_library(kartos_kernel STATIC
     ${_K}/task/task_notify.c
     ${_K}/timer/timer.c
     ${_K}/timer/timer_list.c
+    ${_K}/timer/timer_task.c
     ${_K}/utils/ring_buffer.c
     ${_K}/utils/rtos_assert.c
     $<$<BOOL:${KARTOS_TEST_HOOKS}>:${_K}/core/test_hooks.c>)

@@ -139,7 +139,9 @@ typedef enum
 #define RTOS_NOTIFY_CLEAR_ALL  ((uint32_t) 0xFFFFFFFFU)
 
 /**
- * @brief Send a notification to a task. ISR-safe; never blocks the caller.
+ * @brief Send a notification to a task. Task-context only — uses the task-mode
+ *        critical section and may pend a context switch via the unblock path.
+ *        For ISR contexts use rtos_task_notify_from_isr().
  * @param task Target task handle.
  * @param value Notification value (interpretation depends on action).
  * @param action How the value is applied to the target's notification_value.

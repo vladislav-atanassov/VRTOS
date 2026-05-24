@@ -17,9 +17,17 @@ typedef enum
 } rtos_timer_mode_t;
 
 /*
- * Callbacks execute in ISR context (SysTick handler). Must NOT call blocking RTOS APIs
- * (rtos_mutex_lock, rtos_semaphore_wait, rtos_delay_ms, etc.). Keep callbacks short to avoid
- * tick jitter. Use ISR-safe APIs only (e.g. rtos_event_group_set_bits_from_isr, rtos_task_notify).
+ * Callback execution context depends on whether the software timer service
+ * task has been initialised:
+ *   - Default (no rtos_timer_task_init() call): callbacks run in SysTick ISR
+ *     context. Must NOT call blocking RTOS APIs. Use ISR-safe variants only
+ *     (rtos_event_group_set_bits_from_isr, rtos_semaphore_signal_from_isr,
+ *     rtos_task_notify_from_isr, rtos_queue_send_from_isr, etc.). Keep
+ *     callbacks short to avoid tick jitter.
+ *   - After rtos_timer_task_init(): callbacks are dispatched from the timer
+ *     task and may freely call blocking APIs (rtos_mutex_lock with timeout,
+ *     rtos_delay_ms, rtos_queue_send blocking, etc.). A long-running callback
+ *     does not block SysTick — only subsequent dispatches from the same task.
  */
 typedef void (*rtos_timer_callback_t)(void *timer_handle, void *parameter);
 
@@ -105,6 +113,24 @@ rtos_status_t rtos_timer_delete(rtos_timer_handle_t timer_handle);
  * @brief Process expired timers. Called by the kernel tick handler from SysTick ISR context.
  */
 void rtos_timer_tick(void);
+
+/**
+ * @brief Activate the software timer service task. Call before
+ *        rtos_start_scheduler() to opt in to task-context callback dispatch:
+ *        from this point on, expired-timer callbacks run on the dedicated
+ *        timer task and may call blocking RTOS APIs (mutex_lock,
+ *        delay_ms, etc.).
+ *
+ *        Without this call, callbacks fire directly from the SysTick ISR
+ *        (legacy behaviour) and must stay short and ISR-safe.
+ *
+ *        Configuration knobs (config.h): RTOS_CONFIG_TIMER_TASK_PRIORITY,
+ *        RTOS_CONFIG_TIMER_TASK_STACK_SIZE, RTOS_CONFIG_TIMER_TASK_QUEUE_LENGTH.
+ *
+ * @return RTOS_SUCCESS, RTOS_ERROR_INVALID_STATE if already initialised, or
+ *         an error code from task creation.
+ */
+rtos_status_t rtos_timer_task_init(void);
 
 #ifdef __cplusplus
 }

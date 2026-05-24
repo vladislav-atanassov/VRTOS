@@ -83,10 +83,12 @@
 #define RTOS_TOTAL_HEAP_SIZE (16384U) /**< Total heap size for task stacks */
 #endif
 
-/* Minimum block size for the dual-ended heap allocator. A block split that
+/*
+ * Minimum block size for the dual-ended heap allocator. A block split that
  * would leave a remainder smaller than this threshold is suppressed (the
  * whole free block is handed out instead). Must be >= sizeof(heap header)
- * + a useful payload. 16 bytes = 8-byte header + 8-byte minimum payload. */
+ * + a useful payload. 16 bytes = 8-byte header + 8-byte minimum payload. 
+ */
 #ifndef RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE
 #define RTOS_CONFIG_HEAP_MIN_BLOCK_SIZE (16U)
 #endif
@@ -108,16 +110,45 @@
 #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
 #endif
 
-/* Verify the per-task stack canary on every context switch. Adds one
+/*
+ * Verify the per-task stack canary on every context switch. Adds one
  * load + compare on the outgoing task before it is re-readied; on mismatch
  * the application stack-overflow hook (rtos_hooks.h) fires with the offending
- * task handle. Requires RTOS_ENABLE_STACK_OVERFLOW_CHECK to do anything. */
+ * task handle. Requires RTOS_ENABLE_STACK_OVERFLOW_CHECK to do anything.
+ */
 #ifndef RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH
 #if RTOS_ENABLE_STACK_OVERFLOW_CHECK
 #define RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH (1U)
 #else
 #define RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH (0U)
 #endif
+#endif
+
+/* ======================== Software timer service task =================== */
+
+/*
+ * Software timer dispatch is opt-in via rtos_timer_task_init(). When the
+ * task is running, expired-timer callbacks are deferred from the SysTick
+ * ISR to a task-context dispatcher and may use blocking RTOS APIs; when the
+ * task is not initialised, callbacks fire directly from the ISR (legacy
+ * behaviour). The knobs below control the dispatcher when it is in use. 
+ */
+
+#ifndef RTOS_CONFIG_TIMER_TASK_PRIORITY
+#define RTOS_CONFIG_TIMER_TASK_PRIORITY ((rtos_priority_t) (RTOS_MAX_TASK_PRIORITIES - 2U))
+#endif
+
+#ifndef RTOS_CONFIG_TIMER_TASK_STACK_SIZE
+#define RTOS_CONFIG_TIMER_TASK_STACK_SIZE RTOS_DEFAULT_TASK_STACK_SIZE
+#endif
+
+/*
+ * Number of pending callback dispatches the ring buffer can hold between a
+ * tick that enqueues and the task running them. Must be a power of two for
+ * the modulo to compile to a mask. 
+ */
+#ifndef RTOS_CONFIG_TIMER_TASK_QUEUE_LENGTH
+#define RTOS_CONFIG_TIMER_TASK_QUEUE_LENGTH (8U)
 #endif
 
 #endif /* RTOS_CONFIG_H */
