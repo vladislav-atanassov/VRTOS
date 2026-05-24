@@ -4,6 +4,9 @@
 add_kartos_variant(basic_blinky
     SOURCE "${CMAKE_SOURCE_DIR}/src/examples/basic_blinky/main.c")
 
+add_kartos_variant(schedulers_demo
+    SOURCE "${CMAKE_SOURCE_DIR}/src/examples/schedulers_demo/main.c")
+
 add_kartos_variant(producer_consumer
     SOURCE "${CMAKE_SOURCE_DIR}/src/examples/producer_consumer/main.c")
 

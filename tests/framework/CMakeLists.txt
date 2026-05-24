@@ -24,6 +24,11 @@ target_compile_options(kartos_test_framework
         -Wall -Wextra -Wno-unused-parameter
         -O2 -g3)
 
+target_compile_definitions(kartos_test_framework
+    PUBLIC
+        RTOS_KLOG_ENABLED=1U
+        RTOS_ULOG_ENABLED=1U)
+
 target_link_libraries(kartos_test_framework
     PUBLIC
         kartos::kernel

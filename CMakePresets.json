@@ -46,6 +46,7 @@
     { "name": "producer_consumer",             "configurePreset": "stm32f446re_nucleo", "targets": ["producer_consumer"] },
     { "name": "profiling_demo",                "configurePreset": "stm32f446re_nucleo", "targets": ["profiling_demo"] },
     { "name": "fpu_context_test",              "configurePreset": "stm32f446re_nucleo", "targets": ["fpu_context_test"] },
+    { "name": "schedulers_demo",                "configurePreset": "stm32f446re_nucleo", "targets": ["schedulers_demo"] },
 
     { "name": "test_mutex_suite",                    "configurePreset": "stm32f446re_nucleo", "targets": ["test_mutex_suite"] },
     { "name": "test_semaphore_suite",               "configurePreset": "stm32f446re_nucleo", "targets": ["test_semaphore_suite"] },
@@ -72,6 +73,7 @@
     { "name": "flash-producer_consumer",       "configurePreset": "stm32f446re_nucleo", "targets": ["flash-producer_consumer"] },
     { "name": "flash-profiling_demo",          "configurePreset": "stm32f446re_nucleo", "targets": ["flash-profiling_demo"] },
     { "name": "flash-fpu_context_test",        "configurePreset": "stm32f446re_nucleo", "targets": ["flash-fpu_context_test"] },
+    { "name": "flash-schedulers_demo",          "configurePreset": "stm32f446re_nucleo", "targets": ["flash-schedulers_demo"] },
 
     { "name": "flash-test_mutex_suite",                  "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_mutex_suite"] },
     { "name": "flash-test_semaphore_suite",             "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_semaphore_suite"] },

@@ -17,4 +17,13 @@
 #define RTOS_PROFILING_SYSTEM_ENABLED 0
 #endif
 
+/* Host builds do not have UART or a real scheduler — disable both loggers
+ * so kernel.c does not reference klog_init/ulog_init/log_flush_task. */
+#ifndef RTOS_KLOG_ENABLED
+#define RTOS_KLOG_ENABLED 0
+#endif
+#ifndef RTOS_ULOG_ENABLED
+#define RTOS_ULOG_ENABLED 0
+#endif
+
 #endif /* HOST_RTOS_CONFIG_H */

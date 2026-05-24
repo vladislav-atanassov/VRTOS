@@ -100,6 +100,40 @@
 #define RTOS_UART_BAUD_RATE (921600U) /**< UART baud rate for logging */
 #endif
 
+/* Kernel logger (KLog).  When non-zero the kernel calls log_init() inside
+ * rtos_init() which initialises the KLog backend so KLOG* macros work
+ * immediately. */
+#ifndef RTOS_KLOG_ENABLED
+#define RTOS_KLOG_ENABLED (1U)
+#endif
+
+/* Compile-time minimum verbosity for KLog.
+ * Maps to log_level_t: 0=FAULT 1=ERROR 2=WARN 3=INFO 4=DEBUG 5=TRACE.
+ * Seeds klog_verbosity in .noinit on first boot / corruption. */
+#ifndef RTOS_KLOG_MIN_LEVEL
+#define RTOS_KLOG_MIN_LEVEL (3U) /* LOG_LEVEL_INFO */
+#endif
+
+/* User logger (ULog).  When non-zero the kernel calls log_init() inside
+ * rtos_init() which initialises the ULog backend so ulog_info()/
+ * ulog_error()/etc. work immediately. */
+#ifndef RTOS_ULOG_ENABLED
+#define RTOS_ULOG_ENABLED (1U)
+#endif
+
+/* Compile-time minimum verbosity for ULog.
+ * Maps to log_level_t: 0=FAULT 1=ERROR 2=WARN 3=INFO 4=DEBUG 5=TRACE.
+ * Seeds ulog_verbosity in .noinit on first boot / corruption. */
+#ifndef RTOS_ULOG_MIN_LEVEL
+#define RTOS_ULOG_MIN_LEVEL (3U) /* LOG_LEVEL_INFO */
+#endif
+
+/* Stack size for the kernel-managed log flush task.  The task is created
+ * automatically when either KLog or ULog is enabled, and drains both. */
+#ifndef LOG_FLUSH_TASK_STACK_SIZE
+#define LOG_FLUSH_TASK_STACK_SIZE (2048U)
+#endif
+
 /* ======================== Debug Configuration =========================== */
 
 #ifndef RTOS_ASSERT_ENABLED

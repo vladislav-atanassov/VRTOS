@@ -7,11 +7,12 @@ extern "C"
 #endif
 
 /**
- * @brief RTOS task function that periodically drains the KLog ring buffer
- *        and outputs decoded, human-readable records to UART via printf.
+ * @brief RTOS task function that periodically drains the KLog and ULog
+ *        ring buffers and emits the output to UART via log_flush_drain().
  *
- * Should be created at the lowest priority so it only runs when no other
- * task needs the CPU. Call klog_init() before starting this task.
+ * Created automatically by rtos_init() at the idle priority when either
+ * RTOS_KLOG_ENABLED or RTOS_ULOG_ENABLED is non-zero.  Callers must call
+ * log_init() (which rtos_init() does) before this task runs.
  *
  * @param param Unused
  */

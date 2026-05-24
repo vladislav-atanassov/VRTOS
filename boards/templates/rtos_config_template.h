@@ -18,7 +18,7 @@
 // #define RTOS_MAX_TASK_PRIORITIES    (8U)
 // #define RTOS_DEFAULT_TASK_STACK_SIZE (768U)
 // #define RTOS_MINIMUM_TASK_STACK_SIZE (256U)
-// #define KLOG_FLUSH_TASK_STACK_SIZE   (2048U)
+// #define LOG_FLUSH_TASK_STACK_SIZE    (2048U)
 
 /* ======================== Scheduler ===================================== */
 // #define RTOS_SCHEDULER_TYPE RTOS_SCHEDULER_PREEMPTIVE_SP
@@ -37,6 +37,11 @@
 
 /* ======================== Logging ======================================= */
 // #define RTOS_UART_BAUD_RATE         (921600U)
+// #define RTOS_KLOG_ENABLED           (1U)              /* Kernel auto-inits klog */
+// #define RTOS_KLOG_MIN_LEVEL         (3U)              /* 0=FAULT … 5=TRACE */
+// #define RTOS_ULOG_ENABLED           (1U)              /* Kernel auto-inits ulog */
+// #define RTOS_ULOG_MIN_LEVEL         (3U)              /* 0=NONE 1=ERROR … 4=DEBUG */
+// #define LOG_FLUSH_TASK_STACK_SIZE   (2048U)
 
 /* ======================== Features ====================================== */
 // #define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)

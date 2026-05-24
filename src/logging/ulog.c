@@ -1,5 +1,6 @@
 #include "ulog.h"
 
+#include "config.h"
 #include "ring_buffer.h"
 #include "rtos_port.h"
 
@@ -10,17 +11,37 @@
 
 static uint8_t       ulog_buf[ULOG_BUFFER_SIZE];
 static ring_buffer_t ulog_rb;
-static ulog_level_t  ulog_min_level;
 
-void ulog_init(ulog_level_t level)
+/* Verbosity + magic in .noinit — survives NVIC_SystemReset() */
+#define ULOG_NOINIT_MAGIC 0xB007CA22u
+
+static volatile uint32_t ulog_noinit_magic __attribute__((section(".noinit")));
+volatile uint8_t          ulog_verbosity    __attribute__((section(".noinit")));
+
+void ulog_backend_init(void)
 {
     ring_buffer_init(&ulog_rb, ulog_buf, ULOG_BUFFER_SIZE);
-    ulog_min_level = level;
+    if (ulog_noinit_magic != ULOG_NOINIT_MAGIC || ulog_verbosity > LOG_LEVEL_TRACE)
+    {
+        ulog_noinit_magic = ULOG_NOINIT_MAGIC;
+        ulog_verbosity    = (uint8_t) RTOS_ULOG_MIN_LEVEL;
+    }
+}
+
+void ulog_set_verbosity(uint8_t level)
+{
+    ulog_verbosity = level;
+}
+
+uint8_t ulog_get_verbosity(void)
+{
+    return ulog_verbosity;
 }
 
 void ulog(ulog_level_t level, const char *fmt, ...)
 {
-    if (level > ulog_min_level || fmt == NULL)
+    /* Backstop for direct callers that bypass the macros. */
+    if (level > ulog_verbosity || fmt == NULL)
     {
         return;
     }
@@ -51,21 +72,25 @@ void ulog(ulog_level_t level, const char *fmt, ...)
     rtos_port_exit_critical();
 }
 
-uint32_t ulog_drain(uint8_t *buf, uint32_t max_len)
+/* ── Emit helper ──────────────────────────────────────────────────────────── */
+
+#define ULOG_FLUSH_CHUNK 128
+
+static uint8_t s_ulog_chunk[ULOG_FLUSH_CHUNK];
+
+void ulog_drain_and_emit(void)
 {
-    if (buf == NULL || max_len == 0)
+    uint32_t bytes;
+    do
     {
-        return 0;
-    }
+        rtos_port_enter_critical();
+        bytes = ring_buffer_read(&ulog_rb, s_ulog_chunk, sizeof(s_ulog_chunk));
+        rtos_port_exit_critical();
 
-    rtos_port_enter_critical();
-    uint32_t bytes = ring_buffer_read(&ulog_rb, buf, max_len);
-    rtos_port_exit_critical();
-
-    return bytes;
-}
-
-uint32_t ulog_pending(void)
-{
-    return ring_buffer_count(&ulog_rb);
+        if (bytes > 0)
+        {
+            extern int _write(int file, char *ptr, int len);
+            _write(1, (char *) s_ulog_chunk, (int) bytes);
+        }
+    } while (bytes > 0);
 }

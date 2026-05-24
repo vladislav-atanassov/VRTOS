@@ -201,12 +201,11 @@ static void startup_cb(void *timer_handle, void *param)
 int main(void)
 {
     hardware_env_config();
-    log_uart_init(LOG_LEVEL_INFO);
+    log_uart_init();
 
     rtos_init();
     rtos_profiling_init();
 
-    ulog_init(ULOG_LEVEL_INFO);
     ulog_info("[BENCH] Queue Delivery Latency Benchmark — " __DATE__ " " __TIME__);
     ulog_info("[BENCH] Iterations: %u  Warmup: %u", BENCH_ITERATIONS, BENCH_WARMUP);
 
@@ -227,7 +226,6 @@ int main(void)
     rtos_task_create(ProducerTask, "Producer", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &handle);
     rtos_task_create(ResultTask, "Result", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 1, &handle);
 
-    test_create_log_flush_task(&handle);
     test_create_startup_timer(startup_cb, NULL, &startup_timer);
 
     rtos_start_scheduler();

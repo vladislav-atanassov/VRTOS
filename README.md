@@ -10,23 +10,26 @@ A modular, educational Real-Time Operating System (RTOS) implementation for the 
 
 - **Modular Scheduler Architecture** - Pluggable scheduler implementations via vtable interface
 - **Multiple Scheduling Policies**:
-  - **Preemptive Static Priority** (default) - Priority-based preemption with O(1) lookup
-  - **Cooperative** - Non-preemptive, yield-based scheduling
-  - **Round-Robin** - Time-sliced FIFO scheduling with configurable quantum
+  - **Preemptive Static Priority** (default) - Priority-based preemption; per-priority ready buckets with a `__builtin_clz` bitmask for O(1) highest-priority lookup and an O(1) tail pointer for ready-list append
+  - **Cooperative** - Non-preemptive, yield-based, priority-then-FIFO within a bucket (same O(1) lookup as preemptive)
+  - **Round-Robin** - Time-sliced priority-then-FIFO with configurable quantum (same O(1) lookup as preemptive)
 - **Synchronization Primitives**:
-  - **Mutexes** with Priority Inheritance Protocol (PIP) to prevent priority inversion
-  - **Counting Semaphores** with timeout support
-  - **Message Queues** with blocking send/receive and priority-ordered wait lists
+  - **Mutexes** with Priority Inheritance Protocol (PIP) to prevent priority inversion and a true cycle check on lock that returns `RTOS_MUTEX_ERR_DEADLOCK` instead of hanging
+  - **Counting Semaphores** with timeout support and an ISR-safe `signal_from_isr` variant
+  - **Message Queues** with blocking send/receive, priority-ordered wait lists, and ISR-safe `send_from_isr` / `receive_from_isr` variants
   - **Event Groups** with bitwise wait conditions (wait-any/wait-all) and ISR-safe signaling
-- **Task Notifications** - Lightweight direct task-to-task signaling (set bits, increment, overwrite)
-- **Software Timers** - One-shot and auto-reload timers with sorted active list
+- **Task Notifications** - Lightweight direct task-to-task signaling (set bits, increment, overwrite) with task-context and ISR-context (`_from_isr`) variants
+- **Scheduler Control** - Nested `rtos_scheduler_suspend()` / `rtos_scheduler_resume()` for atomic multi-step updates; deferred yield is fired on the matching resume
+- **Software Timers** - One-shot and auto-reload timers with sorted active list; opt-in service task (`rtos_timer_task_init()`) moves callback dispatch from SysTick ISR to task context so callbacks may use blocking RTOS APIs
+- **Application Hooks** - Weak `rtos_application_*_hook()` symbols for idle, tick, stack overflow, malloc failure, and mutex deadlock; override in the app to halt, log, or telemeter
 - **Tickless Idle** - Optional low-power mode that suppresses the SysTick during long idle windows and reconciles tick count on wake
 - **Task Management** - Dynamic creation, suspend/resume, delete with automatic mutex cleanup
+- **Stack Overflow Detection** - Per-task canary checked on every context switch (gated by `RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH`) plus on-demand `rtos_task_check_stack()`
 - **Timing Services** - System tick with 1ms resolution, `rtos_delay_ms()` and `rtos_delay_until()`
 - **Cortex-M4 Optimization** - Context switching with lazy FPU stacking
 - **Memory Management** - Bi-directional dual-ended heap with first-fit allocation, adjacent-block coalescing, cooperative gap pull-back, per-side diagnostics (free/min-ever/largest-block), and static-allocation variants for task/timer/queue
 - **Profiling Support** - DWT cycle counter-based profiling for WCET analysis
-- **Comprehensive Logging** - Zero-allocation, ISR-safe deferred kernel logger (KLog) and user-facing string logger (ULog)
+- **Comprehensive Logging** - Unified core (shared `log_level_t`, single auto-created flush task, `.noinit` verbosity globals) with two backends: zero-allocation ISR-safe kernel logger (KLog) and printf-style user logger (ULog); live-patchable per-backend via the `kartos verbosity` CLI
 
 ## Architecture
 
@@ -167,7 +170,7 @@ kartos test -e test_scheduler_rr_suite --duration 10
 
 **Integration Test Suites**:
 
-- `test_mutex_suite` - Mutex ownership, blocking, priority inheritance, NULL-input asserts, lock/unlock hook payload
+- `test_mutex_suite` - Mutex ownership, blocking, priority inheritance, deadlock cycle detection, recursion-saturation status, NULL-input asserts, lock/unlock hook payload
 - `test_semaphore_suite` - Counting semaphore wait/signal cases, give/take hook payload, NULL-input asserts
 - `test_queue_suite` - Queue blocking, wake, ordering, send/receive/block-full/block-empty hook payload, NULL-input asserts
 - `test_event_group_suite` - Event group bit-wait cases
@@ -175,6 +178,10 @@ kartos test -e test_scheduler_rr_suite --duration 10
 - `test_task_state_suite` - Task lifecycle state transitions, NULL-input asserts, TASK_STATE + TICK hook observability
 - `test_tickless_idle_suite` - Tickless idle correctness; force-enables `RTOS_CONFIG_USE_TICKLESS_IDLE=1` regardless of board default
 - `test_heap_allocator_suite` - Dual-ended heap cases: routing, gap pull-back, coalescing, fragmentation visibility, cross-heap collision, static-create bypass, dynamic-delete reclaim
+- `test_hooks_suite` - Application hook fire sites: idle, tick (value + cadence), stack overflow on demand and on context switch, malloc-failed (OOM)
+- `test_scheduler_suspend_suite` - `rtos_scheduler_suspend()` / `rtos_scheduler_resume()` counter mechanics, tick advance during suspend, delayed-wake landing on the ready list, yield-under-suspend is a no-op
+- `test_isr_safe_suite` - `_from_isr` wake paths for semaphore / queue (send + receive) / task notify (notify + give); a 1-tick one-shot timer is the deterministic ISR source
+- `test_timer_task_suite` - Optional software timer service task (`rtos_timer_task_init()`): auto-reload in task context, callback acquiring a contended mutex, long-running callback does not stall SysTick
 
 **Benchmarks**:
 
@@ -200,11 +207,12 @@ The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc`
 | `build` | `-e VARIANT` | CMake build for a named variant |
 | `upload` | `-e VARIANT` | Build + OpenOCD flash |
 | `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
+| `upload-monitor` | `-e VARIANT`, `-p PORT`, `-b BAUD` | Attach monitor first, then flash — catches boot output of fast-completing firmware |
 | `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
 | `test-all` | `--pattern GLOB`, `--duration SEC`, `--skip-host`, `--skip-board` | Run host tests + every on-board `test_*_suite`; aggregated verdict |
 | `host-test` | `--reconfigure`, `-v` | Build and run the pure-logic host unit tests (Unity + FFF) |
 | `configure` | | Re-run `cmake --preset <board>` |
-| `verbosity` | `LEVEL`, `-e VARIANT`, `--no-reset` | Live-patch `klog_verbosity` in `.noinit` RAM (FAULT…TRACE) |
+| `verbosity` | `LEVEL`, `-t klog\|ulog\|both`, `-e VARIANT`, `--no-reset` | Live-patch `klog_verbosity` and/or `ulog_verbosity` in `.noinit` RAM (FAULT…TRACE). Defaults to `--target=klog`; use `-t both` to patch both backends in one shot. |
 | `list` | | Print available boards and variant names |
 | `clean` | | Delete the board's build directory |
 
@@ -245,12 +253,21 @@ Measured on hardware via the automated benchmark suite (`bench_*` variants):
 
 | Primitive | Operation | Min | Max | Avg | Description |
 | --- | --- | --- | --- | --- | --- |
-| **Context Switch** | Yield → restore | 656 cyc (7 µs) | 810 cyc (9 µs) | 738 cyc (8 µs) | Task yield to task restore (2002 switches) |
-| **Mutex** | Uncontended | 351 cyc (4 µs) | 351 cyc (4 µs) | 351 cyc (4 µs) | Fast-path lock/unlock |
-| **Mutex** | Contended wake | 1948 cyc (23 µs) | 2903 cyc (34 µs) | 1966 cyc (23 µs) | Unlock-to-wake latency with PIP |
-| **Semaphore** | Uncontended | 264 cyc (3 µs) | 264 cyc (3 µs) | 264 cyc (3 µs) | Fast-path take/give |
-| **Semaphore** | Wake latency | 1864 cyc (22 µs) | 1864 cyc (22 µs) | 1864 cyc (22 µs) | Signal-to-wake latency |
-| **Queue** | Delivery | 2103 cyc (25 µs) | 2365 cyc (28 µs) | 2108 cyc (25 µs) | Send to blocked receiver |
+| **Context Switch** | Yield → restore | 713 cyc (8 µs) | 851 cyc (10 µs) | 781 cyc (9 µs) | Task yield to task restore (2002 switches) |
+| **Mutex** | Uncontended | 468 cyc (5 µs) | 468 cyc (5 µs) | 468 cyc (5 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended wake | 2258 cyc (26 µs) | 3269 cyc (38 µs) | 2278 cyc (27 µs) | Unlock-to-wake latency with PIP |
+| **Semaphore** | Uncontended | 342 cyc (4 µs) | 342 cyc (4 µs) | 342 cyc (4 µs) | Fast-path take/give |
+| **Semaphore** | Wake latency | 2060 cyc (24 µs) | 2060 cyc (24 µs) | 2060 cyc (24 µs) | Signal-to-wake latency |
+| **Queue** | Delivery | 2368 cyc (28 µs) | 4538 cyc (54 µs) | 2402 cyc (28 µs) | Send to blocked receiver |
+
+Numbers are µs-rounded from cycle counts at 84 MHz (1 µs ≈ 84 cyc). The
+context-switch path is slightly heavier than a stripped-down RTOS because
+each switch now also runs the stack-canary check
+(`RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH`), the scheduler-suspend gate, and
+the application stack-overflow hook on canary mismatch. Mutex lock adds a
+wait-for-graph cycle check that prevents `RTOS_MUTEX_ERR_DEADLOCK` from
+turning into a hang. Disable any of these via the corresponding config knob
+if you need the cycles back.
 
 ## Scheduling Policies
 
@@ -270,31 +287,32 @@ Measured on hardware via the automated benchmark suite (`bench_*` variants):
 
 ### Cooperative (Yield-Based)
 
-- **Algorithm**: FIFO queue with round-robin on yield
-- **Preemption**: None - tasks must explicitly yield
-- **Data Structure**: Single FIFO ready list
+- **Algorithm**: Priority-then-FIFO; runs the highest-priority ready task and rotates within that bucket on yield
+- **Preemption**: None — tasks must explicitly yield
+- **Data Structure**: Per-priority ready lists with `__builtin_clz` bitmask (O(1) highest-priority lookup) and per-bucket tail pointer (O(1) append)
 - **Use Case**: Simple applications, reduced context switch overhead
 
 **Key Characteristics**:
 
 - Non-preemptive execution
 - Tasks run until voluntary yield (`rtos_yield()` or delay)
-- Yielding tasks move to end of queue (round-robin behavior)
+- Within a priority bucket, yielding tasks move to the tail (round-robin)
 - Lower interrupt overhead
 - No time-slicing - task scheduling is purely voluntary
 
 ### Round-Robin (Time-Sliced)
 
-- **Algorithm**: FIFO queue with automatic time-slice preemption
-- **Preemption**: Automatic when time slice (1 tick default) expires
-- **Data Structure**: Circular FIFO ready list with tail pointer
+- **Algorithm**: Priority-then-FIFO with automatic time-slice preemption inside the highest-priority bucket
+- **Preemption**: Automatic when the time slice (1 tick default) expires
+- **Data Structure**: Per-priority ready lists with `__builtin_clz` bitmask (O(1) highest-priority lookup) and per-bucket tail pointer (O(1) append + rotate)
 - **Use Case**: Fair CPU distribution among equal-priority tasks
 
 **Key Characteristics**:
 
-- Equal time slices for all tasks
+- Equal time slices for tasks at the same priority
+- Strict priority order across buckets (higher priority always preempts lower)
 - Automatic preemption on quantum expiration
-- Tasks rotated to end of queue after yielding
+- Tasks rotate to the tail of their bucket after a slice expires
 - Time-sorted delayed list for sleeping tasks
 - Configurable time slice via `RTOS_TIME_SLICE_TICKS`
 
@@ -304,11 +322,13 @@ Measured on hardware via the automated benchmark suite (`bench_*` variants):
 
 **Features**:
 
-- Recursive locking support (same task can lock multiple times)
+- Recursive locking support (same task can lock multiple times, up to 255)
 - Priority Inheritance Protocol (PIP) prevents priority inversion
 - Transitive priority inheritance (walks blocking chain)
 - Priority-ordered wait queue (highest priority wakes first)
 - Timeout support with proper cleanup
+- **Deadlock cycle detection** — every `rtos_mutex_lock()` walks the wait-for graph; a lock that would close a cycle (A holds X waiting Y, B holds Y waiting X) returns `RTOS_MUTEX_ERR_DEADLOCK` and fires `rtos_application_deadlock_hook(waiter, mutex)` instead of hanging the caller. The walk is bounded by `RTOS_MAX_TASKS` so it terminates even if the graph is corrupted.
+- **Distinct recursion-saturation status** — the 256th nested lock returns the dedicated `RTOS_MUTEX_ERR_RECURSION` (previously collapsed into `RTOS_MUTEX_ERR_GENERAL`).
 
 **API**:
 
@@ -320,6 +340,17 @@ rtos_mutex_lock(&mutex, 100);             // 100 tick timeout
 rtos_mutex_unlock(&mutex);
 ```
 
+**Error codes** ([include/mutex.h](include/mutex.h)):
+
+```text
+RTOS_MUTEX_OK            ok
+RTOS_MUTEX_ERR_INVALID   NULL handle or no current task
+RTOS_MUTEX_ERR_TIMEOUT   wait expired without acquisition
+RTOS_MUTEX_ERR_DEADLOCK  this lock would close a cycle (see app hook)
+RTOS_MUTEX_ERR_RECURSION uint8_t lock_count saturated at 255
+RTOS_MUTEX_ERR_GENERAL   misc kernel failure
+```
+
 ### Counting Semaphores
 
 **Features**:
@@ -328,6 +359,7 @@ rtos_mutex_unlock(&mutex);
 - Priority-ordered wait queue
 - Timeout support (0 = try-once, RTOS_MAX_WAIT = forever)
 - Thread-safe operations with critical sections
+- ISR-safe `rtos_semaphore_signal_from_isr()` for wake-from-interrupt
 
 **API**:
 
@@ -335,7 +367,8 @@ rtos_mutex_unlock(&mutex);
 rtos_semaphore_t sem;
 rtos_semaphore_init(&sem, 0, 5);  // Initial=0, Max=5
 rtos_semaphore_wait(&sem, RTOS_SEM_MAX_WAIT);
-rtos_semaphore_signal(&sem);
+rtos_semaphore_signal(&sem);                  // task context
+rtos_semaphore_signal_from_isr(&sem);         // interrupt context
 uint32_t count = rtos_semaphore_get_count(&sem);
 ```
 
@@ -348,14 +381,21 @@ uint32_t count = rtos_semaphore_get_count(&sem);
 - Priority-ordered sender and receiver wait lists
 - Separate wait lists for full/empty conditions
 - Thread-safe with proper critical sections
+- ISR-safe non-blocking `rtos_queue_send_from_isr()` / `rtos_queue_receive_from_isr()` variants
 
 **API**:
 
 ```c
 rtos_queue_handle_t queue;
 rtos_queue_create(&queue, 10, sizeof(sensor_data_t));
-rtos_queue_send(queue, &data, 100);      // Block up to 100 ticks
+rtos_queue_send(queue, &data, 100);              // task context, block up to 100 ticks
 rtos_queue_receive(queue, &buffer, RTOS_MAX_DELAY);
+
+/* ISR context: never blocks; returns RTOS_ERROR_FULL / RTOS_ERROR_EMPTY
+   instead of waiting. */
+rtos_queue_send_from_isr(queue, &data);
+rtos_queue_receive_from_isr(queue, &buffer);
+
 uint32_t items = rtos_queue_messages_waiting(queue);
 ```
 
@@ -366,7 +406,7 @@ uint32_t items = rtos_queue_messages_waiting(queue);
 - One-shot and auto-reload modes
 - Sorted active list for O(n) tick processing
 - Wraparound-safe time comparison
-- User callback execution in timer tick context
+- Two callback dispatch modes (see below) — direct-from-ISR by default; task-context after `rtos_timer_task_init()`
 - Create, start, stop, change period, delete operations
 
 **API**:
@@ -385,7 +425,24 @@ rtos_timer_create_static(&my_timer, "MyTimer", 1000, RTOS_TIMER_AUTO_RELOAD,
                          callback, param, &timer);
 ```
 
-> **Warning**: Timer callbacks execute in **ISR context** (SysTick handler). They must not call blocking RTOS APIs (`rtos_mutex_lock`, `rtos_semaphore_wait`, `rtos_delay_ms`, etc.). Use ISR-safe APIs only (e.g. `rtos_event_group_set_bits_from_isr`, `rtos_task_notify`).
+### Callback dispatch mode
+
+| Mode | When | Callback context | Allowed APIs |
+| --- | --- | --- | --- |
+| **Default (ISR-dispatch)** | App never calls `rtos_timer_task_init()` | SysTick ISR | ISR-safe variants only (`rtos_semaphore_signal_from_isr`, `rtos_queue_send_from_isr`, `rtos_task_notify_from_isr`, `rtos_event_group_set_bits_from_isr`). Must NOT call blocking APIs. Keep short to avoid tick jitter. |
+| **Task-dispatch** | App calls `rtos_timer_task_init()` before `rtos_start_scheduler()` | Dedicated `TimerSvc` task at `RTOS_CONFIG_TIMER_TASK_PRIORITY` (default MAX-2) | Anything — including `rtos_mutex_lock`, `rtos_delay_ms`, blocking queue/semaphore. A slow callback only delays subsequent dispatches from the same task; SysTick keeps running. |
+
+Activation is purely runtime: the dispatcher always lives in the kernel and routes via `rtos_timer_dispatch_from_isr()`. Before init it calls the callback synchronously in the ISR; after init it enqueues a (callback, handle, param) snapshot onto a single-producer/single-consumer ring of `RTOS_CONFIG_TIMER_TASK_QUEUE_LENGTH` entries (default 8) and signals the timer task. Ring overflow is counted in `g_timer_dispatch_overflow_count` and the dispatch is dropped — size the queue for your worst-case burst.
+
+```c
+/* App opt-in to task-context callbacks: */
+int main(void) {
+    rtos_init();
+    rtos_timer_task_init();         /* NEW — spawns TimerSvc task */
+    rtos_task_create(...);
+    rtos_start_scheduler();
+}
+```
 
 ## Tickless Idle
 
@@ -451,13 +508,20 @@ rtos_event_group_set_bits_from_isr(&eg, 0x01);
 - Lightweight direct task-to-task signaling (no kernel object needed)
 - Multiple actions: set bits, increment, overwrite, or just signal
 - Can be used as a fast binary/counting semaphore replacement
-- ISR-safe sending
+- Separate ISR-safe variants (`_from_isr`) — the task-context APIs are NOT ISR-safe
 
 **API**:
 
 ```c
-// Send notification with value
+// Task-context send: rtos_task_notify / rtos_task_notify_give
 rtos_task_notify(target_task, 0x01, RTOS_NOTIFY_ACTION_SET_BITS);
+
+// ISR-context send: rtos_task_notify_from_isr / rtos_task_notify_give_from_isr
+//   Uses an ISR-local critical section (does not touch g_critical_nesting)
+//   and pends PendSV directly so a higher-priority wake fires after the ISR
+//   tail-chains out.
+rtos_task_notify_from_isr(target_task, 0x01, RTOS_NOTIFY_ACTION_SET_BITS);
+rtos_task_notify_give_from_isr(target_task);
 
 // Lightweight give/take (counting semaphore pattern)
 rtos_task_notify_give(target_task);
@@ -488,6 +552,85 @@ rtos_task_resume(task_handle);
 // defers the free to the idle task); static stacks untouched
 rtos_task_delete(task_handle);   // NULL = self-delete
 ```
+
+## Scheduler Control (Suspend / Resume)
+
+`rtos_scheduler_suspend()` / `rtos_scheduler_resume()` form a nested pair for
+atomic multi-step updates that must not be interrupted by a context switch
+— building a list of task handles, mass-prioritising a worker pool, etc.
+While suspended:
+
+- **Tick advance, timer expiry, and delayed-task wake still run.** Only the
+  context-switch side-effect is deferred — the running task keeps the CPU.
+- Wake paths (semaphore/queue/notify/mutex unlock) still mark target tasks
+  READY but skip the would-be `rtos_yield()`. The deferred switch is fired
+  on the `rtos_scheduler_resume()` call that drops the nesting count to zero.
+
+```c
+rtos_scheduler_suspend();
+/* atomic multi-step update — no preemption can swap us out here */
+build_consistent_state();
+/* if resume drained a deferred switch, the higher-prio task runs right now */
+bool fired = rtos_scheduler_resume();
+```
+
+> **Do not call blocking RTOS APIs while suspended.** `rtos_delay_ms`,
+> `rtos_mutex_lock` with a non-zero timeout, blocking semaphore/queue waits
+> — nothing else can run to wake the caller, so the system hangs. See
+> [tests/integration/test_scheduler_suspend_suite.c](tests/integration/test_scheduler_suspend_suite.c)
+> for the behavioural contract.
+
+## Application Hooks
+
+Weak-symbol callbacks declared in [include/rtos_hooks.h](include/rtos_hooks.h)
+let the application observe or override key kernel events without modifying
+the kernel. Defaults are no-ops; provide a same-named strong definition in
+application code and the linker prefers it. Kernel-level `KLOG` still fires
+at every hook site, so overrides are additive — turning a hook off does not
+suppress kernel diagnostics.
+
+| Hook | Fired from | Default | Typical override |
+| --- | --- | --- | --- |
+| `rtos_application_idle_hook()` | Idle task loop, once per iteration | no-op | feed watchdog, low-power tuning |
+| `rtos_application_tick_hook(tick)` | SysTick ISR, after `tick_count++` | no-op | scheduler telemetry, soft timekeeping |
+| `rtos_application_stack_overflow_hook(task)` | `rtos_task_check_stack()` AND every context switch when `RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH=1` | no-op | halt, log, kill the offender |
+| `rtos_application_malloc_failed_hook(size, heap)` | `rtos_malloc_from()` just before returning NULL | no-op | record OOM telemetry; caller still sees NULL |
+| `rtos_application_deadlock_hook(waiter, mutex)` | `rtos_mutex_lock()` when the lock would close a wait-for cycle | no-op | log graph, halt; the caller receives `RTOS_MUTEX_ERR_DEADLOCK` |
+
+```c
+/* Application TU — strong overrides shadow the weak kernel defaults. */
+void rtos_application_stack_overflow_hook(rtos_task_handle_t task) {
+    KLOGE("App", "Stack overflow in task %s", task->name);
+    RTOS_ASSERT(0);
+}
+```
+
+Validation: [test_hooks_suite](tests/integration/test_hooks_suite.c) exercises
+the four event-driven hooks; the deadlock hook is covered by
+`mutex:lock_detects_deadlock_cycle` in [test_mutex_suite](tests/integration/test_mutex_suite.c).
+
+## ISR-Safe Sync APIs
+
+Every wake-from-interrupt path has a `_from_isr` sibling that uses an
+ISR-local critical section (`rtos_port_enter_critical_from_isr`) — it never
+touches the task-context `g_critical_nesting` counter and pends PendSV via
+`rtos_port_yield()` so the waking task runs after the ISR tail-chains out.
+
+| Task-context API | ISR-context sibling |
+| --- | --- |
+| `rtos_semaphore_signal` | `rtos_semaphore_signal_from_isr` |
+| `rtos_queue_send` (blocking) | `rtos_queue_send_from_isr` (never blocks → `RTOS_ERROR_FULL`) |
+| `rtos_queue_receive` (blocking) | `rtos_queue_receive_from_isr` (never blocks → `RTOS_ERROR_EMPTY`) |
+| `rtos_task_notify` | `rtos_task_notify_from_isr` |
+| `rtos_task_notify_give` | `rtos_task_notify_give_from_isr` |
+| `rtos_event_group_set_bits` | `rtos_event_group_set_bits_from_isr` |
+
+> **Hard rules**: never call a task-context API from an ISR (the
+> `g_critical_nesting` counter would underflow on return) and never call a
+> `_from_isr` API from a task (the wake will use the wrong critical-section
+> style and may miss BASEPRI restoration). The [test_isr_safe_suite](tests/integration/test_isr_safe_suite.c)
+> uses a 1-tick one-shot timer as a deterministic ISR source and verifies
+> wake delivery + payload integrity for every primitive above.
 
 ## Memory Management
 
@@ -581,17 +724,18 @@ rtos_profiling_print_stat(&my_stats);
 ```md
 KARTOS/
 ├── include/               # Public API headers
-│   ├── KARTOS.h           # Main RTOS header
+│   ├── KARTOS.h           # Main RTOS header (init, start, delay, yield, scheduler suspend/resume)
 │   ├── config.h           # Configuration defaults
-│   ├── task.h             # Task management API
+│   ├── task.h             # Task management API + notify (task and *_from_isr variants)
 │   ├── scheduler.h        # Scheduler interface
-│   ├── mutex.h            # Mutex API
-│   ├── semaphore.h        # Semaphore API
-│   ├── queue.h            # Queue API
+│   ├── mutex.h            # Mutex API (incl. ERR_DEADLOCK / ERR_RECURSION)
+│   ├── semaphore.h        # Semaphore API (incl. *_from_isr)
+│   ├── queue.h            # Queue API (incl. *_from_isr)
 │   ├── event_group.h      # Event group API
-│   ├── timer.h            # Software timer API
+│   ├── timer.h            # Software timer API + rtos_timer_task_init() opt-in
 │   ├── memory.h           # Memory API
 │   ├── profiling.h        # Profiling API
+│   ├── rtos_hooks.h       # Weak application hooks: idle/tick/stack/malloc/deadlock
 │   ├── rtos_types.h       # Type definitions
 │   └── rtos_port.h        # Porting layer interface
 ├── arch/                  # Architecture porting layer
@@ -627,7 +771,8 @@ KARTOS/
 │       └── family.cmake   # Compiler flags, startup file, HAL sources
 ├── src/
 │   ├── core/              # Kernel core
-│   │   ├── kernel.c       # Kernel initialization and tick
+│   │   ├── kernel.c       # Kernel init, tick handler, scheduler suspend/resume, task unblock (task + ISR)
+│   │   ├── hooks.c        # Weak default no-op application hooks
 │   │   └── memory.c       # Bi-directional dual-ended heap allocator
 │   ├── scheduler/         # Scheduler implementations
 │   │   ├── scheduler.c    # Scheduler manager
@@ -646,13 +791,15 @@ KARTOS/
 │   │   └── event_group/   # Event group (bit-field sync)
 │   ├── timer/             # Software timers
 │   │   ├── timer.c        # Timer API
-│   │   └── timer_list.c   # Active timer list management
+│   │   ├── timer_list.c   # Active timer list + tick-driven dispatch
+│   │   └── timer_task.c   # Optional task-context dispatcher (rtos_timer_task_init)
 │   ├── logging/           # Logging subsystem
-│   │   ├── uart_tx.h      # UART transport contract (HAL-free; .c implementation lives in BSP)
-│   │   ├── log_common.h   # Shared path utilities: LOG_BASENAME (compile-time) and log_basename (runtime)
-│   │   ├── klog.c/h       # High-performance deferred kernel logger
-│   │   ├── ulog.c/h       # User-facing string logger
-│   │   └── log_flush_task.c/h  # Flush task (formats KLog and drains ULog)
+│   │   ├── log.c/h        # Shared log_level_t enum + unified log_init / log_flush_drain dispatch
+│   │   ├── klog.c/h       # High-performance deferred kernel logger (defer-the-format)
+│   │   ├── ulog.c/h       # User-facing printf-style logger (format-up-front)
+│   │   ├── log_flush_task.c/h  # Idle-priority task; calls log_flush_drain() each period
+│   │   ├── uart_tx.h      # UART transport interface used by both backends (.c lives in BSP)
+│   │   └── log_common.h   # Shared path utilities: LOG_BASENAME (compile-time) and log_basename (runtime)
 │   ├── profiling/         # Profiling subsystem
 │   │   ├── profiling.c    # DWT cycle counter profiling
 │   │   └── prof_trace.c/h # Profiling trace ring buffer
@@ -674,6 +821,11 @@ KARTOS/
 │   │   ├── test_notify_suite.c
 │   │   ├── test_task_state_suite.c
 │   │   ├── test_tickless_idle_suite.c
+│   │   ├── test_heap_allocator_suite.c
+│   │   ├── test_hooks_suite.c
+│   │   ├── test_scheduler_suspend_suite.c
+│   │   ├── test_isr_safe_suite.c
+│   │   ├── test_timer_task_suite.c
 │   │   ├── test_scheduler_cooperative_suite.c
 │   │   ├── test_scheduler_rr_suite.c
 │   │   └── test_scheduler_preemptive_suite.c
@@ -734,14 +886,30 @@ and uncomment the values you need to override. See [docs/porting_guide.md](docs/
 #define RTOS_DEFAULT_TASK_STACK_SIZE      (1024U)   // 1KB default
 #define RTOS_MINIMUM_TASK_STACK_SIZE      (256U)    // 256B minimum
 
+/* Software timer service task (only consumed after rtos_timer_task_init()) */
+#define RTOS_CONFIG_TIMER_TASK_PRIORITY     (RTOS_MAX_TASK_PRIORITIES - 2U)
+#define RTOS_CONFIG_TIMER_TASK_STACK_SIZE   RTOS_DEFAULT_TASK_STACK_SIZE
+#define RTOS_CONFIG_TIMER_TASK_QUEUE_LENGTH (8U)    // pending dispatches
+
 /* Logging */
-#define RTOS_UART_BAUD_RATE (921600U)  // UART baud rate for log output
+#define RTOS_UART_BAUD_RATE        (921600U)  // UART baud rate for log output
+#define RTOS_KLOG_ENABLED          (1U)       // kernel logger; rtos_init() auto-inits the backend
+#define RTOS_KLOG_MIN_LEVEL        (3U)       // compile-time floor: 0=FAULT … 5=TRACE (seeds klog_verbosity)
+#define RTOS_ULOG_ENABLED          (1U)       // user logger;   rtos_init() auto-inits the backend
+#define RTOS_ULOG_MIN_LEVEL        (3U)       // compile-time floor: 0=FAULT … 5=TRACE (seeds ulog_verbosity)
+#define LOG_FLUSH_TASK_STACK_SIZE  (2048U)    // shared stack for the auto-created log_flush_task
 
 /* Debug */
-#define RTOS_ASSERT_ENABLED (1U)
-#define RTOS_ENABLE_STACK_OVERFLOW_CHECK (1U)
+#define RTOS_ASSERT_ENABLED                     (1U)
+#define RTOS_ENABLE_STACK_OVERFLOW_CHECK        (1U)
+#define RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH  (1U)  // defaults to RTOS_ENABLE_STACK_OVERFLOW_CHECK
 ```
 
+> The `RTOS_ASSERT_CRITICAL` alias was removed — it was a no-op when
+> `RTOS_ASSERT_ENABLED=0`, which silently lost the "critical" promise. Use
+> `RTOS_ASSERT()` directly and gate calls with the build's assertion-enabled
+> macro if you need a different policy.
+>
 > **Note:** `RTOS_UART_BAUD_RATE` configures the on-board UART only. If you change it, pass the same baud rate to `python -m kartos test -b <baud>` or your serial monitor. Mismatched values produce garbled serial output.
 
 ### Port-Layer Constants (`port_priv.h`)
@@ -829,15 +997,28 @@ void consumer_task(void *param) {
 
 ### Stack Overflow Detection
 
+Each task stack is sealed at its base with the canary value `0xC0DEC0DE`.
+A mismatch means the task wrote past its lowest address — i.e. it overran.
+Detection runs in two places:
+
+- **Automatic (every context switch)**, gated by `RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH` (defaults to `RTOS_ENABLE_STACK_OVERFLOW_CHECK`). The kernel checks the outgoing task's canary inside `rtos_kernel_switch_context()` and fires `rtos_application_stack_overflow_hook(task)` on mismatch.
+- **Manual** via `rtos_task_check_stack()` for on-demand polling. Pass `NULL` to sweep every task in the pool, or a specific handle to check one.
+
 ```c
-// Check all tasks
-if (rtos_task_check_stack(NULL)) {
-    log_error("Stack overflow detected!");
+// Check a specific task
+if (rtos_task_check_stack(my_task_handle)) {
+    ulog_error("Task stack overflow!");
 }
 
-// Check specific task
-if (rtos_task_check_stack(my_task_handle)) {
-    log_error("Task stack overflow!");
+// Sweep all tasks
+if (rtos_task_check_stack(NULL)) {
+    ulog_error("Stack overflow detected somewhere!");
+}
+
+// Application-level reaction (weak default is no-op):
+void rtos_application_stack_overflow_hook(rtos_task_handle_t task) {
+    KLOGE("App", "STACK OVERFLOW id=%u name=%s", task->task_id, task->name);
+    RTOS_ASSERT(0);
 }
 ```
 
@@ -865,46 +1046,89 @@ rtos_profiling_report_system_stats();
 
 ## Logging System
 
-KARTOS features a dual-tier logging architecture designed to provide extensive visibility without compromising real-time performance.
+KARTOS features a dual-backend logging architecture: a fast ISR-safe kernel
+logger (KLog) and a printf-style application logger (ULog). Both share the
+same level enum, the same `.noinit` runtime-verbosity pattern, and the same
+flush task — only the producer strategy differs.
 
-### Shared Utilities (`log_common.h`)
+### Unified Core (`log.h`)
 
-[src/logging/log_common.h](src/logging/log_common.h) provides two path-stripping helpers used by both the kernel logger and the test infrastructure:
+[src/logging/log.h](src/logging/log.h) defines the shared layer:
 
-- **`LOG_BASENAME(literal)`** — compile-time macro using `__builtin_strrchr`; reduces `__FILE__` to a bare filename with zero runtime cost (GCC constant-folds it on string literals).
-- **`log_basename(path)`** — runtime inline function; walks the string and handles both `/` and `\` separators for portability.
+- **One `log_level_t` enum** — `LOG_LEVEL_FAULT … LOG_LEVEL_TRACE` (0–5). Both
+  backends use this enum; the old `KLOG_LEVEL_*` and `ULOG_LEVEL_*` spellings
+  remain as aliases for source compatibility.
+- **`log_init()`** — single entry point called from `rtos_init()`. Initialises
+  whichever backends are enabled via `RTOS_KLOG_ENABLED` / `RTOS_ULOG_ENABLED`.
+  Callers no longer call `klog_init()` / `ulog_init()` directly.
+- **`log_flush_drain()`** — single drain entry point. The auto-created
+  `log_flush_task` (`LOG_FLUSH_TASK_STACK_SIZE` bytes, idle priority) wakes
+  every 100 ms, processes incoming UART commands, then calls
+  `log_flush_drain()` to emit pending records from every enabled backend.
+- **Shared path helpers** — [log_common.h](src/logging/log_common.h) provides
+  `LOG_BASENAME(literal)` (compile-time, zero cost) and `log_basename(path)`
+  (runtime, handles `/` and `\`) used by both backends and the test runner.
 
-Both prevent long build-system paths from bloating log lines and overflowing fixed-size buffers.
+Two ring buffers and two verbosity globals are kept independent on purpose:
+you can silence ULog while keeping `KLOGT` traces flowing during kernel
+debugging, or vice versa.
 
 ### Kernel Logger (KLog)
 
-The `klog` system is designed for high-performance, internal RTOS tracing. It uses a deferred formatting approach to ensure zero allocation and ISR-safety.
+[src/logging/klog.c](src/logging/klog.c) targets high-frequency tracing from
+any context, including interrupts.
 
-- **Zero-Allocation & Fast**: Captures up to 4 raw arguments and metadata pointers (like `__FILE__`, `__LINE__`, and `module`) into a fixed-size packed struct.
-- **ISR-Safe**: Uses lockless ring buffers with critical sections, allowing safe logging from any context, including interrupts.
-- **Background Formatting**: A dedicated `log_flush_task` pops packets from the ring buffer, runs the `snprintf` formatting (e.g. `00001204 [IdleTask ] [Kernel ] I kernel.c:45 | Entering low power mode`), and transmits them via UART to prevent blocking the RTOS core.
+- **Defer-the-format** — `KLOG*()` writes a 24-byte `log_packet_t` (timestamp,
+  module tag, file/line, format-string pointer, four raw `uint32_t` args)
+  into a ring buffer. The producer never calls `snprintf`.
+- **ISR-safe** — guarded with `__disable_irq`/`__set_PRIMASK`; never blocks,
+  never allocates. Drops silently on full buffer.
+- **Background formatting** — `klog_drain_and_emit()` runs in the flush task
+  and produces lines like `00001204 [IdleTask ] [Kernel ] I kernel.c:45 |
+  Entering low power mode` before handing them to UART.
+- **Runtime verbosity** — `klog_verbosity` lives in `.noinit` and survives
+  `NVIC_SystemReset()`. The compile-time floor `RTOS_KLOG_MIN_LEVEL` seeds it
+  on first boot or after corruption. Live-patch it on a running board with
+  `python -m kartos verbosity DEBUG` (default `--target=klog`).
 
 **API**:
 
 ```c
-// Shorthand macros automatically capture file/line context
+// Shorthand macros automatically capture file/line context.
+// Level filtering happens at the macro site against klog_verbosity —
+// filtered calls compile to nothing in the hot path.
 KLOGI("Queue", "Created queue %s with %d items", q_name, q_size);
 KLOGE("Scheduler", "Failed to start task %d", task_id);
+KLOGT("Kernel", "CtxSwitch from=%s to=%s", from_name, to_name);
 ```
 
 ### User Logger (ULog)
 
-The `ulog` system provides a standard, `printf`-style deferred logger for user applications.
+[src/logging/ulog.c](src/logging/ulog.c) is the printf-style counterpart for
+application code where the string/float ergonomics matter.
 
-- **String-based**: Formats strings immediately into a character buffer.
-- **Deferred Output**: The `log_flush_task` drains the buffer asynchronously.
-- **Not ISR-Safe**: Intended only for application task use.
+- **Format up front** — `ulog_*()` runs `vsnprintf` into a stack scratch
+  buffer, then copies raw bytes into the ULog ring buffer.
+- **Not ISR-safe** — uses a critical section around the ring-buffer write;
+  intended for task context only.
+- **Symmetric runtime control** — `ulog_verbosity` lives in `.noinit` (same
+  reset-survival pattern as `klog_verbosity`). Compile-time floor:
+  `RTOS_ULOG_MIN_LEVEL`. Live-patch with
+  `python -m kartos verbosity DEBUG -t ulog`, or `-t both` to patch both
+  backends in one shot.
+- **Macro-site filtering** — every `ulog_*()` macro early-outs against
+  `ulog_verbosity` before pushing varargs, so filtered calls have zero
+  call-site cost.
 
-**API**:
+**API** — six per-level macros mirroring `log_level_t`:
 
 ```c
-ulog_info("Connection established to %s", ip_addr);
+ulog_fault("Watchdog trip — last task: %s", last_task_name);
 ulog_error("Failed to read sensor: %d", error_code);
+ulog_warn ("Battery low: %u mV", millivolts);
+ulog_info ("Connection established to %s", ip_addr);
+ulog_debug("Sensor sample %u: raw=%d cal=%d", n, raw, calibrated);
+ulog_trace("Frame parsed: type=0x%02x len=%u", frame_type, len);
 ```
 
 ### Test Framework (`tests/framework/`)

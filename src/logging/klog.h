@@ -1,6 +1,8 @@
 #ifndef KLOG_H
 #define KLOG_H
 
+#include "log.h"
+
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -12,21 +14,18 @@ extern "C"
 #define KLOG_BUFFER_SIZE 4096 /* Must be power of 2 */
 #endif
 
-#ifndef KLOG_MIN_LEVEL
-#define KLOG_MIN_LEVEL KLOG_LEVEL_INFO
-#endif
-
 #define KLOG_MAX_ARGS 4
 
-typedef enum
-{
-    KLOG_LEVEL_FAULT = 0, /* Always logged, never filtered */
-    KLOG_LEVEL_ERROR,
-    KLOG_LEVEL_WARN,
-    KLOG_LEVEL_INFO,
-    KLOG_LEVEL_DEBUG,
-    KLOG_LEVEL_TRACE,
-} klog_level_t;
+/* klog_level_t is an alias for the shared log_level_t enum. */
+typedef log_level_t klog_level_t;
+
+/* Source-compatibility aliases — existing KLOG*() call sites unchanged. */
+#define KLOG_LEVEL_FAULT LOG_LEVEL_FAULT
+#define KLOG_LEVEL_ERROR LOG_LEVEL_ERROR
+#define KLOG_LEVEL_WARN  LOG_LEVEL_WARN
+#define KLOG_LEVEL_INFO  LOG_LEVEL_INFO
+#define KLOG_LEVEL_DEBUG LOG_LEVEL_DEBUG
+#define KLOG_LEVEL_TRACE LOG_LEVEL_TRACE
 
 /**
  * @brief Fixed-size log packet.
@@ -49,9 +48,6 @@ typedef struct __attribute__((packed))
 
 /* Runtime verbosity — lives in .noinit, survives NVIC_SystemReset() */
 extern volatile uint8_t klog_verbosity;
-
-/* Safe to call before the scheduler is running. */
-void klog_init(void);
 
 /* Change/query runtime verbosity. */
 void    klog_set_verbosity(uint8_t level);

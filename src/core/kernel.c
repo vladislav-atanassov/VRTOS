@@ -2,6 +2,7 @@
 #include "assert.h"
 #include "kernel_priv.h"
 #include "klog.h"
+#include "log_flush_task.h"
 #include "memory.h"
 #include "port_common.h"
 #include "profiling.h"
@@ -38,8 +39,9 @@ rtos_status_t rtos_init(void)
     rtos_profiling_init();
 #endif
 
-    /* Initialize kernel logger after profiling (uses DWT for timestamps) */
-    klog_init();
+#if (RTOS_KLOG_ENABLED || RTOS_ULOG_ENABLED)
+    log_init();
+#endif
 
     g_kernel.state               = RTOS_KERNEL_STATE_INACTIVE;
     g_kernel.tick_count          = 0;
@@ -74,6 +76,16 @@ rtos_status_t rtos_init(void)
     {
         return status;
     }
+
+#if (RTOS_KLOG_ENABLED || RTOS_ULOG_ENABLED)
+    rtos_task_handle_t log_flush_handle;
+    status = rtos_task_create(log_flush_task, "LogFlush", LOG_FLUSH_TASK_STACK_SIZE, NULL,
+                              RTOS_IDLE_TASK_PRIORITY, &log_flush_handle);
+    if (status != RTOS_SUCCESS)
+    {
+        return status;
+    }
+#endif
 
     g_kernel.state = RTOS_KERNEL_STATE_READY;
     return RTOS_SUCCESS;

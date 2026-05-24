@@ -14,7 +14,6 @@
 #define UART_RX_BUF_SIZE 64 /* Must be power of 2 */
 
 static UART_HandleTypeDef g_huart2;
-log_level_t               g_log_level = LOG_LEVEL_NONE;
 
 /* SPSC TX ring buffer: _write() produces, USART2_IRQHandler consumes */
 static volatile uint8_t  tx_buf[UART_TX_BUF_SIZE];
@@ -36,7 +35,7 @@ static inline uint32_t tx_free(void)
     return (UART_TX_BUF_SIZE - 1) - tx_count();
 }
 
-void log_uart_init(log_level_t level)
+void log_uart_init(void)
 {
     __HAL_RCC_USART2_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
@@ -73,8 +72,6 @@ void log_uart_init(log_level_t level)
     /* Disable stdout buffering — newlib block-buffers stdout when isatty()==0,
      * so printf output otherwise sits in libc's buffer and never reaches _write. */
     setvbuf(stdout, NULL, _IONBF, 0);
-
-    g_log_level = level;
 }
 
 /* printf retarget — copies to TX ring buffer, spins if full.

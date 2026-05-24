@@ -1,6 +1,8 @@
 #ifndef ULOG_H
 #define ULOG_H
 
+#include "log.h"
+
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -16,29 +18,44 @@ extern "C"
 #define ULOG_LINE_MAX 128 /* Max formatted line length */
 #endif
 
-typedef enum
-{
-    ULOG_LEVEL_NONE = 0,
-    ULOG_LEVEL_ERROR,
-    ULOG_LEVEL_WARN,
-    ULOG_LEVEL_INFO,
-    ULOG_LEVEL_DEBUG,
-} ulog_level_t;
+/* ulog_level_t is an alias for the shared log_level_t enum. */
+typedef log_level_t ulog_level_t;
 
-void ulog_init(ulog_level_t level);
+/* Source-compatibility aliases for ULOG_LEVEL_* spellings.
+ * Note: ULOG_LEVEL_NONE maps to LOG_LEVEL_FAULT (0), not a "silence all"
+ * sentinel — there are no callers that relied on the old silence semantics. */
+#define ULOG_LEVEL_NONE  LOG_LEVEL_FAULT
+#define ULOG_LEVEL_ERROR LOG_LEVEL_ERROR
+#define ULOG_LEVEL_WARN  LOG_LEVEL_WARN
+#define ULOG_LEVEL_INFO  LOG_LEVEL_INFO
+#define ULOG_LEVEL_DEBUG LOG_LEVEL_DEBUG
 
-/* NOT ISR-safe. Output is deferred to the flush task via ring buffer. */
+/* Runtime verbosity — lives in .noinit, survives NVIC_SystemReset().
+ * Symmetric with klog_verbosity; independent control of each channel. */
+extern volatile uint8_t ulog_verbosity;
+
+/* Change/query runtime verbosity. */
+void    ulog_set_verbosity(uint8_t level);
+uint8_t ulog_get_verbosity(void);
+
+/* NOT ISR-safe. Output is deferred to the flush task via ring buffer.
+ * Prefer the ulog_*() macros below — they early-out before the function
+ * call when the level is filtered, avoiding varargs push overhead. */
 void ulog(ulog_level_t level, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
-uint32_t ulog_drain(uint8_t *buf, uint32_t max_len);
-uint32_t ulog_pending(void);
-
-
-
-#define ulog_error(msg, ...) ulog(ULOG_LEVEL_ERROR, "[E] " msg, ##__VA_ARGS__)
-#define ulog_warn(msg, ...)  ulog(ULOG_LEVEL_WARN, "[W] " msg, ##__VA_ARGS__)
-#define ulog_info(msg, ...)  ulog(ULOG_LEVEL_INFO, "[I] " msg, ##__VA_ARGS__)
-#define ulog_debug(msg, ...) ulog(ULOG_LEVEL_DEBUG, "[D] " msg, ##__VA_ARGS__)
+/* Per-level macros — early-out at the call site against ulog_verbosity. */
+#define ulog_fault(msg, ...) \
+    do { if (LOG_LEVEL_FAULT <= ulog_verbosity) ulog(LOG_LEVEL_FAULT, "[F] " msg, ##__VA_ARGS__); } while (0)
+#define ulog_error(msg, ...) \
+    do { if (LOG_LEVEL_ERROR <= ulog_verbosity) ulog(LOG_LEVEL_ERROR, "[E] " msg, ##__VA_ARGS__); } while (0)
+#define ulog_warn(msg, ...)  \
+    do { if (LOG_LEVEL_WARN  <= ulog_verbosity) ulog(LOG_LEVEL_WARN,  "[W] " msg, ##__VA_ARGS__); } while (0)
+#define ulog_info(msg, ...)  \
+    do { if (LOG_LEVEL_INFO  <= ulog_verbosity) ulog(LOG_LEVEL_INFO,  "[I] " msg, ##__VA_ARGS__); } while (0)
+#define ulog_debug(msg, ...) \
+    do { if (LOG_LEVEL_DEBUG <= ulog_verbosity) ulog(LOG_LEVEL_DEBUG, "[D] " msg, ##__VA_ARGS__); } while (0)
+#define ulog_trace(msg, ...) \
+    do { if (LOG_LEVEL_TRACE <= ulog_verbosity) ulog(LOG_LEVEL_TRACE, "[T] " msg, ##__VA_ARGS__); } while (0)
 
 #ifdef __cplusplus
 }

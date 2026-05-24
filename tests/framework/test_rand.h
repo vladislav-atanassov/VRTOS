@@ -35,7 +35,7 @@ extern "C"
  * the current tick count is used as entropy; if the tick count is also
  * zero (very early call), falls back to a compile-time constant.
  *
- * Call once from test_runtime_main() after ulog_init().
+ * Call once from test_runtime_main() after rtos_init() — ulog is then ready.
  */
 void test_rand_init(void);
 

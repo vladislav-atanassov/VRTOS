@@ -27,7 +27,8 @@ DEFINE_FAKE_VOID_FUNC(rtos_assert_failed, const char *, uint32_t, const char *, 
 
 DEFINE_FAKE_VOID_FUNC(klog_write, int, const char *, const char *, uint16_t, const char *,
                       uint32_t, uint32_t, uint32_t, uint32_t);
-volatile uint8_t klog_verbosity = 0; /* below KLOG_LEVEL_FAULT (0) — every call filtered out */
+volatile uint8_t klog_verbosity = 0; /* below KLOG_LEVEL_FAULT (0) — every KLOG call filtered out */
+volatile uint8_t ulog_verbosity = 0; /* below LOG_LEVEL_FAULT — every ulog_* call filtered out */
 
 /* Concrete kernel control block — queue.c reads g_kernel.current_task. */
 rtos_kernel_cb_t g_kernel;

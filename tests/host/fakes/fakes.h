@@ -58,10 +58,15 @@ DECLARE_FAKE_VOID_FUNC(rtos_assert_failed, const char *, uint32_t, const char *,
  * KLOG_* expand to klog_write(...) gated on the klog_verbosity global. The
  * host build sets klog_verbosity = KLOG_LEVEL_FAULT - 1 (effectively "off")
  * so the fake is rarely called; we still need it linkable.
+ *
+ * ulog_verbosity is the symmetric runtime control for ULog. Production .c
+ * files don't call ulog macros today, but the symbol must be linkable for
+ * any TU that transitively includes ulog.h.
  */
 DECLARE_FAKE_VOID_FUNC(klog_write, int, const char *, const char *, uint16_t, const char *,
                        uint32_t, uint32_t, uint32_t, uint32_t);
 extern volatile uint8_t klog_verbosity;
+extern volatile uint8_t ulog_verbosity;
 
 /* Heap: pass-through to libc malloc/free so tests can actually allocate buffers.
  * Side hint is ignored on host — there is no dual-ended split. */

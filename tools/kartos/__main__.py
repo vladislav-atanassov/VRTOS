@@ -64,14 +64,16 @@ DEFAULT_BAUD = 921600
 DEFAULT_TEST_DURATION_SEC = 20
 DEFAULT_OUTPUT_DIR = "tests/artifacts"
 
-# Mirrors klog_level_t in src/logging/klog.h and KLOG_NOINIT_MAGIC in klog.c.
-# Writing the magic alongside the new value keeps klog_init() from rejecting it
-# on the next boot (it would only reset if magic is wrong or level > TRACE).
-KLOG_LEVELS = {
+# Mirrors log_level_t in src/logging/log.h and the *_NOINIT_MAGIC constants
+# in klog.c / ulog.c.  Writing the magic alongside the new value keeps the
+# backend's init from rejecting it on the next boot (the backend only resets
+# its verbosity if the magic is wrong or level > TRACE).
+LOG_LEVELS = {
     "FAULT": 0, "ERROR": 1, "WARN": 2,
     "INFO": 3, "DEBUG": 4, "TRACE": 5,
 }
 KLOG_NOINIT_MAGIC = 0xB007CA11
+ULOG_NOINIT_MAGIC = 0xB007CA22
 
 
 def _project_root() -> Path:
@@ -148,12 +150,12 @@ def _resolve_symbol(elf: Path, name: str) -> int:
 
 def _parse_level(s: str) -> int:
     s = s.strip().upper()
-    if s in KLOG_LEVELS:
-        return KLOG_LEVELS[s]
+    if s in LOG_LEVELS:
+        return LOG_LEVELS[s]
     try:
         n = int(s)
     except ValueError:
-        print(f"[!] Unknown level '{s}'. Use {'|'.join(KLOG_LEVELS)} or 0-5.")
+        print(f"[!] Unknown level '{s}'. Use {'|'.join(LOG_LEVELS)} or 0-5.")
         sys.exit(1)
     if not 0 <= n <= 5:
         print(f"[!] Level out of range: {n}. Must be 0-5.")
@@ -478,34 +480,53 @@ def cmd_list(args):
         print(f"  {v}")
 
 
+_VERBOSITY_TARGETS = {
+    "klog": ("klog_verbosity", "klog_noinit_magic", KLOG_NOINIT_MAGIC),
+    "ulog": ("ulog_verbosity", "ulog_noinit_magic", ULOG_NOINIT_MAGIC),
+}
+
+
 def cmd_verbosity(args):
     board = _resolve_board(args.board)
     level = _parse_level(args.level)
     elf = _resolve_elf(board, args.environment)
 
-    verbosity_addr = _resolve_symbol(elf, "klog_verbosity")
-    magic_addr = _resolve_symbol(elf, "klog_noinit_magic")
+    if args.target == "both":
+        target_keys = ("klog", "ulog")
+    else:
+        target_keys = (args.target,)
+
+    # Resolve symbols upfront so we fail before touching OpenOCD if any are missing.
+    resolved = []
+    for key in target_keys:
+        verbosity_sym, magic_sym, magic_val = _VERBOSITY_TARGETS[key]
+        resolved.append((
+            key,
+            _resolve_symbol(elf, verbosity_sym),
+            _resolve_symbol(elf, magic_sym),
+            magic_val,
+        ))
 
     openocd_cfg = _project_root() / "boards" / board / "openocd.cfg"
     if not openocd_cfg.exists():
         print(f"[!] OpenOCD config not found: {openocd_cfg}")
         sys.exit(1)
 
-    level_name = next(k for k, v in KLOG_LEVELS.items() if v == level)
+    level_name = next(k for k, v in LOG_LEVELS.items() if v == level)
     rel_elf = elf.relative_to(_project_root())
     print(f"[*] ELF: {rel_elf}")
-    print(f"[*] klog_verbosity     @ 0x{verbosity_addr:08x} -> {level} ({level_name})")
-    print(f"[*] klog_noinit_magic  @ 0x{magic_addr:08x} -> 0x{KLOG_NOINIT_MAGIC:08x}")
+    for key, verbosity_addr, magic_addr, magic_val in resolved:
+        print(f"[*] {key}_verbosity     @ 0x{verbosity_addr:08x} -> {level} ({level_name})")
+        print(f"[*] {key}_noinit_magic  @ 0x{magic_addr:08x} -> 0x{magic_val:08x}")
     print(f"[*] {'Soft-reset after write' if not args.no_reset else 'Resume without reset (live change)'}")
 
-    ocd_cmds = [
-        "init",
-        "halt",
-        f"mwb 0x{verbosity_addr:08x} {level}",
-        f"mww 0x{magic_addr:08x} 0x{KLOG_NOINIT_MAGIC:08x}",
-        "reset run" if not args.no_reset else "resume",
-        "exit",
-    ]
+    ocd_cmds = ["init", "halt"]
+    for _key, verbosity_addr, magic_addr, magic_val in resolved:
+        ocd_cmds.append(f"mwb 0x{verbosity_addr:08x} {level}")
+        ocd_cmds.append(f"mww 0x{magic_addr:08x} 0x{magic_val:08x}")
+    ocd_cmds.append("reset run" if not args.no_reset else "resume")
+    ocd_cmds.append("exit")
+
     cmd = [_find_openocd(), "-f", str(openocd_cfg)]
     for c in ocd_cmds:
         cmd += ["-c", c]
@@ -736,11 +757,15 @@ def main():
 
     p_verbosity = sub.add_parser(
         "verbosity",
-        help="Set klog runtime verbosity in .noinit RAM (survives soft reset)",
+        help="Set klog/ulog runtime verbosity in .noinit RAM (survives soft reset)",
     )
     p_verbosity.add_argument(
         "level",
-        help=f"Level: {'|'.join(KLOG_LEVELS)} or 0-5",
+        help=f"Level: {'|'.join(LOG_LEVELS)} or 0-5",
+    )
+    p_verbosity.add_argument(
+        "-t", "--target", choices=("klog", "ulog", "both"), default="klog",
+        help="Which logger to patch (default: klog)",
     )
     p_verbosity.add_argument(
         "-e", "--environment", default=None, metavar="VARIANT",
@@ -748,7 +773,7 @@ def main():
     )
     p_verbosity.add_argument(
         "--no-reset", action="store_true",
-        help="Write the value and resume; skip the soft reset (takes effect live since klog_verbosity is volatile)",
+        help="Write the value and resume; skip the soft reset (takes effect live since the verbosity globals are volatile)",
     )
     p_verbosity.set_defaults(func=cmd_verbosity)
 

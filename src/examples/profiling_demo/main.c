@@ -8,7 +8,6 @@
 #include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
-#include "log_flush_task.h"
 #include "profiling.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
@@ -50,7 +49,7 @@ void ReportTask(void *param)
 
     while (1)
     {
-        rtos_delay_ms(300000); /* Report every 5s */
+        rtos_delay_ms(5000); /* Report every 5s */
 
         ulog_info("========== PROFILING REPORT ==========");
 
@@ -72,12 +71,10 @@ int main(void)
     hardware_env_config();
 
     /* Board Drivers */
-    log_uart_init(LOG_LEVEL_INFO);
+    log_uart_init();
 
     rtos_init();
     rtos_profiling_init();
-
-    ulog_init(ULOG_LEVEL_INFO);
 
     ulog_info("Starting Profiling Demo...");
 
@@ -87,12 +84,9 @@ int main(void)
      * Priority assignment:
      *   WORKER   (3) — highest, simulated real-time work
      *   REPORTER (2) — medium, periodic profiling report
-     *   HEARTBEAT(1) — low
-     *   KLOG     (0) — lowest, drains log buffers when idle
      */
     rtos_task_create(WorkTask, "WORKER", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 3, &task_handle);
     rtos_task_create(ReportTask, "REPORTER", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, 2, &task_handle);
-    rtos_task_create(log_flush_task, "KLOG", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, &task_handle);
 
     rtos_start_scheduler();
 

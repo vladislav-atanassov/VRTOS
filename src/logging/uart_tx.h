@@ -1,48 +1,53 @@
-#ifndef LOG_H
-#define LOG_H
+#ifndef UART_TX_H
+#define UART_TX_H
 
 #include <stdint.h>
 #include <stdio.h> // IWYU pragma: keep
 
-typedef enum
+#ifdef __cplusplus
+extern "C"
 {
-    LOG_LEVEL_NONE = 0,
-    LOG_LEVEL_PROFILE,
-    LOG_LEVEL_ERROR,
-    LOG_LEVEL_INFO,
-    LOG_LEVEL_DEBUG,
-    LOG_LEVEL_ALL
-} log_level_t;
+#endif
 
-extern log_level_t g_log_level;
+/**
+ * @file uart_tx.h
+ * @brief Low-level UART transport used by KLog / ULog and their flush task.
+ *
+ * The board-specific implementation lives in
+ * boards/<board>/uart_tx.c.  This header is the interface KLog/ULog use to
+ * reach the UART; verbosity / filtering / formatting are owned by the
+ * higher-level loggers, not by this layer.
+ */
 
-void log_uart_init(log_level_t level);
+/**
+ * @brief Initialise UART hardware (pins, baud rate, interrupts).
+ *
+ * Must be called from main() before rtos_start_scheduler().  KLog/ULog write
+ * into UART via uart_printf() and the newlib _write retarget which both
+ * depend on this initialisation.
+ */
+void log_uart_init(void);
+
+/**
+ * @brief Blocking flush — drain the TX ring buffer by polling.  Use during
+ *        pre-scheduler boot, fault handlers, or before WFI.
+ */
 void uart_tx_flush(void);
+
+/**
+ * @brief Drain any received bytes and dispatch known commands (e.g. LOG_MASK).
+ *        Called periodically from the log flush task.
+ */
 void uart_rx_process_commands(void);
 
-/* vsnprintf + direct _write — bypasses newlib's broken stdio buffering. */
+/**
+ * @brief Direct printf replacement — formats with vsnprintf, then writes via
+ *        the newlib _write retarget.  Bypasses newlib's stdio buffering.
+ */
 void uart_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 
-/* Internal macro */
-#define log_printf(level, tag, msg, ...)                                                                               \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (g_log_level >= level)                                                                                      \
-        {                                                                                                              \
-            uart_printf("[" tag "] %s:%d:%s(): " msg "\r\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__);             \
-        }                                                                                                              \
-    } while (0)
+#ifdef __cplusplus
+}
+#endif
 
-/* Public logging macros */
-#define log_print(msg, ...)                                                                                            \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        uart_printf("[PRINT] " msg "\r\n", ##__VA_ARGS__);                                                             \
-    } while (0)
-
-#define log_profile(msg, ...) log_printf(LOG_LEVEL_PROFILE, "PROFILE", msg, ##__VA_ARGS__)
-#define log_error(msg, ...)   log_printf(LOG_LEVEL_ERROR, "ERROR", msg, ##__VA_ARGS__)
-#define log_info(msg, ...)    log_printf(LOG_LEVEL_INFO, "INFO", msg, ##__VA_ARGS__)
-#define log_debug(msg, ...)   log_printf(LOG_LEVEL_DEBUG, "DEBUG", msg, ##__VA_ARGS__)
-
-#endif /* LOG_H */
+#endif /* UART_TX_H */

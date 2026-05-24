@@ -1,13 +1,12 @@
 #ifndef BENCH_COMMON_H
 #define BENCH_COMMON_H
 
-#include "KARTOS.h"         /* rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE */
-#include "config.h"         /* RTOS_DEFAULT_TASK_STACK_SIZE, RTOS_SCHEDULER_* */
-#include "log_flush_task.h" /* log_flush_task, KLOG_FLUSH_TASK_STACK_SIZE */
-#include "profiling.h"      /* rtos_profile_stat_t, rtos_profiling_*, macros */
-#include "task.h"           /* rtos_task_create */
-#include "timer.h"          /* rtos_timer_create, rtos_timer_start */
-#include "ulog.h"           /* ulog_init, ULOG_LEVEL_INFO */
+#include "KARTOS.h"    /* rtos_delay_ms, RTOS_DEFAULT_TASK_STACK_SIZE */
+#include "config.h"    /* RTOS_DEFAULT_TASK_STACK_SIZE, RTOS_SCHEDULER_* */
+#include "profiling.h" /* rtos_profile_stat_t, rtos_profiling_*, macros */
+#include "task.h"      /* rtos_task_create, rtos_task_suspend */
+#include "timer.h"     /* rtos_timer_create, rtos_timer_start */
+#include "ulog.h"      /* ulog_info — used by bench_header macro */
 
 #include <stdint.h>
 
@@ -53,12 +52,6 @@ static inline rtos_status_t test_create_startup_timer(void (*callback)(void *, v
         return status;
     }
     return rtos_timer_start(*p_handle);
-}
-
-static inline rtos_status_t test_create_log_flush_task(rtos_task_handle_t *p_handle)
-{
-    ulog_init(ULOG_LEVEL_INFO);
-    return rtos_task_create(log_flush_task, "LogFlush", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, p_handle);
 }
 
 /* ========================= OUTPUT HELPERS ================================== */

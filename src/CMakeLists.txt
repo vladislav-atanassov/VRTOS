@@ -17,6 +17,7 @@ add_library(kartos_kernel STATIC
     ${_K}/core/kernel.c
     ${_K}/core/memory.c
     ${_K}/logging/klog.c
+    ${_K}/logging/log.c
     ${_K}/logging/log_flush_task.c
     ${_K}/logging/ulog.c
     ${_K}/profiling/prof_trace.c

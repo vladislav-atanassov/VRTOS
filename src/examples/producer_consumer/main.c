@@ -1,7 +1,6 @@
 #include "KARTOS.h"
 #include "config.h"
 #include "hardware_env.h"
-#include "log_flush_task.h"
 #include "queue.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
@@ -403,7 +402,7 @@ __attribute__((__noreturn__)) int main(void)
     /* Initialize hardware environment */
     hardware_env_config();
 
-    log_uart_init(LOG_LEVEL_INFO);
+    log_uart_init();
 
     /* Initialize RTOS */
     status = rtos_init();
@@ -411,8 +410,6 @@ __attribute__((__noreturn__)) int main(void)
     {
         indicate_system_failure();
     }
-
-    ulog_init(ULOG_LEVEL_INFO);
 
     ulog_info("====================================");
     ulog_info("  Producer-Consumer Queue Demo");
@@ -476,11 +473,6 @@ __attribute__((__noreturn__)) int main(void)
 
     status =
         rtos_task_create(heartbeat_task, "HEART", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, HEARTBEAT_PRIORITY, &task_handle);
-    if (status != RTOS_SUCCESS)
-        indicate_system_failure();
-
-    /* Create log flush task (lowest priority) */
-    status = rtos_task_create(log_flush_task, "KLOG", KLOG_FLUSH_TASK_STACK_SIZE, NULL, 0, &task_handle);
     if (status != RTOS_SUCCESS)
         indicate_system_failure();
 
