@@ -5,7 +5,6 @@
 #include "hardware_env.h"  /* hardware_env_config, indicate_system_failure */
 #include "task.h"
 #include "test_rand.h"
-#include "uart_tx.h"       /* log_uart_init */
 
 #if RTOS_TEST_HOOKS_ENABLED
 #include "rtos_test_hooks.h"
@@ -65,7 +64,6 @@ int test_runtime_main(const test_suite_t *suite)
     g_runner_suite = suite;
 
     hardware_env_config();
-    log_uart_init();
 
     if (rtos_init() != RTOS_SUCCESS)
     {

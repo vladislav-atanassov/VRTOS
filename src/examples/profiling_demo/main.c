@@ -11,7 +11,6 @@
 #include "profiling.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
-#include "uart_tx.h"
 #include "ulog.h"
 
 /* =================== Tasks =================== */
@@ -71,7 +70,6 @@ int main(void)
     hardware_env_config();
 
     /* Board Drivers */
-    log_uart_init();
 
     rtos_init();
     rtos_profiling_init();

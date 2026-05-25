@@ -1058,9 +1058,11 @@ flush task — only the producer strategy differs.
 - **One `log_level_t` enum** — `LOG_LEVEL_FAULT … LOG_LEVEL_TRACE` (0–5). Both
   backends use this enum; the old `KLOG_LEVEL_*` and `ULOG_LEVEL_*` spellings
   remain as aliases for source compatibility.
-- **`log_init()`** — single entry point called from `rtos_init()`. Initialises
-  whichever backends are enabled via `RTOS_KLOG_ENABLED` / `RTOS_ULOG_ENABLED`.
-  Callers no longer call `klog_init()` / `ulog_init()` directly.
+- **`log_init()`** — single entry point called from `rtos_init()`. Brings up
+  the UART transport (`log_uart_init()`) and initialises whichever backends
+  are enabled via `RTOS_KLOG_ENABLED` / `RTOS_ULOG_ENABLED`. Application code
+  never calls `klog_init()`, `ulog_init()`, or `log_uart_init()` directly —
+  if logging is on in config, `rtos_init()` wires it up end-to-end.
 - **`log_flush_drain()`** — single drain entry point. The auto-created
   `log_flush_task` (`LOG_FLUSH_TASK_STACK_SIZE` bytes, idle priority) wakes
   every 100 ms, processes incoming UART commands, then calls

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "hardware_env.h"
 #include "task.h"
+#include "ulog.h"
 
 #define BLINK_TASK_PRIORITY   (1U)
 #define PRINT_B_TASK_PRIORITY (2U)
@@ -19,17 +20,6 @@ static void busy_wait(void)
     }
 }
 
-static void blink_task(void *param)
-{
-    (void) param;
-
-    while (1)
-    {
-        led_toggle();
-        rtos_delay_ms(BLINK_DELAY_MS);
-    }
-}
-
 static void print_a_task(void *param)
 {
     (void) param;
@@ -37,6 +27,7 @@ static void print_a_task(void *param)
     while (1)
     {
         busy_wait();
+        ulog_info("PRINT | X");
         rtos_delay_ms(PRINT_DELAY_MS);
     }
 }
@@ -48,6 +39,7 @@ static void print_b_task(void *param)
     while (1)
     {
         busy_wait();
+        ulog_info("PRINT | O");
         rtos_delay_ms(PRINT_DELAY_MS);
     }
 }
@@ -55,9 +47,8 @@ static void print_b_task(void *param)
 __attribute__((__noreturn__)) int main(void)
 {
     rtos_status_t      status;
-    rtos_task_handle_t blink_task_handle;
-    rtos_task_handle_t print_a_task_handle;
-    rtos_task_handle_t print_b_task_handle;
+    rtos_task_handle_t print_x_task_handle;
+    rtos_task_handle_t print_o_task_handle;
 
     hardware_env_config();
 
@@ -67,22 +58,15 @@ __attribute__((__noreturn__)) int main(void)
         indicate_system_failure();
     }
 
-    status = rtos_task_create(blink_task, "BLINK", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, BLINK_TASK_PRIORITY,
-                              &blink_task_handle);
+    status = rtos_task_create(print_a_task, "PRINT_X", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, PRINT_A_TASK_PRIORITY,
+                              &print_x_task_handle);
     if (status != RTOS_SUCCESS)
     {
         indicate_system_failure();
     }
 
-    status = rtos_task_create(print_a_task, "PRINT_A", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, PRINT_A_TASK_PRIORITY,
-                              &print_a_task_handle);
-    if (status != RTOS_SUCCESS)
-    {
-        indicate_system_failure();
-    }
-
-    status = rtos_task_create(print_b_task, "PRINT_B", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, PRINT_B_TASK_PRIORITY,
-                              &print_b_task_handle);
+    status = rtos_task_create(print_b_task, "PRINT_O", RTOS_DEFAULT_TASK_STACK_SIZE, NULL, PRINT_B_TASK_PRIORITY,
+                              &print_o_task_handle);
     if (status != RTOS_SUCCESS)
     {
         indicate_system_failure();

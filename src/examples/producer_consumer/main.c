@@ -4,7 +4,6 @@
 #include "queue.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
-#include "uart_tx.h"
 #include "ulog.h"
 
 #include <stdio.h>
@@ -401,8 +400,6 @@ __attribute__((__noreturn__)) int main(void)
 
     /* Initialize hardware environment */
     hardware_env_config();
-
-    log_uart_init();
 
     /* Initialize RTOS */
     status = rtos_init();

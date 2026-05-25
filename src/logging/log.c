@@ -1,6 +1,7 @@
 #include "log.h"
 
 #include "config.h"
+#include "uart_tx.h"
 
 #if RTOS_KLOG_ENABLED
 extern void klog_backend_init(void);
@@ -14,6 +15,8 @@ extern void ulog_drain_and_emit(void);
 
 void log_init(void)
 {
+    log_uart_init();
+
 #if RTOS_KLOG_ENABLED
     klog_backend_init();
 #endif

@@ -3,7 +3,6 @@
 #include "hardware_env.h"
 #include "stm32f4xx_hal.h" // IWYU pragma: keep
 #include "task.h"
-#include "uart_tx.h"
 #include "ulog.h"
 
 /*
@@ -175,7 +174,6 @@ __attribute__((__noreturn__)) int main(void)
     rtos_task_handle_t task_handle;
 
     hardware_env_config();
-    log_uart_init();
 
     status = rtos_init();
     if (status != RTOS_SUCCESS)

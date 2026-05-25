@@ -53,7 +53,6 @@
 #include "profiling.h"
 #include "semaphore.h"
 #include "stm32f4xx_hal.h" /* IWYU pragma: keep */
-#include "uart_tx.h"
 #include "ulog.h"
 
 /* ========================= SYNCHRONIZATION ================================ */
@@ -190,7 +189,6 @@ static void startup_cb(void *timer_handle, void *param)
 int main(void)
 {
     hardware_env_config();
-    log_uart_init();
 
     rtos_init();
     rtos_profiling_init();
