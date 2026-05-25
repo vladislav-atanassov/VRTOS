@@ -396,12 +396,14 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     SysTick->LOAD = reload_value;
     SysTick->VAL  = 0;
     SysTick->CTRL = systick_ctrl_running;
+    __DSB();
 
     __asm volatile("wfi");
 
     /* Snapshot CTRL (reading clears COUNTFLAG), then stop SysTick to read VAL safely. */
     uint32_t ctrl = SysTick->CTRL;
     SysTick->CTRL = systick_ctrl_stopped;
+    __DSB();
 
     uint32_t val = SysTick->VAL;
 
@@ -425,6 +427,8 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     SysTick->LOAD = cycles_per_tick - 1;
     SysTick->VAL  = 0;
     SysTick->CTRL = systick_ctrl_running;
+    __DSB();
+    __ISB();
 
     __enable_irq();
 }
