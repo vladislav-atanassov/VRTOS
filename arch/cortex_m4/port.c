@@ -399,25 +399,31 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     __DSB();
 
     __asm volatile("wfi");
-
-    /* Snapshot CTRL (reading clears COUNTFLAG), then stop SysTick to read VAL safely. */
-    uint32_t ctrl = SysTick->CTRL;
+    __ISB();
     SysTick->CTRL = systick_ctrl_stopped;
     __DSB();
+    __ISB();
 
-    uint32_t val = SysTick->VAL;
+    uint32_t ctrl = SysTick->CTRL;
+    uint32_t val  = SysTick->VAL;
 
     if ((ctrl & SysTick_CTRL_COUNTFLAG_Msk) != 0)
     {
+        /* Counter hit zero during WFI: a full programmed sleep elapsed. */
         complete_tick_periods = sleep_ticks;
     }
     else
     {
+        /* Woke early: count only the whole tick periods that elapsed. */
         uint32_t cycles_slept = reload_value - val;
         complete_tick_periods = cycles_slept / cycles_per_tick;
     }
 
-    /* Step the OS tick */
+    if (complete_tick_periods > sleep_ticks)
+    {
+        complete_tick_periods = sleep_ticks;
+    }
+
     if (complete_tick_periods > 0)
     {
         rtos_kernel_step_tick(complete_tick_periods);
