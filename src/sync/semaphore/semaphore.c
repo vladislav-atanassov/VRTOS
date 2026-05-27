@@ -163,18 +163,12 @@ rtos_sem_status_t rtos_semaphore_wait(rtos_semaphore_t *sem, rtos_tick_t timeout
 
     KLOGD("Semaphore", "SemBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_SEM_MAX_WAIT)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        /* Timed wait - use kernel block with delay */
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the wait-list insert above: a signal racing us
+     * can never observe us listed-but-RUNNING and drop the wake. delay 0 =
+     * infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_SEM_MAX_WAIT) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 

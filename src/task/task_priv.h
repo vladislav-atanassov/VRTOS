@@ -34,6 +34,7 @@ typedef struct rtos_task_control_block
     /* Scheduling */
     rtos_tick_t delay_until;          /**< Tick count until task ready */
     rtos_tick_t time_slice_remaining; /**< Remaining time slice */
+    uint8_t     delay_is_timeout;     /**< 1 = delay_until is a finite sync-wait timeout (re-armed by resume) */
 
     /* List management */
     struct rtos_task_control_block *next; /**< Next task in list */
@@ -80,6 +81,9 @@ void               rtos_task_debug_print_all(void);
 /* Kernel helper functions for task state transitions */
 void rtos_kernel_task_ready(rtos_task_handle_t task);
 void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks);
+/* Caller MUST already hold the critical section; does not yield. See the
+ * definition in kernel.c for the atomicity contract sync primitives rely on. */
+void rtos_kernel_task_block_locked(rtos_task_handle_t task, rtos_tick_t delay_ticks);
 void rtos_kernel_task_unblock(rtos_task_handle_t task);
 
 /* Sync-object wait-list removal helpers — called by rtos_task_delete() */

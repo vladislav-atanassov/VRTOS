@@ -286,18 +286,12 @@ rtos_status_t rtos_queue_send(rtos_queue_handle_t queue_handle, const void *item
 
     KLOGD("Queue", "QueueSendBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_MAX_DELAY)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        /* Timed wait */
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the sender_wait_list insert above: a receiver
+     * racing us can never see us listed-but-RUNNING and drop the wake.
+     * delay 0 = infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_MAX_DELAY) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 
@@ -386,18 +380,12 @@ rtos_status_t rtos_queue_receive(rtos_queue_handle_t queue_handle, void *buffer,
 
     KLOGD("Queue", "QueueRecvBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_MAX_DELAY)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        /* Timed wait */
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the receiver_wait_list insert above: a sender
+     * racing us can never see us listed-but-RUNNING and drop the wake.
+     * delay 0 = infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_MAX_DELAY) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 

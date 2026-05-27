@@ -87,6 +87,7 @@ static rtos_status_t task_create_common(rtos_task_function_t task_function, cons
     new_task->stack_top            = stack_top;
     new_task->stack_is_static      = stack_is_static ? 1U : 0U;
     new_task->delay_until          = 0;
+    new_task->delay_is_timeout     = 0U;
     new_task->time_slice_remaining = RTOS_TIME_SLICE_TICKS;
 
     new_task->next            = NULL;
@@ -468,6 +469,20 @@ rtos_status_t rtos_task_resume(rtos_task_handle_t task_handle)
     if (task_handle->blocked_on != NULL)
     {
         task_handle->state = RTOS_TASK_STATE_BLOCKED;
+
+        /* If the task was sleeping on a finite sync-wait timeout, suspend
+         * pulled it off the delayed list. Re-arm it for the time remaining
+         * to its original deadline so the wait can still time out instead
+         * of blocking forever. delay_until survived the suspend; clamp the
+         * remaining ticks to >= 1 (a deadline already in the past times out
+         * on the next tick). */
+        if (task_handle->delay_is_timeout)
+        {
+            int32_t     remaining = (int32_t) (task_handle->delay_until - rtos_get_tick_count());
+            rtos_tick_t delay     = (remaining > 0) ? (rtos_tick_t) remaining : 1U;
+            rtos_scheduler_add_to_delayed_list(task_handle, delay);
+        }
+
         rtos_port_exit_critical();
         return RTOS_SUCCESS;
     }

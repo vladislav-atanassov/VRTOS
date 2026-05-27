@@ -212,17 +212,12 @@ rtos_eg_status_t rtos_event_group_wait_bits(rtos_event_group_t *eg, uint32_t bit
 
     KLOGD("EventGrp", "EgBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_EG_MAX_WAIT)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the wait-list insert above: a bit-set racing us
+     * can never see us listed-but-RUNNING and drop the wake. delay 0 =
+     * infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_EG_MAX_WAIT) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 

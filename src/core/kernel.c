@@ -21,6 +21,11 @@ rtos_kernel_cb_t g_kernel = {.state               = RTOS_KERNEL_STATE_INACTIVE,
                              .scheduler_suspended = 0,
                              .yield_pending       = false};
 
+#if RTOS_TEST_HOOKS_ENABLED
+volatile kernel_pre_block_cb_t g_kernel_test_pre_block_cb   = NULL;
+void                          *g_kernel_test_pre_block_user = NULL;
+#endif
+
 /* Scheduler choice for this binary, supplied by a per-variant TU generated
  * by add_kartos_variant() (cmake/kartos_add_variant.cmake). Each ELF gets
  * exactly one definition; missing it is a link-time error. */
@@ -495,11 +500,15 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
 void rtos_scheduler_suspend(void)
 {
     rtos_port_enter_critical();
-    /* uint8_t overflow at 256 would silently re-enable the scheduler. The
-     * cap is far beyond any sane nesting depth, so trip an assert instead
-     * of letting the count wrap. */
+    /* uint8_t overflow at 256 would silently re-enable the scheduler. Trip an
+     * assert to catch the offending caller, but also clamp: with asserts
+     * compiled out (RTOS_ASSERT_ENABLED=0) the assert is a no-op, and a wrap
+     * to 0 mid-critical-region would be far worse than a saturated count. */
     RTOS_ASSERT(g_kernel.scheduler_suspended < 0xFFU);
-    g_kernel.scheduler_suspended++;
+    if (g_kernel.scheduler_suspended < 0xFFU)
+    {
+        g_kernel.scheduler_suspended++;
+    }
     rtos_port_exit_critical();
 }
 
@@ -509,7 +518,16 @@ bool rtos_scheduler_resume(void)
 
     rtos_port_enter_critical();
 
+    /* An unbalanced resume (no matching suspend) must not wrap the count to
+     * 255 — that would defer every context switch for the next 255 paired
+     * suspends. Assert to catch the bug; clamp so a release build with
+     * asserts off degrades to a no-op instead of wedging the scheduler. */
     RTOS_ASSERT(g_kernel.scheduler_suspended > 0U);
+    if (g_kernel.scheduler_suspended == 0U)
+    {
+        rtos_port_exit_critical();
+        return fired;
+    }
     g_kernel.scheduler_suspended--;
 
     if (g_kernel.scheduler_suspended == 0U && g_kernel.yield_pending)
@@ -525,19 +543,26 @@ bool rtos_scheduler_resume(void)
     return fired;
 }
 
-/* delay_ticks = 0 means indefinite block (no delayed-list entry) */
-void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
+/* delay_ticks = 0 means indefinite block (no delayed-list entry).
+ *
+ * Caller MUST hold the critical section. Does NOT yield — the caller
+ * releases the critical section and yields if `task` is the current task.
+ *
+ * Sync primitives call this WHILE STILL HOLDING the critical section in
+ * which they inserted `task` into a wait list. Keeping the wait-list insert
+ * and the RUNNING→BLOCKED transition inside one critical section is what
+ * closes the wake-loss race: a producer (signal/unlock/send/notify) can
+ * never observe `task` on a wait list while it is still RUNNING, so its
+ * rtos_kernel_task_unblock() always sees state==BLOCKED and takes effect. */
+void rtos_kernel_task_block_locked(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 {
     if (task == NULL)
     {
         return;
     }
 
-    rtos_port_enter_critical();
-
     if (!rtos_kernel_validate_transition(task, RTOS_TASK_STATE_BLOCKED))
     {
-        rtos_port_exit_critical();
         return;
     }
 
@@ -559,6 +584,11 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
         _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_BLOCKED;
     });
 
+    /* Record whether this block carries a finite timeout so that a
+     * suspend/resume round-trip can re-arm it: suspend pulls the task off
+     * the delayed list, and resume needs to know it must put it back. */
+    task->delay_is_timeout = (delay_ticks > 0) ? 1U : 0U;
+
     if (delay_ticks > 0)
     {
         rtos_scheduler_add_to_delayed_list(task, delay_ticks);
@@ -566,14 +596,37 @@ void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
 
     KLOGT("Kernel", "TaskBlock name=%s delay=%u", (uint32_t) task->name, (uint32_t) delay_ticks);
 
-    if (task == g_kernel.current_task)
+#if RTOS_TEST_HOOKS_ENABLED
+    /* One-shot synchronous test interception fired AFTER the task is fully
+     * committed to BLOCKED (state set, delayed-list entry in place) but
+     * before the caller releases the critical section. Models a producer
+     * delivering a wake at the realistic post-commit point. Snapshot+clear
+     * first so the producer path the callback invokes cannot re-arm it. */
+    kernel_pre_block_cb_t cb = g_kernel_test_pre_block_cb;
+    if (cb != NULL)
     {
-        rtos_port_exit_critical();
-        rtos_yield();
+        g_kernel_test_pre_block_cb = NULL;
+        cb(task, delay_ticks, g_kernel_test_pre_block_user);
+    }
+#endif
+}
+
+void rtos_kernel_task_block(rtos_task_handle_t task, rtos_tick_t delay_ticks)
+{
+    if (task == NULL)
+    {
         return;
     }
 
+    rtos_port_enter_critical();
+    rtos_kernel_task_block_locked(task, delay_ticks);
+    bool yield_self = (task == g_kernel.current_task && task->state == RTOS_TASK_STATE_BLOCKED);
     rtos_port_exit_critical();
+
+    if (yield_self)
+    {
+        rtos_yield();
+    }
 }
 
 /* Shared inner unblock body. Caller MUST hold a critical section */

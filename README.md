@@ -249,25 +249,31 @@ timestamp_ms    level   file    line    func    event   context
 
 ## Performance (STM32F446RE @ 84 MHz)
 
-Measured on hardware via the automated benchmark suite (`bench_*` variants):
+Measured on hardware via the automated benchmark suite (`bench_*` variants),
+with kernel tooling tuned down to a production-style baseline:
+`KARTOS_TEST_HOOKS=OFF`, `RTOS_ASSERT_ENABLED=0`,
+`RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH=0`, `RTOS_CONFIG_USE_TICKLESS_IDLE=0`,
+and `RTOS_KLOG_MIN_LEVEL=0` (FAULT-only). System-profiling stats stay enabled
+because the benchmarks read them.
 
 | Primitive | Operation | Min | Max | Avg | Description |
 | --- | --- | --- | --- | --- | --- |
-| **Context Switch** | Yield → restore | 713 cyc (8 µs) | 851 cyc (10 µs) | 781 cyc (9 µs) | Task yield to task restore (2002 switches) |
-| **Mutex** | Uncontended | 468 cyc (5 µs) | 468 cyc (5 µs) | 468 cyc (5 µs) | Fast-path lock/unlock |
-| **Mutex** | Contended wake | 2258 cyc (26 µs) | 3269 cyc (38 µs) | 2278 cyc (27 µs) | Unlock-to-wake latency with PIP |
-| **Semaphore** | Uncontended | 342 cyc (4 µs) | 342 cyc (4 µs) | 342 cyc (4 µs) | Fast-path take/give |
-| **Semaphore** | Wake latency | 2060 cyc (24 µs) | 2060 cyc (24 µs) | 2060 cyc (24 µs) | Signal-to-wake latency |
-| **Queue** | Delivery | 2368 cyc (28 µs) | 4538 cyc (54 µs) | 2402 cyc (28 µs) | Send to blocked receiver |
+| **Context Switch** | Yield → restore | 639 cyc (7 µs) | 775 cyc (9 µs) | 705 cyc (8 µs) | Full `rtos_kernel_switch_context()` over 2002 switches |
+| **Mutex** | Uncontended | 346 cyc (4 µs) | 346 cyc (4 µs) | 346 cyc (4 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended wake | 1951 cyc (23 µs) | 2886 cyc (34 µs) | 1969 cyc (23 µs) | Unlock-to-wake latency with PIP |
+| **Semaphore** | Uncontended | 269 cyc (3 µs) | 269 cyc (3 µs) | 269 cyc (3 µs) | Fast-path take/give |
+| **Semaphore** | Wake latency | 1872 cyc (22 µs) | 1872 cyc (22 µs) | 1872 cyc (22 µs) | Signal-to-wake latency |
+| **Queue** | Delivery | 2131 cyc (25 µs) | 3067 cyc (36 µs) | 2152 cyc (25 µs) | Send to blocked receiver |
 
 Numbers are µs-rounded from cycle counts at 84 MHz (1 µs ≈ 84 cyc). The
-context-switch path is slightly heavier than a stripped-down RTOS because
-each switch now also runs the stack-canary check
-(`RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH`), the scheduler-suspend gate, and
-the application stack-overflow hook on canary mismatch. Mutex lock adds a
-wait-for-graph cycle check that prevents `RTOS_MUTEX_ERR_DEADLOCK` from
-turning into a hang. Disable any of these via the corresponding config knob
-if you need the cycles back.
+context-switch path still runs the scheduler-suspend gate and the standard
+priority bookkeeping; with the bench config the per-switch stack-canary check
+(`RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH`) is off, so the application
+stack-overflow hook only fires on demand via `rtos_task_check_stack()`. Mutex
+lock still walks the wait-for graph to prevent `RTOS_MUTEX_ERR_DEADLOCK` from
+turning into a hang. Re-enable any of the debug knobs above if you want the
+production-debug numbers instead — expect roughly +10% on the context-switch
+path and +30% on the uncontended fast paths once asserts come back.
 
 ## Scheduling Policies
 

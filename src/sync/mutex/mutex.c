@@ -325,17 +325,13 @@ rtos_mutex_status_t rtos_mutex_lock(rtos_mutex_t *m, rtos_tick_t timeout_ticks)
 
     KLOGD("Mutex", "MutexBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_MAX_WAIT)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the wait-list insert above: state→BLOCKED (plus
+     * the timeout entry for finite waits) happens in this same critical
+     * section, so an unlock racing us can never see us listed-but-RUNNING and
+     * drop our wake. delay 0 = infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_MAX_WAIT) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 

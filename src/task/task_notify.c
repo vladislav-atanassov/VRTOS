@@ -161,18 +161,12 @@ rtos_notify_status_t rtos_task_notify_wait(uint32_t entry_clear_bits, uint32_t e
 
     KLOGD("Notify", "NotifyBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the self-sentinel set above: a notify racing us
+     * can never see the sentinel while we are still RUNNING and drop the
+     * wake. delay 0 = infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_NOTIFY_MAX_WAIT) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 
@@ -239,18 +233,12 @@ rtos_notify_status_t rtos_task_notify_take(bool clear_on_exit, rtos_tick_t timeo
 
     KLOGD("Notify", "NotifyBlock id=%u timeout=%u", current_task->task_id, (uint32_t) timeout_ticks);
 
-    if (timeout_ticks == RTOS_NOTIFY_MAX_WAIT)
-    {
-        current_task->state = RTOS_TASK_STATE_BLOCKED;
-        rtos_scheduler_remove_from_ready_list(current_task);
-        rtos_port_exit_critical();
-        rtos_yield();
-    }
-    else
-    {
-        rtos_port_exit_critical();
-        rtos_kernel_task_block(current_task, timeout_ticks);
-    }
+    /* Block atomically with the self-sentinel set above: a notify racing us
+     * can never see the sentinel while we are still RUNNING and drop the
+     * wake. delay 0 = infinite block. */
+    rtos_kernel_task_block_locked(current_task, (timeout_ticks == RTOS_NOTIFY_MAX_WAIT) ? 0U : timeout_ticks);
+    rtos_port_exit_critical();
+    rtos_yield();
 
     /* --- Task resumes here after unblock or timeout --- */
 

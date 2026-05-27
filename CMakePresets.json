@@ -63,6 +63,7 @@
     { "name": "test_scheduler_suspend_suite",       "configurePreset": "stm32f446re_nucleo", "targets": ["test_scheduler_suspend_suite"] },
     { "name": "test_isr_safe_suite",                "configurePreset": "stm32f446re_nucleo", "targets": ["test_isr_safe_suite"] },
     { "name": "test_timer_task_suite",              "configurePreset": "stm32f446re_nucleo", "targets": ["test_timer_task_suite"] },
+    { "name": "test_kernel_invariants_suite",       "configurePreset": "stm32f446re_nucleo", "targets": ["test_kernel_invariants_suite"] },
 
     { "name": "bench_context_switch",          "configurePreset": "stm32f446re_nucleo", "targets": ["bench_context_switch"] },
     { "name": "bench_mutex",                   "configurePreset": "stm32f446re_nucleo", "targets": ["bench_mutex"] },
@@ -90,6 +91,7 @@
     { "name": "flash-test_scheduler_suspend_suite",     "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_scheduler_suspend_suite"] },
     { "name": "flash-test_isr_safe_suite",              "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_isr_safe_suite"] },
     { "name": "flash-test_timer_task_suite",            "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_timer_task_suite"] },
+    { "name": "flash-test_kernel_invariants_suite",     "configurePreset": "stm32f446re_nucleo", "targets": ["flash-test_kernel_invariants_suite"] },
 
     { "name": "flash-bench_context_switch",    "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_context_switch"] },
     { "name": "flash-bench_mutex",             "configurePreset": "stm32f446re_nucleo", "targets": ["flash-bench_mutex"] },
