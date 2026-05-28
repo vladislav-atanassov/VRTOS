@@ -158,6 +158,7 @@ kartos test -e test_scheduler_rr_suite --duration 10
 **Examples**:
 
 - `basic_blinky` - Simple LED blinking demonstration
+- `schedulers_demo` - Three tasks at distinct priorities (blink + two busy-wait printers) to observe scheduler behavior
 - `producer_consumer` - Queue-based sensor data processing
 - `profiling_demo` - Cycle counter profiling example
 - `fpu_context_test` - FPU context preservation verification
@@ -182,6 +183,7 @@ kartos test -e test_scheduler_rr_suite --duration 10
 - `test_scheduler_suspend_suite` - `rtos_scheduler_suspend()` / `rtos_scheduler_resume()` counter mechanics, tick advance during suspend, delayed-wake landing on the ready list, yield-under-suspend is a no-op
 - `test_isr_safe_suite` - `_from_isr` wake paths for semaphore / queue (send + receive) / task notify (notify + give); a 1-tick one-shot timer is the deterministic ISR source
 - `test_timer_task_suite` - Optional software timer service task (`rtos_timer_task_init()`): auto-reload in task context, callback acquiring a contended mutex, long-running callback does not stall SysTick
+- `test_kernel_invariants_suite` - Kernel-level regression tests under adversarial conditions: wake-during-block-gap race (semaphore + notify) and suspend/resume timeout preservation
 
 **Benchmarks**:
 
@@ -207,7 +209,6 @@ The `--board` flag (or the `KARTOS_BOARD` environment variable, or a `.kartosrc`
 | `build` | `-e VARIANT` | CMake build for a named variant |
 | `upload` | `-e VARIANT` | Build + OpenOCD flash |
 | `monitor` | `-p PORT`, `-b BAUD` | Live serial monitor (Ctrl+C to quit) |
-| `upload-monitor` | `-e VARIANT`, `-p PORT`, `-b BAUD` | Attach monitor first, then flash — catches boot output of fast-completing firmware |
 | `test` | `-e VARIANT`, `--duration SEC`, `--skip-upload`, `--skip-analysis` | Flash, capture serial, parse, and emit a pass/fail verdict |
 | `test-all` | `--pattern GLOB`, `--duration SEC`, `--skip-host`, `--skip-board` | Run host tests + every on-board `test_*_suite`; aggregated verdict |
 | `host-test` | `--reconfigure`, `-v` | Build and run the pure-logic host unit tests (Unity + FFF) |
@@ -779,7 +780,9 @@ KARTOS/
 │   ├── core/              # Kernel core
 │   │   ├── kernel.c       # Kernel init, tick handler, scheduler suspend/resume, task unblock (task + ISR)
 │   │   ├── hooks.c        # Weak default no-op application hooks
-│   │   └── memory.c       # Bi-directional dual-ended heap allocator
+│   │   ├── memory.c       # Bi-directional dual-ended heap allocator
+│   │   ├── test_hooks.c   # KARTOS_TEST_HOOKS kernel event fire sites (built only with -DKARTOS_TEST_HOOKS=ON)
+│   │   └── test_hooks_priv.h # Private test-hook payload/ring definitions
 │   ├── scheduler/         # Scheduler implementations
 │   │   ├── scheduler.c    # Scheduler manager
 │   │   └── scheduler_types/
@@ -811,9 +814,11 @@ KARTOS/
 │   │   └── prof_trace.c/h # Profiling trace ring buffer
 │   ├── utils/             # Shared utilities
 │   │   ├── ring_buffer.c/h  # General-purpose ring buffer
-│   │   └── rtos_assert.c/h  # Assertions
+│   │   ├── rtos_assert.c/h  # Assertions
+│   │   └── utils.h          # Alignment macros (ALIGN_UP / ALIGN_DOWN family)
 │   └── examples/          # Example applications
 │       ├── basic_blinky/
+│       ├── schedulers_demo/
 │       ├── producer_consumer/
 │       ├── profiling_demo/
 │       └── fpu_context_test/
@@ -832,6 +837,7 @@ KARTOS/
 │   │   ├── test_scheduler_suspend_suite.c
 │   │   ├── test_isr_safe_suite.c
 │   │   ├── test_timer_task_suite.c
+│   │   ├── test_kernel_invariants_suite.c
 │   │   ├── test_scheduler_cooperative_suite.c
 │   │   ├── test_scheduler_rr_suite.c
 │   │   └── test_scheduler_preemptive_suite.c
@@ -847,7 +853,8 @@ KARTOS/
 │   └── porting_guide.md   # How to add a new chip/architecture
 ├── tools/
 │   └── kartos/            # KARTOS CLI — invoke as: python -m kartos <subcommand>
-│       └── __main__.py    # build, upload, monitor, test, configure, list, clean
+│       ├── __init__.py    # Package marker
+│       └── __main__.py    # build, upload, monitor, test, test-all, host-test, configure, verbosity, list, clean
 ├── CMakeLists.txt         # Root build file
 ├── CMakePresets.json      # Configure + build presets for all boards/variants
 ├── pyproject.toml         # Python package config for the kartos CLI (pip install -e . from repo root)
