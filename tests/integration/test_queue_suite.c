@@ -1,9 +1,11 @@
 /**
  * @file test_queue_suite.c
- * @brief Queue test suite — 5 focused cases replacing test_queue_state.c.
+ * @brief Queue test suite — state, ordering, hook observability, and
+ *        delete-safety (use-after-free regression) cases.
  *
  * Invariant prefix: INV-Q-
- * Queue is created once in setup() and reset in before() to reuse heap memory.
+ * The shared queue is created once in setup() and reset in before() to reuse
+ * heap memory; the delete-safety case uses its own short-lived dynamic queue.
  * Build with RTOS_MAX_TASKS=24.
  */
 
@@ -48,6 +50,14 @@ static volatile rtos_task_handle_t g_observed_caller;
 static int                         g_hook_id;
 #endif
 
+/* Delete-safety case: its own short-lived dynamic queue (not g_q, which is
+ * reused across cases), plus the blocked sender's recorded outcome. */
+static rtos_queue_handle_t g_del_queue;
+static rtos_task_handle_t  g_del_sender;
+static test_signal_t       g_del_done;
+static volatile int        g_del_status;
+static volatile bool       g_del_returned;
+
 /* ── Lifecycle ───────────────────────────────────────────────────────────── */
 
 static void queue_setup(void)
@@ -72,6 +82,11 @@ static void queue_before(void)
     g_observed_caller  = NULL;
     g_hook_id          = -1;
 #endif
+    test_signal_init(&g_del_done);
+    g_del_queue    = NULL;
+    g_del_sender   = NULL;
+    g_del_status   = -1;
+    g_del_returned = false;
 }
 
 /* ── Task bodies ─────────────────────────────────────────────────────────── */
@@ -213,6 +228,77 @@ TEST_CASE(queue, count_stays_in_bounds)
         TEST_EXPECT(rtos_queue_messages_waiting(g_q) <= Q_CAPACITY,
                     "INV-Q-COUNT");
     }
+}
+
+/* ── Case: delete_refused_while_waiter_blocked ───────────────────────────── */
+/*
+ * rtos_queue_delete() must REFUSE (RTOS_ERROR_BUSY) while a task is blocked on
+ * the queue, instead of freeing the buffer/control block out from under it.
+ * The old code woke the waiter and freed the storage; the waiter then resumed
+ * on a dangling handle and could memcpy into freed (and possibly reclaimed)
+ * memory — a use-after-free. A low-priority sender blocks on a full queue;
+ * delete must be refused, the queue must remain fully usable, and once the
+ * waiter is gone delete must succeed.
+ */
+static void task_delete_sender(void *_)
+{
+    (void) _;
+    uint32_t item = 0xCAFEF00DU;
+    /* Finite timeout so the task can never wedge the suite; long enough that it
+     * blocks (not times out) before the runner makes room. */
+    g_del_status   = (int) rtos_queue_send(g_del_queue, &item, 500U /* ticks */);
+    g_del_returned = true;
+    test_signal_post(&g_del_done);
+    rtos_task_delete(NULL);
+}
+
+TEST_CASE(queue, delete_refused_while_waiter_blocked)
+{
+    TEST_INV_DECLARE("INV-Q-DELETE-BUSY",   1);
+    TEST_INV_DECLARE("INV-Q-DELETE-ALIVE",  2);
+    TEST_INV_DECLARE("INV-Q-DELETE-SENDER", 2);
+
+    /* Own dynamic queue, filled so the next sender must block. */
+    TEST_ASSERT(rtos_queue_create(&g_del_queue, 2U, sizeof(uint32_t)) == RTOS_SUCCESS,
+                "INV-Q-DELETE-BUSY");
+    for (uint32_t i = 0U; i < 2U; i++)
+    {
+        TEST_ASSERT(rtos_queue_send(g_del_queue, &i, 0U) == RTOS_SUCCESS,
+                    "INV-Q-DELETE-BUSY");
+    }
+
+    TEST_ASSERT(rtos_task_create(task_delete_sender, "TQDel", STK, NULL,
+                                 PRIO_LOW, &g_del_sender) == RTOS_SUCCESS,
+                "INV-Q-DELETE-BUSY");
+
+    TEST_AWAIT_PHASE("del-sender-blocking", 100, {
+        while (rtos_task_get_state(g_del_sender) != RTOS_TASK_STATE_BLOCKED && !g_test_aborted)
+        {
+            rtos_delay_ticks(1U);
+        }
+    });
+    TEST_ASSERT(rtos_task_get_state(g_del_sender) == RTOS_TASK_STATE_BLOCKED,
+                "INV-Q-DELETE-BUSY");
+
+    /* Hard assert: the old code returned RTOS_SUCCESS here (freeing the live
+     * queue), so the case aborts cleanly before touching the freed memory. */
+    TEST_ASSERT(rtos_queue_delete(g_del_queue) == RTOS_ERROR_BUSY,
+                "INV-Q-DELETE-BUSY");
+
+    /* Queue still alive: making room wakes the blocked sender, which completes. */
+    uint32_t item = 0U;
+    TEST_EXPECT(rtos_queue_receive(g_del_queue, &item, 0U) == RTOS_SUCCESS,
+                "INV-Q-DELETE-ALIVE");
+
+    TEST_AWAIT_PHASE("del-sender-completes", 300, {
+        test_signal_wait(&g_del_done, 300U);
+    });
+    TEST_EXPECT(g_del_returned, "INV-Q-DELETE-SENDER");
+    TEST_EXPECT(g_del_status == (int) RTOS_SUCCESS, "INV-Q-DELETE-SENDER");
+
+    /* No waiters left → delete now succeeds and frees the storage. */
+    TEST_EXPECT(rtos_queue_delete(g_del_queue) == RTOS_SUCCESS, "INV-Q-DELETE-ALIVE");
+    g_del_queue = NULL;
 }
 
 /* ── Case 6: full_send_fires_block_hook ──────────────────────────────────── */
@@ -482,6 +568,7 @@ static const test_case_t *const g_q_cases[] = {
     &TEST_CASE_REF(queue, fifo_ordering),
     &TEST_CASE_REF(queue, nonblocking_full_returns_error),
     &TEST_CASE_REF(queue, count_stays_in_bounds),
+    &TEST_CASE_REF(queue, delete_refused_while_waiter_blocked),
     &TEST_CASE_REF(queue, full_send_fires_block_hook),
     &TEST_CASE_REF(queue, send_fires_send_hook),
     &TEST_CASE_REF(queue, receive_fires_receive_hook),

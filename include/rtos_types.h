@@ -22,7 +22,8 @@ typedef enum
     RTOS_ERROR_EMPTY,
     RTOS_ERROR_GENERAL,
     RTOS_ERROR_DEADLOCK,
-    RTOS_ERROR_RECURSION
+    RTOS_ERROR_RECURSION,
+    RTOS_ERROR_BUSY
 } rtos_status_t;
 
 #define RTOS_MAX_DELAY ((rtos_tick_t) - 1)

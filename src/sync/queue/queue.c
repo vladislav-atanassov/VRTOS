@@ -174,25 +174,12 @@ rtos_status_t rtos_queue_delete(rtos_queue_handle_t queue_handle)
 
     rtos_port_enter_critical();
 
-    /* Wake every waiter so no task is left blocked on a dead queue.
-     * blocked_on is cleared by the pop helper; the woken task will observe
-     * the queue's count/length as it was at wake time. Callers using
-     * rtos_queue_delete() must ensure no producer/consumer is mid-call. */
-    while (queue->sender_wait_list != NULL)
+    /* Refuse to delete while any task is blocked on the queue. */
+    if (queue->sender_wait_list != NULL || queue->receiver_wait_list != NULL)
     {
-        rtos_tcb_t *sender = queue_pop_highest_priority_waiter(&queue->sender_wait_list);
-        if (sender != NULL)
-        {
-            rtos_kernel_task_unblock(sender);
-        }
-    }
-    while (queue->receiver_wait_list != NULL)
-    {
-        rtos_tcb_t *receiver = queue_pop_highest_priority_waiter(&queue->receiver_wait_list);
-        if (receiver != NULL)
-        {
-            rtos_kernel_task_unblock(receiver);
-        }
+        rtos_port_exit_critical();
+        KLOGE("Queue", "QueueDeleteBusy");
+        return RTOS_ERROR_BUSY;
     }
 
     bool free_buffer = !queue->buffer_is_static;

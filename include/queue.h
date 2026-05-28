@@ -50,11 +50,15 @@ rtos_status_t rtos_queue_create_static(rtos_queue_t *queue_buffer, void *item_st
 
 /**
  * @brief Delete a queue, freeing heap storage if it was created dynamically.
- *        Wakes all waiting senders and receivers with their current operation
- *        aborted (they will observe the queue having been invalidated via
- *        timeout-like behaviour). The handle is invalid after this call.
+ *        Refuses with RTOS_ERROR_BUSY if any task is currently blocked on the queue
+ *        (sending or receiving) and frees nothing in that case — a blocked waiter
+ *        holds a handle it would dereference on wake, so freeing underneath it is a
+ *        use-after-free. The caller must ensure no task is blocked on the queue
+ *        before deleting (drain items / unblock waiters first). On success the handle
+ *        is invalid after this call.
  * @param queue_handle Handle of the queue to delete.
- * @return RTOS_SUCCESS or an error code.
+ * @return RTOS_SUCCESS on deletion, RTOS_ERROR_BUSY if waiters are blocked,
+ *         or RTOS_ERROR_INVALID_PARAM.
  */
 rtos_status_t rtos_queue_delete(rtos_queue_handle_t queue_handle);
 
