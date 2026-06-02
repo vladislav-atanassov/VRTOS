@@ -233,7 +233,8 @@ static void hf_uart_write_hex32(uint32_t v)
     hf_uart_write(buf);
 }
 
-__attribute__((__noreturn__)) void HardFault_Handler_C(uint32_t *stack_frame)
+/* `used` so LTO does not eliminate it */
+__attribute__((__noreturn__, used)) void HardFault_Handler_C(uint32_t *stack_frame)
 {
     __asm volatile("CPSID I");  /* mask all interrupts — we're not returning */
 

@@ -56,10 +56,6 @@ typedef struct rtos_task_control_block
     uint32_t event_wait_bits;     /**< Bits this task is waiting for */
     uint8_t  event_wait_all;      /**< 1 = wait for ALL bits, 0 = wait for ANY */
     uint8_t  event_clear_on_exit; /**< 1 = clear waited bits on successful wake */
-
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    uint32_t ready_timestamp; /**< DWT cycle count when task became READY */
-#endif
 } rtos_tcb_t;
 RTOS_STATIC_ASSERT(offsetof(rtos_tcb_t, stack_pointer) == 0, "stack_pointer must be first in TCB");
 

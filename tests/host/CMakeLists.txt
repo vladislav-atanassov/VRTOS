@@ -39,8 +39,6 @@ target_include_directories(host_fakes PUBLIC
     ${KARTOS_ROOT}/src/utils          # rtos_assert.h
     ${KARTOS_ROOT}/src/sync/queue     # queue_priv.h
     ${KARTOS_ROOT}/src/profiling)
-target_compile_definitions(host_fakes PUBLIC
-    RTOS_PROFILING_SYSTEM_ENABLED=0)
 target_compile_options(host_fakes PRIVATE -Wall -Wextra -Wno-unused-parameter)
 
 # ── 3. Helper: register a test that links one production .c file ────────

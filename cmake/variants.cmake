@@ -126,7 +126,9 @@ add_kartos_variant(test_kernel_invariants_suite
 add_kartos_variant(bench_context_switch
     SOURCE         "${CMAKE_SOURCE_DIR}/tests/benchmarks/bench_context_switch/bench_context_switch.c"
     SCHEDULER      RTOS_SCHEDULER_PREEMPTIVE_SP
-    EXTRA_INCLUDES "${CMAKE_SOURCE_DIR}/tests/benchmarks")
+    EXTRA_INCLUDES "${CMAKE_SOURCE_DIR}/tests/benchmarks"
+    EXTRA_DEFINES  BENCH_ITERATIONS=100000U
+                   BENCH_WARMUP=200U)
 
 add_kartos_variant(bench_mutex
     SOURCE         "${CMAKE_SOURCE_DIR}/tests/benchmarks/bench_mutex/bench_mutex.c"

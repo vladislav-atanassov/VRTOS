@@ -55,12 +55,8 @@ void ReportTask(void *param)
         /* User/Application profiling */
         rtos_profiling_print_stat(&prof_work);
 
-        /* RTOS System profiling (only if enabled) */
-        rtos_profiling_report_system_stats();
-
         /* Reset stats — each report shows the last 5s window only */
         rtos_profiling_reset_stat(&prof_work, "WorkBlock");
-        rtos_profiling_reset_system_stats();
     }
 }
 

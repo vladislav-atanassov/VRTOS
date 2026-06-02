@@ -79,9 +79,7 @@ rtos_task_handle_t rtos_scheduler_get_next_task(void)
         return NULL;
     }
 
-    RTOS_SYS_PROFILE_START(scheduler);
     rtos_task_handle_t next = g_scheduler_instance.vtable->get_next_task(&g_scheduler_instance);
-    RTOS_SYS_PROFILE_END(scheduler, &g_prof_scheduler);
 
     KLOGT("Scheduler", "GetNext picked=%s", (uint32_t) (next ? next->name : "none"));
 

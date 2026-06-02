@@ -9,14 +9,6 @@
 #ifndef HOST_RTOS_CONFIG_H
 #define HOST_RTOS_CONFIG_H
 
-/*
- * The kernel's profiling.h checks RTOS_PROFILING_SYSTEM_ENABLED. Force it off
- * for host builds so we don't drag in DWT cycle-counter dependencies.
- */
-#ifndef RTOS_PROFILING_SYSTEM_ENABLED
-#define RTOS_PROFILING_SYSTEM_ENABLED 0
-#endif
-
 /* Host builds do not have UART or a real scheduler — disable both loggers
  * so kernel.c does not reference klog_init/ulog_init/log_flush_task. */
 #ifndef RTOS_KLOG_ENABLED

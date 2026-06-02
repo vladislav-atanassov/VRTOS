@@ -224,10 +224,6 @@ __attribute__((__noreturn__)) void rtos_port_start_first_task(void)
 
     rtos_port_start_systick();
 
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    rtos_profiling_init();
-#endif
-
     __asm volatile("svc 0");
 
     KLOGE("Port", "StartFail");
@@ -244,21 +240,6 @@ void SysTick_Handler(void)
 
 void rtos_port_systick_handler(void)
 {
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    static uint32_t last_tick_cycle = 0;
-    uint32_t        now             = DWT->CYCCNT;
-
-    if (last_tick_cycle != 0)
-    {
-        uint32_t expected   = RTOS_CYCLES_PER_TICK;
-        uint32_t actual     = now - last_tick_cycle;
-        int32_t  jitter     = (int32_t) (actual - expected);
-        uint32_t abs_jitter = (jitter < 0) ? (uint32_t) (-jitter) : (uint32_t) jitter;
-        rtos_profiling_record(&g_prof_tick_jitter, abs_jitter);
-    }
-    last_tick_cycle = now;
-#endif
-
     rtos_kernel_tick_handler();
 }
 
@@ -280,13 +261,6 @@ __attribute__((naked)) void SVC_Handler(void)
 __attribute__((naked)) void PendSV_Handler(void)
 {
     __asm volatile(
-#if RTOS_PROFILING_SYSTEM_ENABLED
-        /* Capture DWT->CYCCNT at entry and store in global */
-        "LDR     R1, =%[cyccnt_addr]        \n"
-        "LDR     R2, [R1]                   \n" /* R2 = start cycle count */
-        "LDR     R3, =g_pendsv_start_cycles \n"
-        "STR     R2, [R3]                   \n"
-#endif
         "MRS     R0, PSP                    \n" /* Get current PSP */
         "ISB                                \n"
 
@@ -333,25 +307,11 @@ __attribute__((naked)) void PendSV_Handler(void)
         "2:                                 \n"
 #endif
 
-#if RTOS_PROFILING_SYSTEM_ENABLED
-        /* Compute full PendSV elapsed cycles and store */
-        "LDR     R1, =%[cyccnt_addr]        \n"
-        "LDR     R2, [R1]                   \n" /* R2 = end cycle count */
-        "LDR     R1, =g_pendsv_start_cycles \n"
-        "LDR     R3, [R1]                   \n" /* R3 = start cycle count */
-        "SUB     R2, R2, R3                 \n" /* R2 = elapsed */
-        "LDR     R1, =g_pendsv_cycles       \n"
-        "STR     R2, [R1]                   \n"
-#endif
-
         "MSR     PSP, R0                    \n"
         "ISB                                \n"
         "BX      R14                        \n" /* Per-task EXC_RETURN */
         :
-        : [max_prio] "i"(PORT_MAX_INTERRUPT_PRIORITY),
-#if RTOS_PROFILING_SYSTEM_ENABLED
-          [cyccnt_addr] "i"(PORT_DWT_CYCCNT_ADDR)
-#endif
+        : [max_prio] "i"(PORT_MAX_INTERRUPT_PRIORITY)
         : "memory");
 }
 

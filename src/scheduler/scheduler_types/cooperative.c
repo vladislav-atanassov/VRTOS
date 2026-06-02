@@ -190,13 +190,6 @@ static void cooperative_update_delayed_tasks_internal(void)
             cooperative_remove_from_delayed_list_internal(task);
             task->state = RTOS_TASK_STATE_READY;
 
-#if RTOS_PROFILING_SYSTEM_ENABLED
-            if (task->priority > 0)
-            {
-                task->ready_timestamp = rtos_profiling_get_cycles();
-            }
-#endif
-
             cooperative_add_to_ready_list_internal(task);
 
             KLOGT("Sched/Co", "DelayExpired id=%u", task->task_id);

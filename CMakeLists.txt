@@ -6,6 +6,13 @@ set(KARTOS_BOARD "stm32f446re_nucleo" CACHE STRING "Target board name")
 
 project(kartos LANGUAGES C ASM)
 
+# ── Optional link-time optimization ─────────────────────────────────────────
+option(KARTOS_LTO "Enable link-time optimization (-flto) across all targets" OFF)
+if(KARTOS_LTO)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    message(STATUS "KARTOS_LTO=ON — building all targets with -flto")
+endif()
+
 # ── 1. Board — sets KARTOS_* variables, creates kartos::board INTERFACE ─────
 include("${CMAKE_SOURCE_DIR}/boards/${KARTOS_BOARD}/board.cmake")
 

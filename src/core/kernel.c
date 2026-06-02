@@ -40,10 +40,6 @@ rtos_status_t rtos_init(void)
         return RTOS_ERROR_INVALID_STATE;
     }
 
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    rtos_profiling_init();
-#endif
-
 #if (RTOS_KLOG_ENABLED || RTOS_ULOG_ENABLED)
     log_init();
 #endif
@@ -209,7 +205,6 @@ void rtos_yield(void)
 
 void rtos_kernel_tick_handler(void)
 {
-    RTOS_SYS_PROFILE_START(tick);
     g_kernel.tick_count++;
 
     RTOS_TEST_HOOK_FIRE(RTOS_HOOK_TICK, {
@@ -242,7 +237,6 @@ void rtos_kernel_tick_handler(void)
             else
             {
                 rtos_port_exit_critical();
-                RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
                 rtos_yield();
                 return;
             }
@@ -252,7 +246,6 @@ void rtos_kernel_tick_handler(void)
             rtos_port_exit_critical();
         }
     }
-    RTOS_SYS_PROFILE_END(tick, &g_prof_tick);
 }
 
 void rtos_kernel_step_tick(uint32_t ticks_slept)
@@ -293,14 +286,13 @@ void rtos_kernel_step_tick(uint32_t ticks_slept)
     }
 }
 
-void rtos_kernel_switch_context(void)
+/* `used` so LTO keeps this symbol */
+__attribute__((used)) void rtos_kernel_switch_context(void)
 {
     if (g_kernel.scheduler_suspended > 0)
     {
         return;
     }
-
-    RTOS_SYS_PROFILE_START(ctx_switch);
 
     rtos_port_enter_critical();
 
@@ -335,25 +327,6 @@ void rtos_kernel_switch_context(void)
     {
         rtos_scheduler_remove_from_ready_list(g_kernel.next_task);
 
-#if RTOS_PROFILING_SYSTEM_ENABLED
-        /* Only track scheduling latency for tasks above idle priority.
-         * Priority-0 tasks (e.g. log flush) naturally wait for all others,
-         * producing high but expected latency that skews the aggregate. */
-        if (g_kernel.next_task->ready_timestamp != 0)
-        {
-            uint32_t latency = rtos_profiling_get_cycles() - g_kernel.next_task->ready_timestamp;
-            rtos_profiling_record(&g_prof_scheduling_latency, latency);
-            g_kernel.next_task->ready_timestamp = 0;
-        }
-
-        /* Full PendSV duration captured in assembly */
-        if (g_pendsv_cycles != 0)
-        {
-            rtos_profiling_record(&g_prof_pendsv_full, g_pendsv_cycles);
-            g_pendsv_cycles = 0;
-        }
-#endif
-
         g_kernel.next_task->state = RTOS_TASK_STATE_RUNNING;
         g_kernel.current_task     = g_kernel.next_task;
     }
@@ -378,8 +351,6 @@ void rtos_kernel_switch_context(void)
     KLOGT("Kernel", "CtxSwitch from=%s to=%s", (uint32_t) from_name, (uint32_t) rtos_get_current_task_name());
 
     rtos_port_exit_critical();
-
-    RTOS_SYS_PROFILE_END(ctx_switch, &g_prof_context_switch);
 }
 
 /* Valid state transitions:
@@ -461,16 +432,6 @@ void rtos_kernel_task_ready(rtos_task_handle_t task)
         _ctx_.u.task_state.old_state = (uint8_t) _old_state_ready;
         _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_READY;
     });
-
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    /* Only track scheduling latency for tasks above idle priority.
-     * Priority-0 tasks (e.g. log flush) naturally wait for all others,
-     * producing high but expected latency that skews the aggregate. */
-    if (task->priority > 0)
-    {
-        task->ready_timestamp = rtos_profiling_get_cycles();
-    }
-#endif
 
     rtos_scheduler_add_to_ready_list(task);
 
@@ -654,13 +615,6 @@ static bool kernel_task_unblock_locked(rtos_task_handle_t task)
         _ctx_.u.task_state.old_state = (uint8_t) _old_state;
         _ctx_.u.task_state.new_state = (uint8_t) RTOS_TASK_STATE_READY;
     });
-
-#if RTOS_PROFILING_SYSTEM_ENABLED
-    if (task->priority > 0)
-    {
-        task->ready_timestamp = rtos_profiling_get_cycles();
-    }
-#endif
 
     rtos_scheduler_add_to_ready_list(task);
 

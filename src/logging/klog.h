@@ -1,6 +1,7 @@
 #ifndef KLOG_H
 #define KLOG_H
 
+#include "config.h"
 #include "log.h"
 
 #include <stdint.h>
@@ -63,7 +64,13 @@ uint32_t klog_drain(log_packet_t *out, uint32_t max_records);
 #define KLOG_PAD(_d, a0, a1, a2, a3, ...) \
     (uint32_t)(a0), (uint32_t)(a1), (uint32_t)(a2), (uint32_t)(a3)
 
-/* Runtime level check — module is the subsystem tag string. */
+/* Runtime level check — module is the subsystem tag string.
+ *
+ * When RTOS_KLOG_ENABLED is 0 the macro compiles to a no-op and its arguments
+ * are NOT evaluated, so every kernel KLOG* call site disappears from the build
+ * (mirrors the rtos_assert.h convention). This is what removes the hot-path
+ * verbosity branch from the scheduler/context-switch path. ULog is unaffected. */
+#if RTOS_KLOG_ENABLED
 #define KLOG(level, module, fmt, ...)                                   \
     do                                                                  \
     {                                                                   \
@@ -71,6 +78,9 @@ uint32_t klog_drain(log_packet_t *out, uint32_t max_records);
             klog_write((level), (module), __FILE__, __LINE__, (fmt),    \
                        KLOG_PAD(_, ##__VA_ARGS__, 0, 0, 0, 0));        \
     } while (0)
+#else
+#define KLOG(level, module, fmt, ...) ((void) 0)
+#endif
 
 /* Shorthand wrappers — first arg is the module/subsystem tag */
 #define KLOGF(module, fmt, ...) KLOG(KLOG_LEVEL_FAULT, (module), (fmt), ##__VA_ARGS__)

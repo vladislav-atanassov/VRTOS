@@ -207,6 +207,7 @@ TEST_CASE(hooks, stack_overflow_hook_fires_on_canary_corrupt)
  * with the corrupted task still as g_kernel.current_task. The hook must fire
  * with the victim handle.
  */
+#if RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH
 static volatile bool s_auto_victim_ran = false;
 
 static void auto_overflow_victim_body(void *_)
@@ -224,9 +225,11 @@ static void auto_overflow_victim_body(void *_)
         rtos_delay_ms(1000);
     }
 }
+#endif
 
 TEST_CASE(hooks, stack_overflow_hook_fires_on_context_switch)
 {
+#if RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH
     TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-VICTIM-RAN",   1);
     TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-HOOK-FIRES",   1);
     TEST_INV_DECLARE("INV-HOOK-AUTO-STACK-HOOK-TASK",    1);
@@ -252,6 +255,9 @@ TEST_CASE(hooks, stack_overflow_hook_fires_on_context_switch)
      * tripping the check during cleanup. */
     s_victim_stack[0] = PORT_STACK_CANARY_VALUE;
     rtos_task_delete(victim);
+#else
+    TEST_ASSUME(false, "stack_overflow_hook_fires_on_context_switch requires RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH");
+#endif
 }
 
 /* ── Suite registration ──────────────────────────────────────────────────── */
