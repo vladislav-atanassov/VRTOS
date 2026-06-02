@@ -254,17 +254,16 @@ Measured on hardware via the automated benchmark suite (`bench_*` variants),
 with kernel tooling tuned down to a production-style baseline:
 `KARTOS_TEST_HOOKS=OFF`, `RTOS_ASSERT_ENABLED=0`,
 `RTOS_CONFIG_AUTO_STACK_CHECK_ON_SWITCH=0`, `RTOS_CONFIG_USE_TICKLESS_IDLE=0`,
-and `RTOS_KLOG_MIN_LEVEL=0` (FAULT-only). System-profiling stats stay enabled
-because the benchmarks read them.
+and `RTOS_KLOG_ENABLED=0`, `KARTOS_LTO=ON`.
 
 | Primitive | Operation | Min | Max | Avg | Description |
 | --- | --- | --- | --- | --- | --- |
-| **Context Switch** | Yield → restore | 639 cyc (7 µs) | 775 cyc (9 µs) | 705 cyc (8 µs) | Full `rtos_kernel_switch_context()` over 2002 switches |
-| **Mutex** | Uncontended | 346 cyc (4 µs) | 346 cyc (4 µs) | 346 cyc (4 µs) | Fast-path lock/unlock |
-| **Mutex** | Contended wake | 1951 cyc (23 µs) | 2886 cyc (34 µs) | 1969 cyc (23 µs) | Unlock-to-wake latency with PIP |
-| **Semaphore** | Uncontended | 269 cyc (3 µs) | 269 cyc (3 µs) | 269 cyc (3 µs) | Fast-path take/give |
-| **Semaphore** | Wake latency | 1872 cyc (22 µs) | 1872 cyc (22 µs) | 1872 cyc (22 µs) | Signal-to-wake latency |
-| **Queue** | Delivery | 2131 cyc (25 µs) | 3067 cyc (36 µs) | 2152 cyc (25 µs) | Send to blocked receiver |
+| **Context Switch** | Yield → restore | 433 cyc (5 µs) | 783 cyc (9 µs) | 434 cyc (5 µs) | Full PendSV |
+| **Mutex** | Uncontended | 268 cyc (3 µs) | 268 cyc (3 µs) | 268 cyc (3 µs) | Fast-path lock/unlock |
+| **Mutex** | Contended wake | 996 cyc (11 µs) | 1341 cyc (15 µs) | 999 cyc (11 µs) | Unlock-to-wake latency with PIP |
+| **Semaphore** | Uncontended | 167 cyc (1 µs) | 167 cyc (1 µs) | 167 cyc (1 µs) | Fast-path take/give |
+| **Semaphore** | Wake latency | 903 cyc (10 µs) | 903 cyc (10 µs) | 903 cyc (10 µs) | Signal-to-wake latency |
+| **Queue** | Delivery | 1136 cyc (13 µs) | 1944 cyc (23 µs) | 1142 cyc (13 µs) | Send to blocked receiver |
 
 Numbers are µs-rounded from cycle counts at 84 MHz (1 µs ≈ 84 cyc). The
 context-switch path still runs the scheduler-suspend gate and the standard
