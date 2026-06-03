@@ -397,4 +397,13 @@ void rtos_port_suppress_ticks_and_sleep(uint32_t expected_idle_ticks)
     __ISB();
 
     __enable_irq();
+
+    /* Trace the sleep from task context, after IRQs are back on how many ticks we asked for vs. actually slept. */
+    if (complete_tick_periods > 0)
+    {
+        KLOGD("Port", "TicklessSleep expected=%u sleep=%u actual=%u early=%u",
+              (uint32_t) expected_idle_ticks, (uint32_t) sleep_ticks,
+              (uint32_t) complete_tick_periods,
+              (uint32_t) (complete_tick_periods < sleep_ticks));
+    }
 }
